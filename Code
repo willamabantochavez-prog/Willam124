@@ -1,0 +1,77 @@
+local a1=game:GetService("Players")
+local a2=game:GetService("UserInputService")
+local a3=game:GetService("ReplicatedStorage")
+local a4=a1.LocalPlayer
+local a5=Instance.new("ScreenGui")
+a5.Parent=a4:WaitForChild("PlayerGui")
+a5.ResetOnSpawn=false
+a5.Name="AftonHub"
+local a6=Instance.new("Frame")
+a6.Parent=a5
+a6.Size=UDim2.new(0,400,0,230)
+a6.Position=UDim2.new(0.5,-200,0.5,-115)
+a6.BackgroundColor3=Color3.fromRGB(20,0,0)
+a6.BorderSizePixel=0
+a6.Active=true
+a6.Draggable=true
+Instance.new("UICorner",a6).CornerRadius=UDim.new(0,14)
+local a7=Instance.new("TextLabel")
+a7.Parent=a6
+a7.Size=UDim2.new(1,0,0,45)
+a7.BackgroundTransparency=1
+a7.Text="AFTON HUB"
+a7.TextColor3=Color3.fromRGB(255,0,0)
+a7.Font=Enum.Font.GothamBlack
+a7.TextSize=28
+local a8=Instance.new("TextButton")
+a8.Parent=a6
+a8.Size=UDim2.new(0,40,0,40)
+a8.Position=UDim2.new(1,-45,0,5)
+a8.Text="X"
+a8.Font=Enum.Font.GothamBlack
+a8.TextSize=20
+a8.TextColor3=Color3.fromRGB(255,255,255)
+a8.BackgroundColor3=Color3.fromRGB(120,0,0)
+a8.BorderSizePixel=0
+Instance.new("UICorner",a8).CornerRadius=UDim.new(0,10)
+local a9=Instance.new("TextLabel")
+a9.Parent=a6
+a9.Size=UDim2.new(1,0,0,30)
+a9.Position=UDim2.new(0,0,0,50)
+a9.BackgroundTransparency=1
+a9.Text="STATUS: OFFLINE"
+a9.TextColor3=Color3.fromRGB(255,80,80)
+a9.Font=Enum.Font.GothamBold
+a9.TextSize=18
+a9.TextXAlignment=Enum.TextXAlignment.Center
+local a10=Instance.new("TextButton")
+a10.Parent=a6
+a10.Size=UDim2.new(0.8,0,0,55)
+a10.Position=UDim2.new(0.1,0,0,110)
+a10.Text="ANTI WAVES: OFF"
+a10.Font=Enum.Font.GothamBlack
+a10.TextSize=20
+a10.TextColor3=Color3.fromRGB(255,255,255)
+a10.BackgroundColor3=Color3.fromRGB(70,0,0)
+a10.BorderSizePixel=0
+Instance.new("UICorner",a10).CornerRadius=UDim.new(0,12)
+a2.InputBegan:Connect(function(a11,a12)if a12 then return end;if a11.KeyCode==Enum.KeyCode.RightShift then a6.Visible=not a6.Visible end end)
+a8.MouseButton1Click:Connect(function()a6.Visible=false end)
+local a13=false
+a10.MouseButton1Click:Connect(function()
+if a13 then return end
+a13=true
+a10.Text="ANTI WAVES: ON"
+a10.BackgroundColor3=Color3.fromRGB(0,150,0)
+a9.Text="WORKING"
+a9.TextColor3=Color3.fromRGB(0,255,0)
+-- eliminar TsunamiWaves
+for _,a14 in pairs(a3:GetDescendants())do if a14 and a14.Name=="TsunamiWaves"then pcall(function()a14:Destroy()end)end end
+-- eliminar Events en Controllers -> EventController
+local a15=a3:FindFirstChild("Controllers")
+if a15 then
+local a16=a15:FindFirstChild("EventController")
+if a16 then
+local a17=a16:FindFirstChild("Events")
+if a17 then pcall(function()a17:Destroy()end)end end end
+end)
