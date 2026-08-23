@@ -1,6 +1,6 @@
 -- =============================================================
 -- ROBLOX LUA HUB v7.0 - LOADSTRINGS TOGGLE ON/OFF
--- [LOGO] [OG Sniper] [Eclipse Duels] [FPS:120 Ping:45ms] [Auto Code] [Coming Soon] [≡]
+-- [LOGO] [OG Sniper] [Eclipse Duels] [FPS:120 Ping:45ms] [Auto Code] [More Opts] [≡]
 -- =============================================================
  
 local Players = game:GetService("Players")
@@ -21,7 +21,7 @@ local activeThreads = {}
 local scriptThreads = {}
 local scriptEnvs = {}
  
-local buttonNames = {"OG Sniper", "Eclipse Duels", "Auto Code", "Coming Soon"}
+local buttonNames = {"OG Sniper", "Eclipse Duels", "Auto Code", "More Opts"}
  
 for _, name in ipairs(buttonNames) do
     toggleStates[name] = false
@@ -38,7 +38,7 @@ local scriptURLs = {
     ["OG Sniper"]    = "https://pastebin.com/raw/EqDevJSA",
     ["Eclipse Duels"] = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/DuelsSS",
     ["Auto Code"]    = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/c0d3S8p35",
-    ["Coming Soon"]  = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/MoreOptions",
+    ["More Opts"]    = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/MoreOptions",
 }
  
 -- =============================================================
@@ -122,13 +122,13 @@ local COLORS = {
 }
  
 -- =============================================================
--- MAPA DE FUNCIONES
+-- MAPA DE FUNCIONES (CORREGIDO)
 -- =============================================================
 local functionMap = {
     ["OG Sniper"]    = { start = function() runScript("OG Sniper") end,    stop = function() stopScript("OG Sniper") end },
     ["Eclipse Duels"] = { start = function() runScript("Eclipse Duels") end, stop = function() stopScript("Eclipse Duels") end },
     ["Auto Code"]    = { start = function() runScript("Auto Code") end,    stop = function() stopScript("Auto Code") end },
-    ["Coming Soon"]  = { start = function() print("[Coming Soon] Reservado") end, stop = function() print("[Coming Soon] Desactivado") end },
+    ["More Opts"]    = { start = function() runScript("More Opts") end,    stop = function() stopScript("More Opts") end },
 }
  
 -- =============================================================
@@ -958,7 +958,7 @@ local function createHub()
     makeVSep(7)
  
     createToggleButton("Auto Code", 8)
-    createToggleButton("Coming Soon", 9)
+    createToggleButton("More Opts", 9)
  
     makeVSep(10)
  
@@ -1063,5 +1063,4 @@ player.CharacterAdded:Connect(function()
     createHub()
 end)
  
-print("⚡ Hub v7.0 | Loadstrings ON/OFF | OG Sniper + Eclipse Duels + Auto Code | RightControl")
- 
+print("⚡ Hub v7.0 | Loadstrings ON/OFF | OG Sniper + Eclipse Duels + Auto Code + More Opts | RightControl")
