@@ -1,0 +1,1790 @@
+local cloneref = cloneref or function(object) return object end
+local Players           = cloneref(game:GetService("Players"))
+local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
+local RunService        = cloneref(game:GetService("RunService"))
+local TweenService      = cloneref(game:GetService("TweenService"))
+local UserInputService  = cloneref(game:GetService("UserInputService"))
+local HttpService       = cloneref(game:GetService("HttpService"))
+local Lighting          = cloneref(game:GetService("Lighting"))
+local Workspace         = cloneref(game:GetService("Workspace"))
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+if getgenv and getgenv().StopAura then pcall(getgenv().StopAura) end
+
+local CONFIG_FILE = "ace_code_sniper_v2_config.json"
+local savedConfig = {
+    codeSniper = true, autoSubmit = true, submitAfter = 3,
+    retypeInvalid = false, riddleSolver = false,
+    anchorEnabled = false, anchorKeybind = "Z",
+    autoBuyEnabled = false, autoBuyKeybind = "X",
+    antiLagEnabled = false, uiSize = "Medium", selectedBG = 1,
+}
+pcall(function()
+    if type(isfile) == "function" and type(readfile) == "function" and isfile(CONFIG_FILE) then
+        local decoded = HttpService:JSONDecode(readfile(CONFIG_FILE))
+        if type(decoded) == "table" then
+            for k, v in pairs(decoded) do
+                if savedConfig[k] ~= nil and type(savedConfig[k]) == type(v) then savedConfig[k] = v end
+            end
+        end
+    end
+end)
+
+local function saveConfig()
+    if type(writefile) ~= "function" then return end
+    pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(savedConfig)) end)
+end
+
+local _enabled              = savedConfig.codeSniper
+local _seen                 = {}
+local _focused              = nil
+local _lastBox              = nil
+local _autoAccept           = savedConfig.autoSubmit
+local _submitAfter          = savedConfig.submitAfter
+local _capturedParts        = {}
+local _lastWatchedBox       = nil
+local _boxTextConn          = nil
+local _boxAncestryConn      = nil
+local _boxVisibilityConns   = {}
+local _retypeInvalid        = savedConfig.retypeInvalid
+local _riddleSolver         = savedConfig.riddleSolver
+local _lastNonBlankBoxText  = ""
+local _pendingRejectedText  = nil
+local _pendingRejectedBox   = nil
+local _pendingRejectedUntil = 0
+local _pendingRejectedToken = 0
+local ACE_CASE_MODE         = "EXACT"
+local ACE_WORD_COUNT        = 1
+
+local _anchorEnabled = savedConfig.anchorEnabled
+local _anchorKeybind = savedConfig.anchorKeybind
+local _autoBuyEnabled = savedConfig.autoBuyEnabled
+local _autoBuyKeybind = savedConfig.autoBuyKeybind
+local _antiLagEnabled = savedConfig.antiLagEnabled
+local _currentUISize = savedConfig.uiSize
+local _selectedBG = savedConfig.selectedBG
+local _anchorPosition = nil
+local _anchorConnection = nil
+local _waitingForKeybind = nil
+
+local getupvalues = (debug and debug.getupvalues) or getupvalues
+local getconns    = getconnections or (debug and debug.getconnections)
+local setupv      = (debug and debug.setupvalue) or setupvalue
+
+local httpRequest   = (syn and syn.request) or (http and http.request) or request or http_request
+local RIDDLE_URL    = "https://worker-wandering-cloud-e4b3.willamabantochavez.workers.dev"
+local RIDDLE_TOKEN  = "x7k9m2p4r6t8v0w1y3z5a8b5c2d9e6f3g0h7"
+local _solving      = 0
+local _solvedCount  = 0
+local _lastTypedSeq = 0
+local _riddleSeq    = 0
+
+local BG_PRESETS = {
+    {name = "Default", id = "rbxassetid://112002576136361"},
+    {name = "BG 1",    id = "rbxassetid://137990929651104"},
+    {name = "BG 2",    id = "rbxassetid://134141437615263"},
+    {name = "BG 3",    id = "rbxassetid://87198018304955"},
+    {name = "BG 4",    id = "rbxassetid://96622334167969"},
+}
+
+local BG_THEMES = {
+    {
+        Label = "Amber",
+        Window = Color3.fromRGB(12, 10, 7), Row = Color3.fromRGB(22, 18, 12),
+        Control = Color3.fromRGB(40, 30, 18), ControlHover = Color3.fromRGB(58, 44, 26),
+        Log = Color3.fromRGB(14, 11, 8), Border = Color3.fromRGB(95, 60, 22),
+        Accent = Color3.fromRGB(220, 140, 40), TabActive = Color3.fromRGB(255, 160, 50),
+        TabInactive = Color3.fromRGB(50, 38, 22), TabTextOn = Color3.fromRGB(255, 255, 255),
+        Dim = Color3.fromRGB(190, 180, 165), Text = Color3.fromRGB(235, 230, 220),
+        ConsoleAmber = "rgb(235,190,90)", ConsoleDim = "rgb(160,145,120)",
+    },
+    {
+        Label = "Ocean Blue",
+        Window = Color3.fromRGB(6, 12, 22), Row = Color3.fromRGB(12, 22, 40),
+        Control = Color3.fromRGB(20, 40, 70), ControlHover = Color3.fromRGB(30, 55, 90),
+        Log = Color3.fromRGB(8, 16, 28), Border = Color3.fromRGB(35, 90, 160),
+        Accent = Color3.fromRGB(50, 150, 240), TabActive = Color3.fromRGB(60, 170, 255),
+        TabInactive = Color3.fromRGB(18, 35, 60), TabTextOn = Color3.fromRGB(255, 255, 255),
+        Dim = Color3.fromRGB(140, 170, 210), Text = Color3.fromRGB(200, 225, 255),
+        ConsoleAmber = "rgb(100,190,255)", ConsoleDim = "rgb(100,130,170)",
+    },
+    {
+        Label = "Ultra Violet",
+        Window = Color3.fromRGB(10, 8, 18), Row = Color3.fromRGB(20, 15, 35),
+        Control = Color3.fromRGB(35, 25, 60), ControlHover = Color3.fromRGB(50, 38, 82),
+        Log = Color3.fromRGB(12, 10, 22), Border = Color3.fromRGB(80, 55, 140),
+        Accent = Color3.fromRGB(140, 80, 220), TabActive = Color3.fromRGB(110, 100, 230),
+        TabInactive = Color3.fromRGB(28, 20, 52), TabTextOn = Color3.fromRGB(255, 255, 255),
+        Dim = Color3.fromRGB(165, 150, 200), Text = Color3.fromRGB(220, 210, 255),
+        ConsoleAmber = "rgb(180,150,255)", ConsoleDim = "rgb(130,110,170)",
+    },
+    {
+        Label = "Inferno",
+        Window = Color3.fromRGB(18, 6, 6), Row = Color3.fromRGB(35, 12, 12),
+        Control = Color3.fromRGB(60, 20, 20), ControlHover = Color3.fromRGB(82, 30, 30),
+        Log = Color3.fromRGB(22, 8, 8), Border = Color3.fromRGB(140, 40, 40),
+        Accent = Color3.fromRGB(235, 55, 55), TabActive = Color3.fromRGB(255, 70, 70),
+        TabInactive = Color3.fromRGB(55, 18, 18), TabTextOn = Color3.fromRGB(255, 255, 255),
+        Dim = Color3.fromRGB(200, 140, 140), Text = Color3.fromRGB(255, 210, 210),
+        ConsoleAmber = "rgb(255,140,140)", ConsoleDim = "rgb(170,100,100)",
+    },
+    {
+        Label = "Blood",
+        Window = Color3.fromRGB(14, 4, 4), Row = Color3.fromRGB(25, 8, 8),
+        Control = Color3.fromRGB(45, 14, 14), ControlHover = Color3.fromRGB(62, 22, 22),
+        Log = Color3.fromRGB(16, 5, 5), Border = Color3.fromRGB(100, 25, 25),
+        Accent = Color3.fromRGB(170, 30, 30), TabActive = Color3.fromRGB(190, 40, 40),
+        TabInactive = Color3.fromRGB(40, 12, 12), TabTextOn = Color3.fromRGB(255, 230, 230),
+        Dim = Color3.fromRGB(175, 110, 110), Text = Color3.fromRGB(230, 180, 180),
+        ConsoleAmber = "rgb(200,100,100)", ConsoleDim = "rgb(140,80,80)",
+    },
+}
+
+local COLORS = {}
+local function copyTheme(t)
+    COLORS.Window = t.Window; COLORS.Row = t.Row; COLORS.Control = t.Control
+    COLORS.ControlHover = t.ControlHover; COLORS.Log = t.Log; COLORS.Border = t.Border
+    COLORS.Accent = t.Accent; COLORS.TabActive = t.TabActive; COLORS.TabInactive = t.TabInactive
+    COLORS.TabTextOn = t.TabTextOn; COLORS.Dim = t.Dim; COLORS.Text = t.Text
+    COLORS.White = Color3.fromRGB(255, 255, 255)
+    COLORS.Green = Color3.fromRGB(110, 225, 130)
+    COLORS.Red = Color3.fromRGB(240, 95, 95)
+end
+copyTheme(BG_THEMES[1])
+
+local setStatus, flashCode, appendToBox
+local rememberPendingSubmission, clearPendingSubmission, handleRedemptionFeedback
+local clearAceCapture
+local _lastStatusMsg = nil
+
+local CONSOLE_COLORS = {
+    Dim   = "rgb(190,180,165)",
+    Amber = "rgb(235,190,90)",
+    Green = "rgb(110,225,130)",
+    Red   = "rgb(240,95,95)",
+    Cyan  = "rgb(235,230,220)",
+}
+
+local function normalizeCode(s)
+    return (tostring(s or "")):match("^%s*(.-)%s*$") or ""
+end
+
+local function aiPost(path, body)
+    if not httpRequest then
+        if setStatus then setStatus("ERROR: httpRequest not available", COLORS.Red) end
+        return nil
+    end
+    local ok, res = pcall(httpRequest, {
+        Url = RIDDLE_URL .. path,
+        Method = "POST",
+        Headers = {
+            ["Content-Type"] = "application/json",
+            ["Authorization"] = "Bearer " .. RIDDLE_TOKEN,
+        },
+        Body = HttpService:JSONEncode(body),
+    })
+    if not ok then
+        if setStatus then setStatus("ERROR: HTTP failed - " .. tostring(res), COLORS.Red) end
+        return nil
+    end
+    if type(res) ~= "table" then
+        if setStatus then setStatus("ERROR: Invalid response type", COLORS.Red) end
+        return nil
+    end
+    local raw = res.Body or res.body
+    if type(raw) ~= "string" then
+        if setStatus then setStatus("ERROR: No response body", COLORS.Red) end
+        return nil
+    end
+    local okd, data = pcall(function() return HttpService:JSONDecode(raw) end)
+    if not okd then
+        if setStatus then setStatus("ERROR: JSON decode failed", COLORS.Red) end
+        return nil
+    end
+    if type(data) == "table" and data.error then
+        if setStatus then setStatus("API ERROR: " .. tostring(data.error):sub(1,60), COLORS.Red) end
+        return nil
+    end
+    return data
+end
+
+local function isOurGui(instance)
+    local p = instance
+    for _ = 1, 10 do
+        if not p then break end
+        if p.Name == "ACECodeSniperUI" or p.Name == "SourcesHubRedeemerGui" then return true end
+        p = p.Parent
+    end
+    return false
+end
+
+local function isVisibleChain(inst)
+    local current = inst
+    while current do
+        if current:IsA("GuiObject") and not current.Visible then return false end
+        if current:IsA("ScreenGui") then return current.Enabled end
+        current = current.Parent
+    end
+    return true
+end
+
+local function findAllTextBoxes(pg)
+    local boxes = {}
+    for _, gui in ipairs(pg:GetChildren()) do
+        if gui:IsA("ScreenGui") and gui.Enabled and not isOurGui(gui) then
+            for _, d in ipairs(gui:GetDescendants()) do
+                if d:IsA("TextBox") and not isOurGui(d) then
+                    boxes[#boxes+1] = d
+                end
+            end
+        end
+    end
+    return boxes
+end
+
+local function findCodeButtons(pg)
+    local btns = {}
+    for _, gui in ipairs(pg:GetChildren()) do
+        if gui:IsA("ScreenGui") and gui.Enabled and not isOurGui(gui) then
+            for _, d in ipairs(gui:GetDescendants()) do
+                if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) then
+                    local n  = d.Name:lower()
+                    local pn = (d.Parent and d.Parent.Name or ""):lower()
+                    if (n:find("code") or n:find("redeem") or pn:find("code") or pn:find("redeem"))
+                        and isVisibleChain(d) then
+                        btns[#btns+1] = d
+                    end
+                end
+            end
+        end
+    end
+    return btns
+end
+
+local function clickButton(btn)
+    if not btn then return false end
+    local methods = {}
+    methods[#methods+1] = function() btn.MouseButton1Click:Fire() end
+    methods[#methods+1] = function() btn.Activated:Fire() end
+    if typeof(firesignal) == "function" then
+        methods[#methods+1] = function() firesignal(btn.MouseButton1Click) end
+        methods[#methods+1] = function() firesignal(btn.Activated) end
+    end
+    if typeof(getconns) == "function" then
+        methods[#methods+1] = function()
+            local ok, cs = pcall(getconns, btn.MouseButton1Click)
+            if ok and type(cs) == "table" then
+                for _, c in ipairs(cs) do pcall(function() c:Fire() end) end
+            end
+            local ok2, cs2 = pcall(getconns, btn.Activated)
+            if ok2 and type(cs2) == "table" then
+                for _, c in ipairs(cs2) do pcall(function() c:Fire() end) end
+            end
+        end
+    end
+    if typeof(fireclick) == "function" then
+        methods[#methods+1] = function() fireclick(btn) end
+    end
+    local anyOk = false
+    for _, fn in ipairs(methods) do
+        local ok = pcall(fn)
+        anyOk = anyOk or ok
+    end
+    return anyOk
+end
+
+local function fireBoxFocusLost(box)
+    if not box then return false end
+    local anyFired = false
+    if typeof(firesignal) == "function" then
+        local ok = pcall(firesignal, box.FocusLost, true)
+        anyFired = anyFired or ok
+    end
+    if typeof(getconns) == "function" then
+        local ok, cs = pcall(getconns, box.FocusLost)
+        if ok and type(cs) == "table" then
+            for _, c in ipairs(cs) do
+                local fn
+                pcall(function() fn = c.Function end)
+                if fn and typeof(getupvalues) == "function" and typeof(setupv) == "function" then
+                    local uOk, ups = pcall(getupvalues, fn)
+                    if uOk and type(ups) == "table" then
+                        for i, v in pairs(ups) do
+                            if type(v) == "boolean" and v == true then
+                                pcall(setupv, fn, i, false)
+                            end
+                        end
+                    end
+                end
+                local fOk = pcall(function()
+                    if c.Enabled ~= false then c:Fire(true) end
+                end)
+                anyFired = anyFired or fOk
+            end
+        end
+    end
+    return anyFired
+end
+
+local function typeAndSubmitCode(code)
+    local pg = playerGui or player:FindFirstChild("PlayerGui")
+    if not pg then return false, "no PlayerGui" end
+
+    local codesGui = pg:FindFirstChild("Codes")
+    if codesGui then
+        if codesGui:IsA("ScreenGui") then codesGui.Enabled = true end
+        local codesFrame = codesGui:FindFirstChild("Codes") or codesGui
+        if codesFrame then
+            if codesFrame:IsA("GuiObject") then codesFrame.Visible = true end
+            local cur = codesFrame
+            while cur and cur ~= codesGui do
+                if cur:IsA("GuiObject") then cur.Visible = true end
+                cur = cur.Parent
+            end
+
+            local box = nil
+            for _, d in ipairs(codesFrame:GetDescendants()) do
+                if d:IsA("TextBox") and not isOurGui(d) then
+                    box = d
+                    break
+                end
+            end
+
+            local submitBtn = nil
+            for _, d in ipairs(codesFrame:GetDescendants()) do
+                if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) then
+                    local n = d.Name:lower()
+                    local txt = ""
+                    pcall(function() txt = d.Text:lower() end)
+                    if n:find("submit") or txt:find("submit") or n:find("redeem") or txt:find("redeem") or n:find("claim") or txt:find("confirm") or n:find("enter") then
+                        submitBtn = d
+                        break
+                    end
+                end
+            end
+            if not submitBtn then
+                for _, d in ipairs(codesFrame:GetDescendants()) do
+                    if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) then
+                        local n = d.Name:lower()
+                        if not n:find("close") and not n:find("x") and not n:find("toggle") then
+                            submitBtn = d
+                            break
+                        end
+                    end
+                end
+            end
+
+            if box then
+                pcall(function() box.Text = code end)
+                task.wait(0.05)
+                if submitBtn then clickButton(submitBtn) end
+                fireBoxFocusLost(box)
+                return true, "submitted via PlayerGui.Codes"
+            end
+        end
+    end
+
+    local btns = findCodeButtons(pg)
+    for _, btn in ipairs(btns) do
+        clickButton(btn)
+        task.wait(0.05)
+    end
+
+    task.wait(0.2)
+
+    local box = nil
+    local deadline = tick() + 2
+    while tick() < deadline do
+        local allBoxes = findAllTextBoxes(pg)
+        for _, d in ipairs(allBoxes) do
+            if isVisibleChain(d) then
+                local n  = d.Name:lower()
+                local pn = (d.Parent and d.Parent.Name or ""):lower()
+                if n:find("code") or pn:find("code") or n:find("redeem") or pn:find("redeem") or n:find("input") or pn:find("textbox") or n:find("enter") then
+                    box = d
+                    break
+                end
+            end
+        end
+        if not box then
+            for _, d in ipairs(allBoxes) do
+                if isVisibleChain(d) then box = d; break end
+            end
+        end
+        if box then break end
+        task.wait(0.1)
+    end
+
+    if not box then return false, "no codebox visible" end
+
+    pcall(function() box.Text = code end)
+    task.wait(0.05)
+
+    local redeemBtn = nil
+    local searchNames = {"submit","redeem","claim","confirm","enter","send","apply","ok","use","go","check"}
+    local p = box.Parent
+    for _ = 1, 8 do
+        if not p then break end
+        for _, d in ipairs(p:GetDescendants()) do
+            if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) and d ~= box then
+                local n = d.Name:lower()
+                local txt = ""
+                pcall(function() txt = d.Text:lower() end)
+                for _, sn in ipairs(searchNames) do
+                    if n:find(sn) or txt:find(sn) then
+                        if isVisibleChain(d) then
+                            redeemBtn = d
+                            break
+                        end
+                    end
+                end
+                if redeemBtn then break end
+            end
+        end
+        if redeemBtn then break end
+        p = p.Parent
+    end
+
+    if redeemBtn then clickButton(redeemBtn) end
+    fireBoxFocusLost(box)
+
+    return true, "submitted via dynamic search"
+end
+
+local function aceCodeBox()
+    local pg = playerGui
+    local allBoxes = findAllTextBoxes(pg)
+    for _, box in ipairs(allBoxes) do
+        if isVisibleChain(box) then return box end
+    end
+    return nil
+end
+
+local function addCorner(parent, radius)
+    local value = Instance.new("UICorner")
+    value.CornerRadius = UDim.new(0, radius)
+    value.Parent = parent
+    return value
+end
+
+local function addStroke(parent, color, thickness, transparency)
+    local value = Instance.new("UIStroke")
+    value.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    value.Color = color
+    value.Thickness = thickness or 1
+    value.Transparency = transparency or 0
+    value.Parent = parent
+    return value
+end
+
+local function makeLabel(parent, text, size, position, textSize, color, font)
+    local label = Instance.new("TextLabel")
+    label.Size = size
+    label.Position = position
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextSize = textSize
+    label.TextColor3 = color
+    label.Font = font or Enum.Font.GothamMedium
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextYAlignment = Enum.TextYAlignment.Center
+    label.ZIndex = 10
+    label.Parent = parent
+    return label
+end
+
+pcall(function()
+    for _, name in ipairs({"ACECodeSniperUI", "AutoTypeCodesUI", "ACEPaste"}) do
+        local previous = game.CoreGui:FindFirstChild(name)
+        if previous then previous:Destroy() end
+    end
+end)
+for _, name in ipairs({"ACECodeSniperUI", "AutoTypeCodesUI", "ACEPaste"}) do
+    local previous = playerGui:FindFirstChild(name)
+    if previous then previous:Destroy() end
+end
+
+local GUI = Instance.new("ScreenGui")
+GUI.Name = "ACECodeSniperUI"
+GUI.ResetOnSpawn = false
+GUI.IgnoreGuiInset = true
+GUI.DisplayOrder = 999
+if not pcall(function() GUI.Parent = game.CoreGui end) then GUI.Parent = playerGui end
+
+local Window = Instance.new("Frame")
+Window.Name = "Window"
+Window.Size = UDim2.fromOffset(320, 440)
+Window.AnchorPoint = Vector2.new(1, 0)
+Window.Position = UDim2.new(1, -8, 0, 8)
+Window.BackgroundColor3 = COLORS.Window
+Window.BorderSizePixel = 0
+Window.ClipsDescendants = true
+Window.Parent = GUI
+addCorner(Window, 14)
+addStroke(Window, COLORS.Accent, 4, 0.85)
+addStroke(Window, COLORS.Accent, 1, 0.35)
+
+local InterfaceScale = Instance.new("UIScale")
+InterfaceScale.Name = "InterfaceScale"
+InterfaceScale.Scale = 0.92
+InterfaceScale.Parent = Window
+
+local viewportConnection
+local function updateInterfaceScale()
+    local camera = workspace.CurrentCamera
+    if not camera then InterfaceScale.Scale = 0.92; return end
+    local viewport = camera.ViewportSize
+    local fitScale = math.min((viewport.X - 16) / 320, (viewport.Y - 16) / 440)
+    if UserInputService.TouchEnabled then
+        InterfaceScale.Scale = math.max(0.45, math.min(0.72, fitScale))
+    else
+        InterfaceScale.Scale = 0.92
+    end
+end
+local function watchViewport()
+    if viewportConnection then viewportConnection:Disconnect(); viewportConnection = nil end
+    local camera = workspace.CurrentCamera
+    if camera then viewportConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateInterfaceScale) end
+    updateInterfaceScale()
+end
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(watchViewport)
+watchViewport()
+
+local BackgroundImage = Instance.new("ImageLabel")
+BackgroundImage.Name = "ACEBackground"
+BackgroundImage.Size = UDim2.new(1, 0, 1, 0)
+BackgroundImage.BackgroundTransparency = 1
+BackgroundImage.Image = BG_PRESETS[_selectedBG].id
+BackgroundImage.ScaleType = Enum.ScaleType.Crop
+BackgroundImage.ZIndex = 1
+BackgroundImage.Parent = Window
+addCorner(BackgroundImage, 14)
+
+local BackgroundOverlay = Instance.new("Frame")
+BackgroundOverlay.Name = "BackgroundOverlay"
+BackgroundOverlay.Size = UDim2.new(1, 0, 1, 0)
+BackgroundOverlay.BackgroundColor3 = Color3.fromRGB(10, 7, 3)
+BackgroundOverlay.BackgroundTransparency = 0.22
+BackgroundOverlay.BorderSizePixel = 0
+BackgroundOverlay.ZIndex = 2
+BackgroundOverlay.Parent = Window
+addCorner(BackgroundOverlay, 14)
+
+local featureStates = {}
+local Console, ConsoleOutput, updateConsoleCanvas
+
+local function scrollConsoleToBottom()
+    task.defer(function()
+        task.wait()
+        if not Console then return end
+        if updateConsoleCanvas then updateConsoleCanvas() end
+        local bottom = math.max(0, Console.AbsoluteCanvasSize.Y - Console.AbsoluteWindowSize.Y)
+        Console.CanvasPosition = Vector2.new(0, bottom)
+    end)
+end
+
+local function appendConsoleStatus(name, activated)
+    if not ConsoleOutput then return end
+    local state = activated and "ON" or "OFF"
+    local stateColor = activated and CONSOLE_COLORS.Green or CONSOLE_COLORS.Red
+    local line = '<font color="' .. CONSOLE_COLORS.Dim .. '">[setting]</font> '
+        .. '<font color="' .. CONSOLE_COLORS.Amber .. '">' .. name .. "</font> "
+        .. '<font color="' .. CONSOLE_COLORS.Dim .. '">-&gt;</font> '
+        .. '<font color="' .. stateColor .. '">' .. state .. "</font>"
+    if ConsoleOutput.Text == "" then ConsoleOutput.Text = line
+    else ConsoleOutput.Text = ConsoleOutput.Text .. "\n\n" .. line end
+    scrollConsoleToBottom()
+end
+
+local themed = {
+    windowFrame = Window, windowStrokes = {}, bgOverlay = BackgroundOverlay,
+    headerAccent = nil, autoWriteBtn = nil, autoWriteStroke = nil,
+    tabButtons = {}, tabStrokes = {}, cards = {}, cardStrokes = {},
+    toggleButtons = {}, toggleStrokes = {},
+    counterShell = nil, counterStroke = nil, counterBtns = {},
+    consoleFrame = nil, consoleStroke = nil,
+    keybindFrames = {}, keybindStrokes = {}, keybindLabels = {},
+    bgButtons = {}, bgStrokes = {},
+    discordLabel = nil, farmTitle = nil, settingsTitle = nil,
+    sizeButtons = {}, sizeStrokes = {},
+}
+
+local function applyFullTheme(index)
+    local t = BG_THEMES[index] or BG_THEMES[1]; copyTheme(t)
+    local ti = TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    CONSOLE_COLORS.Amber = t.ConsoleAmber; CONSOLE_COLORS.Dim = t.ConsoleDim
+    if themed.windowFrame then TweenService:Create(themed.windowFrame, ti, {BackgroundColor3 = t.Window}):Play() end
+    for _, s in ipairs(themed.windowStrokes) do TweenService:Create(s, ti, {Color = t.Accent}):Play() end
+    if themed.bgOverlay then TweenService:Create(themed.bgOverlay, ti, {BackgroundColor3 = t.Window}):Play() end
+    if themed.headerAccent then TweenService:Create(themed.headerAccent, ti, {BackgroundColor3 = t.Accent}):Play() end
+    if themed.autoWriteBtn and autoWriteEnabled then TweenService:Create(themed.autoWriteBtn, ti, {BackgroundColor3 = t.Accent}):Play() end
+    if themed.autoWriteStroke then TweenService:Create(themed.autoWriteStroke, ti, {Color = autoWriteEnabled and t.Accent or t.Border}):Play() end
+    for _, c in ipairs(themed.cards) do TweenService:Create(c, ti, {BackgroundColor3 = t.Row}):Play() end
+    for _, s in ipairs(themed.cardStrokes) do TweenService:Create(s, ti, {Color = t.Border}):Play() end
+    for _, data in ipairs(themed.toggleButtons) do
+        if data.btn then local isOn = data.isOn(); TweenService:Create(data.btn, ti, {BackgroundColor3 = isOn and t.Accent or t.Control, TextColor3 = isOn and t.TabTextOn or t.Dim}):Play() end
+    end
+    for _, data in ipairs(themed.toggleStrokes) do
+        if data.stroke then TweenService:Create(data.stroke, ti, {Color = data.isOn() and t.Accent or t.Border}):Play() end
+    end
+    if themed.counterShell then TweenService:Create(themed.counterShell, ti, {BackgroundColor3 = t.Window}):Play() end
+    if themed.counterStroke then TweenService:Create(themed.counterStroke, ti, {Color = t.Border}):Play() end
+    for _, b in ipairs(themed.counterBtns) do TweenService:Create(b, ti, {BackgroundColor3 = t.Control, TextColor3 = t.Text}):Play() end
+    if themed.consoleFrame then TweenService:Create(themed.consoleFrame, ti, {BackgroundColor3 = t.Log}):Play() end
+    if themed.consoleStroke then TweenService:Create(themed.consoleStroke, ti, {Color = t.Border}):Play() end
+    for _, f in ipairs(themed.keybindFrames) do TweenService:Create(f, ti, {BackgroundColor3 = t.Control}):Play() end
+    for _, s in ipairs(themed.keybindStrokes) do TweenService:Create(s, ti, {Color = t.Accent}):Play() end
+    for _, l in ipairs(themed.keybindLabels) do TweenService:Create(l, ti, {TextColor3 = t.Accent}):Play() end
+    for name, btn in pairs(themed.tabButtons) do
+        local isActive = (name == currentTab)
+        TweenService:Create(btn, ti, {BackgroundColor3 = isActive and t.TabActive or t.TabInactive, TextColor3 = isActive and t.TabTextOn or t.Dim}):Play()
+        local s = themed.tabStrokes[name]; if s then TweenService:Create(s, ti, {Color = isActive and t.TabActive or t.Border, Transparency = isActive and 0.3 or 0.6}):Play() end
+    end
+    for idx, b in pairs(themed.bgButtons) do TweenService:Create(b, ti, {BackgroundColor3 = (idx == index) and t.Accent or t.Control}):Play() end
+    for idx, s in pairs(themed.bgStrokes) do TweenService:Create(s, ti, {Color = (idx == index) and t.Accent or t.Border, Transparency = (idx == index) and 0.2 or 0.7}):Play() end
+    for name, b in pairs(themed.sizeButtons) do
+        local a = (name == _currentUISize)
+        TweenService:Create(b, ti, {BackgroundColor3 = a and t.Accent or t.Control, TextColor3 = a and t.TabTextOn or t.Dim}):Play()
+        local s = themed.sizeStrokes[name]; if s then TweenService:Create(s, ti, {Color = a and t.Accent or t.Border, Transparency = a and 0.3 or 0.7}):Play() end
+    end
+    if themed.discordLabel then TweenService:Create(themed.discordLabel, ti, {TextColor3 = t.Accent}):Play() end
+    if themed.farmTitle then TweenService:Create(themed.farmTitle, ti, {TextColor3 = t.Accent}):Play() end
+    if themed.settingsTitle then TweenService:Create(themed.settingsTitle, ti, {TextColor3 = t.Accent}):Play() end
+    if Console then TweenService:Create(Console, ti, {ScrollBarImageColor3 = t.Dim}):Play() end
+end
+
+-- HEADER
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 50)
+Header.BackgroundTransparency = 1
+Header.Active = true
+Header.ZIndex = 5
+Header.Parent = Window
+
+local BrandMark = Instance.new("Frame")
+BrandMark.Size = UDim2.fromOffset(28, 28)
+BrandMark.Position = UDim2.fromOffset(12, 10)
+BrandMark.BackgroundTransparency = 1
+BrandMark.ZIndex = 6
+BrandMark.Parent = Header
+addCorner(BrandMark, 14)
+
+local BrandImage = Instance.new("ImageLabel")
+BrandImage.Size = UDim2.fromScale(1, 1)
+BrandImage.BackgroundTransparency = 1
+BrandImage.Image = "rbxassetid://104937666038724"
+BrandImage.ScaleType = Enum.ScaleType.Fit
+BrandImage.ZIndex = 7
+BrandImage.Parent = BrandMark
+addCorner(BrandImage, 14)
+
+makeLabel(Header, "Eclipse Auto Codes", UDim2.fromOffset(160, 20), UDim2.fromOffset(48, 5), 13, COLORS.White, Enum.Font.GothamBold)
+
+local AutoWriteButton = Instance.new("TextButton")
+AutoWriteButton.Name = "AutoWrite"
+AutoWriteButton.Size = UDim2.fromOffset(47, 22)
+AutoWriteButton.Position = UDim2.new(1, -62, 0, 12)
+AutoWriteButton.BackgroundColor3 = COLORS.Accent
+AutoWriteButton.BorderSizePixel = 0
+AutoWriteButton.AutoButtonColor = false
+AutoWriteButton.Text = ""
+AutoWriteButton.ZIndex = 8
+AutoWriteButton.Parent = Header
+addCorner(AutoWriteButton, 11)
+themed.autoWriteBtn = AutoWriteButton
+
+local AutoWriteStroke = addStroke(AutoWriteButton, COLORS.Accent, 1, 0.5)
+themed.autoWriteStroke = AutoWriteStroke
+
+local AutoWriteKnob = Instance.new("Frame")
+AutoWriteKnob.Size = UDim2.fromOffset(18, 18)
+AutoWriteKnob.Position = UDim2.new(1, -20, 0.5, -9)
+AutoWriteKnob.BackgroundColor3 = COLORS.Window
+AutoWriteKnob.ZIndex = 9
+AutoWriteKnob.Parent = AutoWriteButton
+addCorner(AutoWriteKnob, 9)
+
+local autoWriteEnabled = _enabled
+AutoWriteButton.BackgroundColor3 = autoWriteEnabled and COLORS.Accent or COLORS.Control
+AutoWriteStroke.Color = autoWriteEnabled and COLORS.Accent or COLORS.Border
+AutoWriteStroke.Transparency = autoWriteEnabled and 0.5 or 0.7
+AutoWriteKnob.BackgroundColor3 = autoWriteEnabled and COLORS.Window or COLORS.White
+AutoWriteKnob.Position = autoWriteEnabled and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+
+local lastToggleTime = 0
+local function toggleAutoWrite()
+    if tick() - lastToggleTime < 0.15 then return end
+    lastToggleTime = tick()
+    autoWriteEnabled = not autoWriteEnabled
+    _enabled = autoWriteEnabled
+    if not autoWriteEnabled and clearAceCapture then clearAceCapture() end
+    savedConfig.codeSniper = autoWriteEnabled
+    saveConfig()
+    _lastStatusMsg = nil
+    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
+    AutoWriteButton.BackgroundColor3 = autoWriteEnabled and t.Accent or t.Control
+    AutoWriteStroke.Color = autoWriteEnabled and t.Accent or t.Border
+    AutoWriteStroke.Transparency = autoWriteEnabled and 0.5 or 0.7
+    AutoWriteKnob.BackgroundColor3 = autoWriteEnabled and t.Window or COLORS.White
+    AutoWriteKnob.Position = autoWriteEnabled and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    if ConsoleOutput then
+        if autoWriteEnabled then
+            ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Amber .. '">&gt;</font> <font color="' .. CONSOLE_COLORS.Dim .. '">scanning for codes...</font>'
+        else
+            ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Dim .. '">status:</font> <font color="' .. CONSOLE_COLORS.Red .. '">OFF</font>\n<font color="' .. CONSOLE_COLORS.Dim .. '">code sniper paused</font>'
+        end
+        scrollConsoleToBottom()
+    end
+end
+
+AutoWriteButton.Activated:Connect(toggleAutoWrite)
+AutoWriteButton.MouseButton1Click:Connect(toggleAutoWrite)
+AutoWriteButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        toggleAutoWrite()
+    end
+end)
+
+local HeaderAccent = Instance.new("Frame")
+HeaderAccent.Size = UDim2.new(1, -24, 0, 1)
+HeaderAccent.Position = UDim2.fromOffset(12, 40)
+HeaderAccent.BackgroundColor3 = COLORS.Accent
+HeaderAccent.BackgroundTransparency = 0.45
+HeaderAccent.BorderSizePixel = 0
+HeaderAccent.ZIndex = 5
+HeaderAccent.Parent = Header
+themed.headerAccent = HeaderAccent
+
+-- TAB BAR
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, 0, 0, 30)
+TabBar.Position = UDim2.fromOffset(0, 52)
+TabBar.BackgroundTransparency = 1
+TabBar.ZIndex = 5
+TabBar.Parent = Window
+local TabLayout = Instance.new("UIListLayout")
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+TabLayout.Padding = UDim.new(0, 4)
+TabLayout.Parent = TabBar
+
+local currentTab = "MAIN"
+local tabPanels = {}
+
+local function createTabButton(name)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.fromOffset(93, 24)
+    btn.BackgroundColor3 = name == "MAIN" and COLORS.TabActive or COLORS.TabInactive
+    btn.BorderSizePixel = 0
+    btn.AutoButtonColor = false
+    btn.Text = name
+    btn.TextSize = 11
+    btn.TextColor3 = name == "MAIN" and COLORS.TabTextOn or COLORS.Dim
+    btn.Font = Enum.Font.GothamBold
+    btn.ZIndex = 6
+    btn.Parent = TabBar
+    addCorner(btn, 6)
+    local ts = addStroke(btn, name == "MAIN" and COLORS.TabActive or COLORS.Border, 1, name == "MAIN" and 0.3 or 0.6)
+    themed.tabButtons[name] = btn
+    themed.tabStrokes[name] = ts
+    btn.Activated:Connect(function()
+        if currentTab == name then return end
+        local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
+        if themed.tabButtons[currentTab] then
+            TweenService:Create(themed.tabButtons[currentTab], TweenInfo.new(0.2), {BackgroundColor3 = t.TabInactive, TextColor3 = t.Dim}):Play()
+            local s = themed.tabStrokes[currentTab]; if s then s.Color = t.Border; s.Transparency = 0.6 end
+        end
+        currentTab = name
+        TweenService:Create(themed.tabButtons[currentTab], TweenInfo.new(0.2), {BackgroundColor3 = t.TabActive, TextColor3 = t.TabTextOn}):Play()
+        local s = themed.tabStrokes[currentTab]; if s then s.Color = t.TabActive; s.Transparency = 0.3 end
+        for n, p in pairs(tabPanels) do p.Visible = (n == name) end
+    end)
+end
+createTabButton("MAIN")
+createTabButton("FARM")
+createTabButton("SETTINGS")
+
+local PanelContainer = Instance.new("Frame")
+PanelContainer.Size = UDim2.new(1, 0, 1, -86)
+PanelContainer.Position = UDim2.fromOffset(0, 86)
+PanelContainer.BackgroundTransparency = 1
+PanelContainer.ZIndex = 5
+PanelContainer.Parent = Window
+
+-- MAIN PANEL
+local MainPanel = Instance.new("ScrollingFrame")
+MainPanel.Name = "MainPanel"
+MainPanel.Size = UDim2.new(1, 0, 1, 0)
+MainPanel.BackgroundTransparency = 1
+MainPanel.BorderSizePixel = 0
+MainPanel.ScrollBarThickness = 3
+MainPanel.ScrollBarImageColor3 = COLORS.Dim
+MainPanel.CanvasSize = UDim2.new(0, 0, 0, 300)
+MainPanel.ZIndex = 5
+MainPanel.Parent = PanelContainer
+tabPanels["MAIN"] = MainPanel
+local MPPad = Instance.new("UIPadding")
+MPPad.PaddingLeft = UDim.new(0, 12); MPPad.PaddingRight = UDim.new(0, 12)
+MPPad.PaddingTop = UDim.new(0, 8); MPPad.Parent = MainPanel
+local MPLayout = Instance.new("UIListLayout")
+MPLayout.Padding = UDim.new(0, 6); MPLayout.Parent = MainPanel
+
+local function makeCard(parent, pos, size)
+    local c = Instance.new("Frame")
+    c.Position = pos; c.Size = size; c.BackgroundColor3 = COLORS.Row
+    c.BackgroundTransparency = 0.4; c.BorderSizePixel = 0; c.ZIndex = 6; c.Parent = parent
+    addCorner(c, 9)
+    local cs = addStroke(c, COLORS.Border, 1, 0.55)
+    table.insert(themed.cards, c); table.insert(themed.cardStrokes, cs)
+    return c
+end
+
+local function makeToggle(parent, enabled, consoleName, onToggle)
+    parent.Active = true
+    featureStates[consoleName] = enabled
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.fromOffset(42, 20)
+    btn.Position = UDim2.new(1, -50, 0.5, -10)
+    btn.BackgroundColor3 = enabled and COLORS.Accent or COLORS.Control
+    btn.BorderSizePixel = 0; btn.AutoButtonColor = false
+    btn.Text = enabled and "ON" or "OFF"
+    btn.TextSize = 8; btn.TextColor3 = enabled and COLORS.TabTextOn or COLORS.Dim
+    btn.Font = Enum.Font.GothamBold; btn.ZIndex = 8; btn.Parent = parent
+    addCorner(btn, 6)
+    local outline = addStroke(btn, enabled and COLORS.Accent or COLORS.Border, 1, enabled and 0.5 or 0.7)
+    local isOnFn = function() return featureStates[consoleName] end
+    table.insert(themed.toggleButtons, {btn = btn, isOn = isOnFn})
+    table.insert(themed.toggleStrokes, {stroke = outline, isOn = isOnFn})
+    local lastT = 0
+    local function toggle()
+        if tick() - lastT < 0.15 then return end; lastT = tick()
+        local newState = not featureStates[consoleName]; featureStates[consoleName] = newState
+        btn.Text = newState and "ON" or "OFF"
+        local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
+        btn.BackgroundColor3 = newState and t.Accent or t.Control
+        btn.TextColor3 = newState and t.TabTextOn or t.Dim
+        outline.Color = newState and t.Accent or t.Border
+        outline.Transparency = newState and 0.5 or 0.7
+        if autoWriteEnabled then appendConsoleStatus(consoleName, newState) end
+        if onToggle then onToggle(newState) end
+    end
+    btn.Activated:Connect(toggle)
+    btn.MouseButton1Click:Connect(toggle)
+    btn.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggle() end end)
+    return btn
+end
+
+local CardsRow = Instance.new("Frame")
+CardsRow.Size = UDim2.new(1, 0, 0, 48)
+CardsRow.BackgroundTransparency = 1
+CardsRow.ZIndex = 6
+CardsRow.Parent = MainPanel
+
+local AutoCard = makeCard(CardsRow, UDim2.fromOffset(0, 0), UDim2.fromOffset(130, 48))
+makeLabel(AutoCard, "Auto submit", UDim2.new(1, -55, 1, 0), UDim2.fromOffset(10, 0), 10, COLORS.White, Enum.Font.GothamMedium)
+makeToggle(AutoCard, _autoAccept, "Auto submit", function(s) _autoAccept = s; savedConfig.autoSubmit = s; saveConfig() end)
+
+local AICard = makeCard(CardsRow, UDim2.fromOffset(136, 0), UDim2.fromOffset(130, 48))
+makeLabel(AICard, "Riddle solver", UDim2.new(1, -55, 1, 0), UDim2.fromOffset(10, 0), 10, COLORS.White, Enum.Font.GothamMedium)
+makeToggle(AICard, _riddleSolver, "Riddle solver", function(s) _riddleSolver = s; savedConfig.riddleSolver = s; saveConfig() end)
+
+local DelayCard = makeCard(MainPanel, UDim2.fromOffset(0, 0), UDim2.fromOffset(276, 42))
+makeLabel(DelayCard, "Submit after msgs", UDim2.new(1, -110, 1, 0), UDim2.fromOffset(10, 0), 10, COLORS.White, Enum.Font.GothamMedium)
+
+local CounterShell = Instance.new("Frame")
+CounterShell.Size = UDim2.fromOffset(90, 28)
+CounterShell.Position = UDim2.new(1, -98, 0.5, -14)
+CounterShell.BackgroundColor3 = COLORS.Window
+CounterShell.BackgroundTransparency = 0.05
+CounterShell.ZIndex = 7
+CounterShell.Parent = DelayCard
+addCorner(CounterShell, 6)
+local cStroke = addStroke(CounterShell, COLORS.Border, 1, 0.65)
+themed.counterShell = CounterShell; themed.counterStroke = cStroke
+
+local Minus = Instance.new("TextButton")
+Minus.Size = UDim2.fromOffset(22, 22); Minus.Position = UDim2.fromOffset(3, 3)
+Minus.BackgroundColor3 = COLORS.Control; Minus.Text = "-"; Minus.TextSize = 14
+Minus.TextColor3 = COLORS.Text; Minus.Font = Enum.Font.GothamBold
+Minus.ZIndex = 8; Minus.Parent = CounterShell; addCorner(Minus, 4)
+table.insert(themed.counterBtns, Minus)
+
+local Count = makeLabel(CounterShell, tostring(_submitAfter), UDim2.fromOffset(24, 22), UDim2.fromOffset(33, 3), 14, COLORS.White, Enum.Font.GothamBold)
+Count.TextXAlignment = Enum.TextXAlignment.Center; Count.ZIndex = 8
+
+local Plus = Instance.new("TextButton")
+Plus.Size = UDim2.fromOffset(22, 22); Plus.Position = UDim2.fromOffset(65, 3)
+Plus.BackgroundColor3 = COLORS.Control; Plus.Text = "+"; Plus.TextSize = 14
+Plus.TextColor3 = COLORS.Text; Plus.Font = Enum.Font.GothamBold
+Plus.ZIndex = 8; Plus.Parent = CounterShell; addCorner(Plus, 4)
+table.insert(themed.counterBtns, Plus)
+
+-- FIX: Solo Activated, sin MouseButton1Click para evitar doble-fire
+local lastDecr = 0
+local function decr()
+    if tick() - lastDecr < 0.15 then return end; lastDecr = tick()
+    _submitAfter = math.max(1, _submitAfter - 1)
+    Count.Text = tostring(_submitAfter)
+    savedConfig.submitAfter = _submitAfter
+    clearAceCapture()
+    saveConfig()
+end
+local lastIncr = 0
+local function incr()
+    if tick() - lastIncr < 0.15 then return end; lastIncr = tick()
+    _submitAfter = _submitAfter + 1
+    Count.Text = tostring(_submitAfter)
+    savedConfig.submitAfter = _submitAfter
+    clearAceCapture()
+    saveConfig()
+end
+Minus.Activated:Connect(decr)
+Plus.Activated:Connect(incr)
+
+local RetypeCard = makeCard(MainPanel, UDim2.fromOffset(0, 0), UDim2.fromOffset(276, 36))
+makeLabel(RetypeCard, "Retype invalid", UDim2.new(1, -55, 1, 0), UDim2.fromOffset(10, 0), 10, COLORS.White, Enum.Font.GothamMedium)
+makeToggle(RetypeCard, _retypeInvalid, "Retype invalid", function(s) _retypeInvalid = s; savedConfig.retypeInvalid = s; saveConfig() end)
+
+Console = Instance.new("ScrollingFrame")
+Console.Name = "Console"
+Console.Size = UDim2.new(1, 0, 0, 105)
+Console.BackgroundColor3 = COLORS.Log
+Console.BorderSizePixel = 0
+Console.ClipsDescendants = true
+Console.Active = true
+Console.ScrollingEnabled = true
+Console.ScrollingDirection = Enum.ScrollingDirection.Y
+Console.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+Console.CanvasSize = UDim2.new(0, 0, 0, 0)
+Console.ScrollBarThickness = 4
+Console.ScrollBarImageColor3 = COLORS.Dim
+Console.ZIndex = 6
+Console.Parent = MainPanel
+addCorner(Console, 9)
+local cs2 = addStroke(Console, COLORS.Border, 1, 0.65)
+themed.consoleFrame = Console; themed.consoleStroke = cs2
+
+ConsoleOutput = Instance.new("TextLabel")
+ConsoleOutput.Name = "ConsoleOutput"
+ConsoleOutput.Size = UDim2.new(1, -16, 0, 90)
+ConsoleOutput.AutomaticSize = Enum.AutomaticSize.Y
+ConsoleOutput.Position = UDim2.fromOffset(8, 6)
+ConsoleOutput.BackgroundTransparency = 1
+ConsoleOutput.RichText = true
+if autoWriteEnabled then
+    ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Amber .. '">&gt;</font> <font color="' .. CONSOLE_COLORS.Dim .. '">scanning for codes...</font>'
+else
+    ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Dim .. '">status:</font> <font color="' .. CONSOLE_COLORS.Red .. '">OFF</font>\n<font color="' .. CONSOLE_COLORS.Dim .. '">code sniper paused</font>'
+end
+ConsoleOutput.TextSize = 11
+ConsoleOutput.Font = Enum.Font.Code
+ConsoleOutput.TextColor3 = COLORS.Dim
+ConsoleOutput.TextXAlignment = Enum.TextXAlignment.Left
+ConsoleOutput.TextYAlignment = Enum.TextYAlignment.Top
+ConsoleOutput.TextWrapped = true
+ConsoleOutput.ZIndex = 7
+ConsoleOutput.Parent = Console
+
+updateConsoleCanvas = function()
+    if not Console or not ConsoleOutput then return end
+    Console.CanvasSize = UDim2.new(0, 0, 0, ConsoleOutput.Position.Y.Offset + ConsoleOutput.AbsoluteSize.Y + 30)
+end
+ConsoleOutput:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateConsoleCanvas)
+task.defer(updateConsoleCanvas)
+
+-- FARM PANEL
+local FarmPanel = Instance.new("ScrollingFrame")
+FarmPanel.Name = "FarmPanel"
+FarmPanel.Size = UDim2.new(1, 0, 1, 0)
+FarmPanel.BackgroundTransparency = 1
+FarmPanel.Visible = false
+FarmPanel.ScrollBarThickness = 3
+FarmPanel.ScrollBarImageColor3 = COLORS.Dim
+FarmPanel.CanvasSize = UDim2.new(0, 0, 0, 200)
+FarmPanel.ZIndex = 5
+FarmPanel.Parent = PanelContainer
+tabPanels["FARM"] = FarmPanel
+local FPPad = Instance.new("UIPadding")
+FPPad.PaddingLeft = UDim.new(0, 12); FPPad.PaddingRight = UDim.new(0, 12)
+FPPad.PaddingTop = UDim.new(0, 10); FPPad.Parent = FarmPanel
+local FPLayout = Instance.new("UIListLayout")
+FPLayout.Padding = UDim.new(0, 8); FPLayout.Parent = FarmPanel
+
+local farmTitle = makeLabel(FarmPanel, "FARM", UDim2.new(1, 0, 0, 20), UDim2.fromOffset(0, 0), 13, COLORS.Accent, Enum.Font.GothamBold)
+themed.farmTitle = farmTitle
+
+local AnchorCard = Instance.new("Frame")
+AnchorCard.Size = UDim2.new(1, 0, 0, 52)
+AnchorCard.BackgroundColor3 = COLORS.Row; AnchorCard.BackgroundTransparency = 0.4
+AnchorCard.BorderSizePixel = 0; AnchorCard.ZIndex = 6; AnchorCard.Parent = FarmPanel
+addCorner(AnchorCard, 10)
+local anchS = addStroke(AnchorCard, COLORS.Border, 1, 0.4)
+table.insert(themed.cards, AnchorCard); table.insert(themed.cardStrokes, anchS)
+
+makeLabel(AnchorCard, "Anchor Position", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
+
+local AKFrame = Instance.new("Frame")
+AKFrame.Size = UDim2.fromOffset(46, 20); AKFrame.Position = UDim2.fromOffset(12, 28)
+AKFrame.BackgroundColor3 = COLORS.Control; AKFrame.ZIndex = 7; AKFrame.Parent = AnchorCard
+addCorner(AKFrame, 5)
+local AKStroke = addStroke(AKFrame, COLORS.Accent, 1, 0.6)
+table.insert(themed.keybindFrames, AKFrame); table.insert(themed.keybindStrokes, AKStroke)
+
+local AKLabel = Instance.new("TextLabel")
+AKLabel.Size = UDim2.fromScale(1, 1); AKLabel.BackgroundTransparency = 1
+AKLabel.Text = "[".._anchorKeybind.."]"; AKLabel.TextSize = 9
+AKLabel.TextColor3 = COLORS.Accent; AKLabel.Font = Enum.Font.GothamBold
+AKLabel.ZIndex = 8; AKLabel.Parent = AKFrame
+table.insert(themed.keybindLabels, AKLabel)
+
+local AKBtn = Instance.new("TextButton")
+AKBtn.Size = UDim2.fromScale(1, 1); AKBtn.BackgroundTransparency = 1
+AKBtn.Text = ""; AKBtn.ZIndex = 9; AKBtn.Parent = AKFrame
+AKBtn.MouseButton1Click:Connect(function() _waitingForKeybind = "anchor"; AKLabel.Text = "..."; AKLabel.TextColor3 = COLORS.Red end)
+
+local AnchorToggle = Instance.new("TextButton")
+AnchorToggle.Size = UDim2.fromOffset(50, 26); AnchorToggle.Position = UDim2.new(1, -58, 0, 12)
+AnchorToggle.BackgroundColor3 = _anchorEnabled and COLORS.Accent or COLORS.Control
+AnchorToggle.BorderSizePixel = 0; AnchorToggle.AutoButtonColor = false
+AnchorToggle.Text = _anchorEnabled and "ON" or "OFF"
+AnchorToggle.TextSize = 9; AnchorToggle.TextColor3 = _anchorEnabled and COLORS.TabTextOn or COLORS.Dim
+AnchorToggle.Font = Enum.Font.GothamBold; AnchorToggle.ZIndex = 8; AnchorToggle.Parent = AnchorCard
+addCorner(AnchorToggle, 8)
+local ATStroke = addStroke(AnchorToggle, _anchorEnabled and COLORS.Accent or COLORS.Border, 1, _anchorEnabled and 0.4 or 0.7)
+table.insert(themed.toggleButtons, {btn = AnchorToggle, isOn = function() return _anchorEnabled end})
+table.insert(themed.toggleStrokes, {stroke = ATStroke, isOn = function() return _anchorEnabled end})
+
+local function toggleAnchor(state)
+    if state == nil then state = not _anchorEnabled end
+    _anchorEnabled = state; savedConfig.anchorEnabled = state; saveConfig()
+    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
+    AnchorToggle.Text = state and "ON" or "OFF"
+    AnchorToggle.BackgroundColor3 = state and t.Accent or t.Control
+    AnchorToggle.TextColor3 = state and t.TabTextOn or t.Dim
+    ATStroke.Color = state and t.Accent or t.Border; ATStroke.Transparency = state and 0.4 or 0.7
+    if state then
+        local char = player.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                _anchorPosition = root.CFrame
+                if _anchorConnection then _anchorConnection:Disconnect() end
+                _anchorConnection = RunService.Heartbeat:Connect(function()
+                    if root and root.Parent and _anchorPosition then
+                        root.CFrame = _anchorPosition
+                        root.Velocity = Vector3.zero
+                        root.RotVelocity = Vector3.zero
+                    end
+                end)
+            end
+        end
+        if ConsoleOutput then appendConsoleStatus("Anchor", true) end
+    else
+        if _anchorConnection then _anchorConnection:Disconnect(); _anchorConnection = nil end
+        _anchorPosition = nil
+        if ConsoleOutput then appendConsoleStatus("Anchor", false) end
+    end
+end
+AnchorToggle.Activated:Connect(function() toggleAnchor() end)
+AnchorToggle.MouseButton1Click:Connect(function() toggleAnchor() end)
+AnchorToggle.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggleAnchor() end end)
+
+local AutoBuyCard = Instance.new("Frame")
+AutoBuyCard.Size = UDim2.new(1, 0, 0, 52)
+AutoBuyCard.BackgroundColor3 = COLORS.Row; AutoBuyCard.BackgroundTransparency = 0.4
+AutoBuyCard.BorderSizePixel = 0; AutoBuyCard.ZIndex = 6; AutoBuyCard.Parent = FarmPanel
+addCorner(AutoBuyCard, 10)
+local abS = addStroke(AutoBuyCard, COLORS.Border, 1, 0.4)
+table.insert(themed.cards, AutoBuyCard); table.insert(themed.cardStrokes, abS)
+
+makeLabel(AutoBuyCard, "Auto Buy", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
+
+local ABKFrame = Instance.new("Frame")
+ABKFrame.Size = UDim2.fromOffset(46, 20); ABKFrame.Position = UDim2.fromOffset(12, 28)
+ABKFrame.BackgroundColor3 = COLORS.Control; ABKFrame.ZIndex = 7; ABKFrame.Parent = AutoBuyCard
+addCorner(ABKFrame, 5)
+local ABKStroke = addStroke(ABKFrame, COLORS.Accent, 1, 0.6)
+table.insert(themed.keybindFrames, ABKFrame); table.insert(themed.keybindStrokes, ABKStroke)
+
+local ABKLabel = Instance.new("TextLabel")
+ABKLabel.Size = UDim2.fromScale(1, 1); ABKLabel.BackgroundTransparency = 1
+ABKLabel.Text = "[".._autoBuyKeybind.."]"; ABKLabel.TextSize = 9
+ABKLabel.TextColor3 = COLORS.Accent; ABKLabel.Font = Enum.Font.GothamBold
+ABKLabel.ZIndex = 8; ABKLabel.Parent = ABKFrame
+table.insert(themed.keybindLabels, ABKLabel)
+
+local ABKBtn = Instance.new("TextButton")
+ABKBtn.Size = UDim2.fromScale(1, 1); ABKBtn.BackgroundTransparency = 1
+ABKBtn.Text = ""; ABKBtn.ZIndex = 9; ABKBtn.Parent = ABKFrame
+ABKBtn.MouseButton1Click:Connect(function() _waitingForKeybind = "autoBuy"; ABKLabel.Text = "..."; ABKLabel.TextColor3 = COLORS.Red end)
+
+local AutoBuyToggle = Instance.new("TextButton")
+AutoBuyToggle.Size = UDim2.fromOffset(50, 26); AutoBuyToggle.Position = UDim2.new(1, -58, 0, 12)
+AutoBuyToggle.BackgroundColor3 = _autoBuyEnabled and COLORS.Accent or COLORS.Control
+AutoBuyToggle.BorderSizePixel = 0; AutoBuyToggle.AutoButtonColor = false
+AutoBuyToggle.Text = _autoBuyEnabled and "ON" or "OFF"
+AutoBuyToggle.TextSize = 9; AutoBuyToggle.TextColor3 = _autoBuyEnabled and COLORS.TabTextOn or COLORS.Dim
+AutoBuyToggle.Font = Enum.Font.GothamBold; AutoBuyToggle.ZIndex = 8; AutoBuyToggle.Parent = AutoBuyCard
+addCorner(AutoBuyToggle, 8)
+local ABTStroke = addStroke(AutoBuyToggle, _autoBuyEnabled and COLORS.Accent or COLORS.Border, 1, _autoBuyEnabled and 0.4 or 0.7)
+table.insert(themed.toggleButtons, {btn = AutoBuyToggle, isOn = function() return _autoBuyEnabled end})
+table.insert(themed.toggleStrokes, {stroke = ABTStroke, isOn = function() return _autoBuyEnabled end})
+
+local function toggleAutoBuy(state)
+    if state == nil then state = not _autoBuyEnabled end
+    _autoBuyEnabled = state; savedConfig.autoBuyEnabled = state; saveConfig()
+    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
+    AutoBuyToggle.Text = state and "ON" or "OFF"
+    AutoBuyToggle.BackgroundColor3 = state and t.Accent or t.Control
+    AutoBuyToggle.TextColor3 = state and t.TabTextOn or t.Dim
+    ABTStroke.Color = state and t.Accent or t.Border; ABTStroke.Transparency = state and 0.4 or 0.7
+    if state then if ConsoleOutput then appendConsoleStatus("Auto Buy", true) end
+    else if ConsoleOutput then appendConsoleStatus("Auto Buy", false) end end
+end
+AutoBuyToggle.Activated:Connect(function() toggleAutoBuy() end)
+AutoBuyToggle.MouseButton1Click:Connect(function() toggleAutoBuy() end)
+AutoBuyToggle.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggleAutoBuy() end end)
+
+makeLabel(FarmPanel, "Tap keybind boxes to change", UDim2.new(1, 0, 0, 14), UDim2.fromOffset(0, 0), 8, COLORS.Dim, Enum.Font.GothamMedium)
+
+-- SETTINGS PANEL
+local SettingsPanel = Instance.new("ScrollingFrame")
+SettingsPanel.Name = "SettingsPanel"
+SettingsPanel.Size = UDim2.new(1, 0, 1, 0)
+SettingsPanel.BackgroundTransparency = 1
+SettingsPanel.Visible = false
+SettingsPanel.ScrollBarThickness = 3
+SettingsPanel.ScrollBarImageColor3 = COLORS.Dim
+SettingsPanel.CanvasSize = UDim2.new(0, 0, 0, 360)
+SettingsPanel.ZIndex = 5
+SettingsPanel.Parent = PanelContainer
+tabPanels["SETTINGS"] = SettingsPanel
+local SPPad = Instance.new("UIPadding")
+SPPad.PaddingLeft = UDim.new(0, 12); SPPad.PaddingRight = UDim.new(0, 12)
+SPPad.PaddingTop = UDim.new(0, 10); SPPad.Parent = SettingsPanel
+local SPLayout = Instance.new("UIListLayout")
+SPLayout.Padding = UDim.new(0, 8); SPLayout.Parent = SettingsPanel
+
+local settingsTitle = makeLabel(SettingsPanel, "SETTINGS", UDim2.new(1, 0, 0, 20), UDim2.fromOffset(0, 0), 13, COLORS.Accent, Enum.Font.GothamBold)
+themed.settingsTitle = settingsTitle
+
+local AntiLagCard = Instance.new("Frame")
+AntiLagCard.Size = UDim2.new(1, 0, 0, 52)
+AntiLagCard.BackgroundColor3 = COLORS.Row; AntiLagCard.BackgroundTransparency = 0.4
+AntiLagCard.BorderSizePixel = 0; AntiLagCard.ZIndex = 6; AntiLagCard.Parent = SettingsPanel
+addCorner(AntiLagCard, 10)
+local alS = addStroke(AntiLagCard, COLORS.Border, 1, 0.4)
+table.insert(themed.cards, AntiLagCard); table.insert(themed.cardStrokes, alS)
+
+makeLabel(AntiLagCard, "Anti Lag", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
+makeLabel(AntiLagCard, "Reduce graphics for FPS", UDim2.fromOffset(150, 14), UDim2.fromOffset(12, 26), 8, COLORS.Dim, Enum.Font.GothamMedium)
+
+local AntiLagToggle = Instance.new("TextButton")
+AntiLagToggle.Size = UDim2.fromOffset(50, 26); AntiLagToggle.Position = UDim2.new(1, -58, 0.5, -13)
+AntiLagToggle.BackgroundColor3 = _antiLagEnabled and COLORS.Accent or COLORS.Control
+AntiLagToggle.BorderSizePixel = 0; AntiLagToggle.AutoButtonColor = false
+AntiLagToggle.Text = _antiLagEnabled and "ON" or "OFF"
+AntiLagToggle.TextSize = 9; AntiLagToggle.TextColor3 = _antiLagEnabled and COLORS.TabTextOn or COLORS.Dim
+AntiLagToggle.Font = Enum.Font.GothamBold; AntiLagToggle.ZIndex = 8; AntiLagToggle.Parent = AntiLagCard
+addCorner(AntiLagToggle, 8)
+local ALTStroke = addStroke(AntiLagToggle, _antiLagEnabled and COLORS.Accent or COLORS.Border, 1, _antiLagEnabled and 0.4 or 0.7)
+table.insert(themed.toggleButtons, {btn = AntiLagToggle, isOn = function() return _antiLagEnabled end})
+table.insert(themed.toggleStrokes, {stroke = ALTStroke, isOn = function() return _antiLagEnabled end})
+
+local savedLighting = {}
+local function applyAntiLag(state)
+    if state then
+        savedLighting = {GlobalShadows = Lighting.GlobalShadows, Quality = settings().Rendering.QualityLevel}
+        pcall(function()
+            Lighting.GlobalShadows = false; Lighting.FogEnd = 100000
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+            for _, d in ipairs(Workspace:GetDescendants()) do
+                if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled = false end
+            end
+        end)
+        if ConsoleOutput then appendConsoleStatus("Anti Lag", true) end
+    else
+        pcall(function()
+            if savedLighting.GlobalShadows ~= nil then Lighting.GlobalShadows = savedLighting.GlobalShadows end
+            if savedLighting.Quality then settings().Rendering.QualityLevel = savedLighting.Quality end
+            for _, d in ipairs(Workspace:GetDescendants()) do
+                if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled = true end
+            end
+        end)
+        if ConsoleOutput then appendConsoleStatus("Anti Lag", false) end
+    end
+end
+
+local function toggleAntiLag(state)
+    if state == nil then state = not _antiLagEnabled end
+    _antiLagEnabled = state; savedConfig.antiLagEnabled = state; saveConfig()
+    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
+    AntiLagToggle.Text = state and "ON" or "OFF"
+    AntiLagToggle.BackgroundColor3 = state and t.Accent or t.Control
+    AntiLagToggle.TextColor3 = state and t.TabTextOn or t.Dim
+    ALTStroke.Color = state and t.Accent or t.Border; ALTStroke.Transparency = state and 0.4 or 0.7
+    applyAntiLag(state)
+end
+AntiLagToggle.Activated:Connect(function() toggleAntiLag() end)
+AntiLagToggle.MouseButton1Click:Connect(function() toggleAntiLag() end)
+AntiLagToggle.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggleAntiLag() end end)
+
+local UISizeCard = Instance.new("Frame")
+UISizeCard.Size = UDim2.new(1, 0, 0, 68)
+UISizeCard.BackgroundColor3 = COLORS.Row; UISizeCard.BackgroundTransparency = 0.4
+UISizeCard.BorderSizePixel = 0; UISizeCard.ZIndex = 6; UISizeCard.Parent = SettingsPanel
+addCorner(UISizeCard, 10)
+local usS = addStroke(UISizeCard, COLORS.Border, 1, 0.4)
+table.insert(themed.cards, UISizeCard); table.insert(themed.cardStrokes, usS)
+
+makeLabel(UISizeCard, "UI Size", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
+
+local Sizes = {"UltraMini", "Small", "Medium", "Large"}
+local SizeScales = {UltraMini = 0.55, Small = 0.75, Medium = 0.92, Large = 1.1}
+local SizeButtons = {}
+
+local SBFrame = Instance.new("Frame")
+SBFrame.Size = UDim2.new(1, -24, 0, 28); SBFrame.Position = UDim2.fromOffset(12, 34)
+SBFrame.BackgroundTransparency = 1; SBFrame.ZIndex = 7; SBFrame.Parent = UISizeCard
+local SBLayout = Instance.new("UIListLayout")
+SBLayout.FillDirection = Enum.FillDirection.Horizontal; SBLayout.Padding = UDim.new(0, 4)
+SBLayout.Parent = SBFrame
+
+local function applyUISize(size)
+    _currentUISize = size; savedConfig.uiSize = size; saveConfig()
+    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
+    TweenService:Create(InterfaceScale, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Scale = SizeScales[size] or 0.92}):Play()
+    for n, b in pairs(SizeButtons) do
+        local a = (n == size)
+        TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = a and t.Accent or t.Control, TextColor3 = a and t.TabTextOn or t.Dim}):Play()
+        local s = b:FindFirstChildOfClass("UIStroke"); if s then s.Color = a and t.Accent or t.Border; s.Transparency = a and 0.3 or 0.7 end
+    end
+    if ConsoleOutput then appendConsoleStatus("UI: "..size, true) end
+end
+
+for _, size in ipairs(Sizes) do
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0.25, -3, 1, 0)
+    b.BackgroundColor3 = (_currentUISize == size) and COLORS.Accent or COLORS.Control
+    b.BorderSizePixel = 0; b.AutoButtonColor = false
+    b.Text = size; b.TextSize = 8
+    b.TextColor3 = (_currentUISize == size) and COLORS.TabTextOn or COLORS.Dim
+    b.Font = Enum.Font.GothamBold; b.ZIndex = 8; b.Parent = SBFrame
+    addCorner(b, 5)
+    local ss = addStroke(b, (_currentUISize == size) and COLORS.Accent or COLORS.Border, 1, (_currentUISize == size) and 0.3 or 0.7)
+    SizeButtons[size] = b; themed.sizeButtons[size] = b; themed.sizeStrokes[size] = ss
+    b.Activated:Connect(function() applyUISize(size) end)
+    b.MouseButton1Click:Connect(function() applyUISize(size) end)
+    b.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then applyUISize(size) end end)
+end
+
+local BGCard = Instance.new("Frame")
+BGCard.Size = UDim2.new(1, 0, 0, 100)
+BGCard.BackgroundColor3 = COLORS.Row; BGCard.BackgroundTransparency = 0.4
+BGCard.BorderSizePixel = 0; BGCard.ZIndex = 6; BGCard.Parent = SettingsPanel
+addCorner(BGCard, 10)
+local bgS = addStroke(BGCard, COLORS.Border, 1, 0.4)
+table.insert(themed.cards, BGCard); table.insert(themed.cardStrokes, bgS)
+
+makeLabel(BGCard, "Background", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
+
+local BGGrid = Instance.new("Frame")
+BGGrid.Size = UDim2.new(1, -24, 0, 55); BGGrid.Position = UDim2.fromOffset(12, 38)
+BGGrid.BackgroundTransparency = 1; BGGrid.ZIndex = 7; BGGrid.Parent = BGCard
+local BGGridLayout = Instance.new("UIGridLayout")
+BGGridLayout.CellSize = UDim2.new(0, 44, 0, 55); BGGridLayout.CellPadding = UDim2.new(0, 5, 0, 0)
+BGGridLayout.FillDirection = Enum.FillDirection.Horizontal
+BGGridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+BGGridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+BGGridLayout.Parent = BGGrid
+
+local BGButtons = {}
+
+local function applyBG(index)
+    _selectedBG = index; savedConfig.selectedBG = index; saveConfig()
+    BackgroundImage.Image = BG_PRESETS[index].id
+    applyFullTheme(index)
+    local t = BG_THEMES[index] or BG_THEMES[1]
+    for idx, b in pairs(BGButtons) do
+        local a = (idx == index)
+        TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = a and t.Accent or t.Control}):Play()
+        local s = b:FindFirstChildOfClass("UIStroke"); if s then s.Color = a and t.Accent or t.Border; s.Transparency = a and 0.2 or 0.7 end
+        local ch = b:FindFirstChild("Check"); if ch then ch.Visible = a end
+    end
+    if ConsoleOutput then appendConsoleStatus("BG: "..BG_PRESETS[index].name.." ["..t.Label.."]", true) end
+end
+
+for i, preset in ipairs(BG_PRESETS) do
+    local t = BG_THEMES[i] or BG_THEMES[1]
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, 44, 0, 55)
+    b.BackgroundColor3 = (_selectedBG == i) and t.Accent or COLORS.Control
+    b.BorderSizePixel = 0; b.AutoButtonColor = false; b.LayoutOrder = i
+    b.ZIndex = 8; b.Parent = BGGrid; addCorner(b, 6)
+    local bStroke = addStroke(b, (_selectedBG == i) and t.Accent or COLORS.Border, 1.5, (_selectedBG == i) and 0.2 or 0.7)
+    themed.bgButtons[i] = b; themed.bgStrokes[i] = bStroke
+
+    local preview = Instance.new("ImageLabel")
+    preview.Size = UDim2.new(1, -4, 1, -16); preview.Position = UDim2.fromOffset(2, 2)
+    preview.BackgroundTransparency = 1; preview.Image = preset.id
+    preview.ScaleType = Enum.ScaleType.Crop; preview.ZIndex = 9; preview.Parent = b
+    addCorner(preview, 4)
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 0, 12); nameLabel.Position = UDim2.new(0, 0, 1, -12)
+    nameLabel.BackgroundTransparency = 1; nameLabel.Text = preset.name
+    nameLabel.TextSize = 7; nameLabel.TextColor3 = COLORS.Dim
+    nameLabel.Font = Enum.Font.GothamBold; nameLabel.ZIndex = 9; nameLabel.Parent = b
+
+    local check = Instance.new("TextLabel")
+    check.Name = "Check"; check.Size = UDim2.fromOffset(12, 12)
+    check.Position = UDim2.new(1, -13, 0, 1)
+    check.BackgroundColor3 = COLORS.Green; check.Text = "Y"
+    check.TextSize = 7; check.TextColor3 = Color3.fromRGB(0, 0, 0)
+    check.Font = Enum.Font.GothamBold; check.ZIndex = 10
+    check.Visible = (_selectedBG == i); check.Parent = b
+    addCorner(check, 6)
+
+    BGButtons[i] = b
+    b.Activated:Connect(function() applyBG(i) end)
+    b.MouseButton1Click:Connect(function() applyBG(i) end)
+    b.InputBegan:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.Touch or inp.UserInputType == Enum.UserInputType.MouseButton1 then applyBG(i) end end)
+end
+
+local DiscordFooter = Instance.new("TextLabel")
+DiscordFooter.Size = UDim2.fromOffset(200, 16)
+DiscordFooter.Position = UDim2.new(0.5, -100, 1, -20)
+DiscordFooter.BackgroundTransparency = 1
+DiscordFooter.Text = "discord.gg/aQKQSyNBV"
+DiscordFooter.TextSize = 10
+DiscordFooter.TextColor3 = COLORS.Accent
+DiscordFooter.Font = Enum.Font.GothamBold
+DiscordFooter.TextXAlignment = Enum.TextXAlignment.Center
+DiscordFooter.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+DiscordFooter.TextStrokeTransparency = 0.15
+DiscordFooter.ZIndex = 10
+DiscordFooter.Parent = Window
+themed.discordLabel = DiscordFooter
+
+-- KEYBIND HANDLER
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local key = input.KeyCode.Name
+        if _waitingForKeybind then
+            local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
+            if _waitingForKeybind == "anchor" then
+                _anchorKeybind = key; savedConfig.anchorKeybind = key
+                AKLabel.Text = "["..key.."]"; AKLabel.TextColor3 = t.Accent
+            elseif _waitingForKeybind == "autoBuy" then
+                _autoBuyKeybind = key; savedConfig.autoBuyKeybind = key
+                ABKLabel.Text = "["..key.."]"; ABKLabel.TextColor3 = t.Accent
+            end
+            _waitingForKeybind = nil; saveConfig(); return
+        end
+        if key == _anchorKeybind then toggleAnchor()
+        elseif key == _autoBuyKeybind then toggleAutoBuy() end
+    end
+end)
+
+-- DRAG
+do
+    local dragging = false
+    local activeDragInput
+    local dragStart
+    local startPosition
+    local dragMoved = false
+    local DRAG_THRESHOLD = UserInputService.TouchEnabled and 10 or 3
+
+    local function isOverHeaderControl(position)
+        local btnPos = AutoWriteButton.AbsolutePosition
+        local btnSize = AutoWriteButton.AbsoluteSize
+        return position.X >= (btnPos.X - 10)
+            and position.X <= (btnPos.X + btnSize.X + 10)
+            and position.Y >= (btnPos.Y - 10)
+            and position.Y <= (btnPos.Y + btnSize.Y + 10)
+    end
+
+    local function stopDragging(input)
+        if input ~= activeDragInput then return end
+        dragging = false; activeDragInput = nil; dragStart = nil; startPosition = nil
+    end
+
+    Header.InputBegan:Connect(function(input)
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        if dragging or isOverHeaderControl(input.Position) then return end
+        dragging = true; activeDragInput = input
+        dragStart = Vector2.new(input.Position.X, input.Position.Y)
+        startPosition = Window.Position; dragMoved = false
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End or input.UserInputState == Enum.UserInputState.Cancel then
+                stopDragging(input)
+            end
+        end)
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging or not activeDragInput then return end
+        local isTrackedTouch = activeDragInput.UserInputType == Enum.UserInputType.Touch and input == activeDragInput
+        local isTrackedMouse = activeDragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement
+        if not isTrackedTouch and not isTrackedMouse then return end
+        local current = Vector2.new(input.Position.X, input.Position.Y)
+        local delta = current - dragStart
+        if not dragMoved then
+            if delta.Magnitude < DRAG_THRESHOLD then return end
+            dragMoved = true
+        end
+        Window.Position = UDim2.new(
+            startPosition.X.Scale, startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
+        )
+    end)
+end
+
+-- CORE LOGIC
+local function col3ToRich(col)
+    if col == COLORS.Green then return CONSOLE_COLORS.Green end
+    if col == COLORS.Red then return CONSOLE_COLORS.Red end
+    if col == COLORS.Text then return CONSOLE_COLORS.Amber end
+    if col == COLORS.White then return CONSOLE_COLORS.Cyan end
+    if col == COLORS.Dim then return CONSOLE_COLORS.Dim end
+    return string.format("rgb(%d,%d,%d)", math.floor(col.R * 255 + 0.5), math.floor(col.G * 255 + 0.5), math.floor(col.B * 255 + 0.5))
+end
+
+function setStatus(msg, col)
+    if not ConsoleOutput or not _enabled then return end
+    if msg == _lastStatusMsg then return end
+    _lastStatusMsg = msg
+    col = col or COLORS.Dim
+    local line = '<font color="' .. col3ToRich(col) .. '">' .. tostring(msg) .. "</font>"
+    if ConsoleOutput.Text == "" then ConsoleOutput.Text = line
+    else ConsoleOutput.Text = ConsoleOutput.Text .. "\n\n" .. line end
+    scrollConsoleToBottom()
+end
+
+function flashCode(code, col)
+    if not code or code == "" or code == "—" then return end
+    setStatus("[code] -> " .. tostring(code), col or COLORS.White)
+end
+
+local function resetPasteCounter() _capturedParts = {} end
+clearAceCapture = function() _capturedParts = {} end
+
+local function clearBoxWatchers()
+    if _boxTextConn then pcall(function() _boxTextConn:Disconnect() end) end
+    if _boxAncestryConn then pcall(function() _boxAncestryConn:Disconnect() end) end
+    for _, connection in ipairs(_boxVisibilityConns) do pcall(function() connection:Disconnect() end) end
+    _boxTextConn = nil; _boxAncestryConn = nil; _boxVisibilityConns = {}; _lastWatchedBox = nil
+end
+
+local function watchBoxForBlankReset(box)
+    if not box or _lastWatchedBox == box then return end
+    clearBoxWatchers(); _lastWatchedBox = box
+    if box.Text ~= "" then _lastNonBlankBoxText = box.Text end
+    _boxTextConn = box:GetPropertyChangedSignal("Text"):Connect(function()
+        if box.Text == "" then resetPasteCounter()
+        else _lastNonBlankBoxText = box.Text end
+    end)
+    _boxAncestryConn = box.AncestryChanged:Connect(function(_, parent)
+        if not parent then resetPasteCounter(); clearBoxWatchers() end
+    end)
+end
+
+UserInputService.TextBoxFocused:Connect(function(box)
+    if box:IsDescendantOf(GUI) then return end
+    if box ~= aceCodeBox() then return end
+    _focused = box; _lastBox = box; watchBoxForBlankReset(box)
+    if _enabled then setStatus("Ready", COLORS.Green) end
+end)
+
+UserInputService.TextBoxFocusReleased:Connect(function(box)
+    if box:IsDescendantOf(GUI) then return end
+    local codeBox = aceCodeBox()
+    if box ~= codeBox and box ~= _lastBox then return end
+    if _retypeInvalid and rememberPendingSubmission and (box == codeBox or box == _lastBox) then
+        local submittedText = box.Text ~= "" and box.Text or _lastNonBlankBoxText
+        rememberPendingSubmission(box, submittedText, false)
+    end
+    if _focused == box then
+        _focused = nil
+        if _enabled then
+            setStatus((_lastBox and _lastBox.Parent) and "Ready" or "Click code box first", (_lastBox and _lastBox.Parent) and COLORS.Green or COLORS.Dim)
+        end
+    end
+end)
+
+clearPendingSubmission = function()
+    _pendingRejectedToken += 1; _pendingRejectedText = nil; _pendingRejectedBox = nil; _pendingRejectedUntil = 0
+end
+
+rememberPendingSubmission = function(box, text, replaceExisting)
+    if not _retypeInvalid or not text or text == "" then return end
+    if not replaceExisting and _pendingRejectedText and os.clock() <= _pendingRejectedUntil then return end
+    _pendingRejectedToken += 1; local token = _pendingRejectedToken
+    _pendingRejectedText = text; _pendingRejectedBox = box; _pendingRejectedUntil = os.clock() + 8
+    task.delay(8, function() if token == _pendingRejectedToken then clearPendingSubmission() end end)
+end
+
+local function restoreRejectedText(box, previousText)
+    if not _retypeInvalid or not previousText or previousText == "" then return false end
+    RunService.Heartbeat:Wait()
+    local repasteBox = aceCodeBox() or box
+    if not repasteBox or not isVisibleChain(repasteBox) then return false end
+    local restored = pcall(function() repasteBox.Text = previousText end)
+    if restored then _lastBox = repasteBox; watchBoxForBlankReset(repasteBox) end
+    return restored
+end
+
+handleRedemptionFeedback = function(text, feedbackObject)
+    if not _retypeInvalid or not _pendingRejectedText then return end
+    if os.clock() > _pendingRejectedUntil then clearPendingSubmission(); return end
+    if feedbackObject and feedbackObject:IsDescendantOf(GUI) then return end
+    local lower = tostring(text or ""):lower()
+    local rejected = lower:find("invalid code", 1, true)
+        or lower:find("code is invalid", 1, true)
+        or lower:find("expired", 1, true)
+        or lower:find("already redeemed", 1, true)
+        or lower:find("already used", 1, true)
+        or lower:find("doesn't exist", 1, true)
+        or lower:find("does not exist", 1, true)
+        or lower:find("not found", 1, true)
+        or lower:find("rejected", 1, true)
+    if not rejected then return end
+    local previousText = _pendingRejectedText
+    local previousBox = _pendingRejectedBox
+    local restored = restoreRejectedText(previousBox, previousText)
+    clearPendingSubmission()
+    if restored then
+        setStatus("Invalid - repasted: " .. previousText, COLORS.Text)
+        flashCode(previousText, COLORS.Red)
+    end
+end
+
+function appendToBox(text)
+    if not text or text == "" then return end
+    if _lastWatchedBox and not isVisibleChain(_lastWatchedBox) then
+        resetPasteCounter(); clearBoxWatchers()
+    end
+    local box = aceCodeBox()
+    _capturedParts[#_capturedParts + 1] = text
+    local combinedCode = table.concat(_capturedParts)
+    local capturedCount = #_capturedParts
+    if box then
+        _lastBox = box; watchBoxForBlankReset(box)
+        local boxWasFocused = UserInputService:GetFocusedTextBox() == box
+        box.Text = combinedCode
+        if boxWasFocused then
+            pcall(function()
+                local caretEnd = #combinedCode + 1
+                box.CursorPosition = caretEnd; box.SelectionStart = caretEnd
+            end)
+        end
+    else
+        setStatus("Captured; opening & searching UI...", COLORS.Text)
+    end
+    setStatus("Pasted " .. tostring(capturedCount) .. "/" .. tostring(_submitAfter), COLORS.Green)
+    flashCode(combinedCode, COLORS.Green)
+    if capturedCount >= _submitAfter then
+        _capturedParts = {}
+        if _autoAccept then
+            rememberPendingSubmission(box, combinedCode, true)
+            local ok, statusMsg = typeAndSubmitCode(combinedCode)
+            if ok then
+                setStatus("Redeemed: " .. combinedCode, COLORS.Green)
+            else
+                local restored = restoreRejectedText(box, combinedCode)
+                clearPendingSubmission()
+                if restored then
+                    setStatus("Invalid - repasted: " .. combinedCode, COLORS.Text)
+                    flashCode(combinedCode, COLORS.Red)
+                else
+                    setStatus("Failed: " .. tostring(statusMsg), COLORS.Red)
+                end
+            end
+        end
+    end
+end
+
+local function watchRedemptionFeedbackObject(obj)
+    if not (obj:IsA("TextLabel") or obj:IsA("TextButton")) then return end
+    handleRedemptionFeedback(obj.Text or "", obj)
+    obj:GetPropertyChangedSignal("Text"):Connect(function()
+        handleRedemptionFeedback(obj.Text or "", obj)
+    end)
+end
+for _, obj in ipairs(playerGui:GetDescendants()) do watchRedemptionFeedbackObject(obj) end
+playerGui.DescendantAdded:Connect(function(obj)
+    task.wait(0.04); watchRedemptionFeedbackObject(obj)
+end)
+
+local function resolveNotifyRemote()
+    if _G.PhiNotifyRemote then return _G.PhiNotifyRemote end
+    local Net = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Net")
+    local getinfo = debug and (debug.getinfo or debug.info)
+    if getgc and getinfo and getconnections then
+        for _, d in ipairs(Net:GetDescendants()) do
+            if d:IsA("RemoteEvent") then
+                local ok, cs = pcall(getconnections, d.OnClientEvent)
+                if ok then
+                    for _, c in ipairs(cs) do
+                        local f, fn = pcall(function() return c.Function end)
+                        if f and type(fn) == "function" then
+                            local i, info = pcall(getinfo, fn)
+                            if i and tostring(info.short_src or info.source or ""):find("NotificationController", 1, true) then
+                                return d
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function aceStripRich(text)
+    if type(text) ~= "string" then return tostring(text) end
+    return (text:gsub("<[^>]->", ""))
+end
+
+local function aceTokenize(text)
+    local words = {}
+    for word in text:gmatch("[%w_]+") do
+        words[#words + 1] = word
+    end
+    return words
+end
+
+local function solveRiddle(message, seq)
+    _solving = _solving + 1
+    setStatus("Riddle detected! Asking AI...", COLORS.Text)
+
+    task.spawn(function()
+        local data = nil
+        local httpOk, httpErr = pcall(function()
+            data = aiPost("/solve", { riddle = message })
+        end)
+
+        _solving = math.max(0, _solving - 1)
+
+        if not _enabled then return end
+
+        if not httpOk then
+            setStatus("ERROR: HTTP call crashed - " .. tostring(httpErr), COLORS.Red)
+            return
+        end
+
+        if not data then
+            setStatus("ERROR: AI returned nothing", COLORS.Red)
+            return
+        end
+
+        if not data.answer then
+            setStatus("ERROR: AI returned no answer", COLORS.Red)
+            return
+        end
+
+        local answer = normalizeCode(data.answer)
+
+        if answer == "" then
+            setStatus("ERROR: AI answer is empty", COLORS.Red)
+            return
+        end
+
+        if not _riddleSolver then return end
+
+        _lastTypedSeq = seq
+        _solvedCount = _solvedCount + 1
+
+        setStatus("AI answer: " .. answer, COLORS.Green)
+
+        rememberPendingSubmission(nil, answer, true)
+        local ok, statusMsg = typeAndSubmitCode(answer)
+
+        if ok then
+            setStatus("Riddle redeemed: " .. answer, COLORS.Green)
+        else
+            setStatus("Riddle failed: " .. tostring(statusMsg), COLORS.Red)
+        end
+    end)
+end
+
+local aceCollectBuffer = {}
+local function onAceAnnouncement(...)
+    local text = aceStripRich(tostring((...) or ""))
+    text = text:match("^%s*(.-)%s*$") or ""
+    if text == "" then return end
+
+    if _riddleSolver and text:find("%s") then
+        _riddleSeq = _riddleSeq + 1
+        solveRiddle(text, _riddleSeq)
+        return
+    end
+
+    if text:find("%s") then return end
+
+    for _, word in ipairs(aceTokenize(text)) do
+        aceCollectBuffer[#aceCollectBuffer + 1] = word
+    end
+
+    local parts = {}
+    for index = 1, math.min(#aceCollectBuffer, ACE_WORD_COUNT) do
+        parts[index] = aceCollectBuffer[index]
+    end
+    if #aceCollectBuffer < ACE_WORD_COUNT then return end
+    aceCollectBuffer = {}
+
+    local captured = table.concat(parts)
+    if captured == "" or _seen[captured] then return end
+    _seen[captured] = true
+    task.delay(1.25, function() _seen[captured] = nil end)
+    appendToBox(captured)
+end
+
+local aceNotifyRemote = resolveNotifyRemote()
+local aceListenConnection
+if aceNotifyRemote then
+    if getgenv then
+        local previous = getgenv().ACECodeSniperNotifyConnection
+        if previous then pcall(function() previous:Disconnect() end) end
+    end
+    aceListenConnection = aceNotifyRemote.OnClientEvent:Connect(function(...)
+        if not _enabled then return end
+        pcall(onAceAnnouncement, ...)
+    end)
+    if getgenv then getgenv().ACECodeSniperNotifyConnection = aceListenConnection end
+end
+
+if getgenv then
+    getgenv().StopAura = function()
+        if aceListenConnection then
+            pcall(function() aceListenConnection:Disconnect() end)
+            aceListenConnection = nil
+        end
+        if getgenv().ACECodeSniperNotifyConnection then
+            pcall(function() getgenv().ACECodeSniperNotifyConnection:Disconnect() end)
+            getgenv().ACECodeSniperNotifyConnection = nil
+        end
+        if _anchorConnection then _anchorConnection:Disconnect() end
+        if GUI then GUI:Destroy() end
+    end
+end
+
+if _antiLagEnabled then task.defer(function() applyAntiLag(true) end) end
+task.defer(function()
+    InterfaceScale.Scale = SizeScales[_currentUISize] or 0.92
+    applyFullTheme(_selectedBG)
+end)
+task.defer(function()
+    task.wait(0.1)
+    local finalPos = Window.Position
+    Window.Position = UDim2.new(finalPos.X.Scale, finalPos.X.Offset, finalPos.Y.Scale, finalPos.Y.Offset + 20)
+    TweenService:Create(Window, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        Position = finalPos
+    }):Play()
+end)
+
+print("Eclipse Auto Codes v3.0 | Counter fixed: 1,2,3,4,5,6...")
