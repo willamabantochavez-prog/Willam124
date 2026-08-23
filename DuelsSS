@@ -1,4 +1,4 @@
--- Eclipse Duels - Visual Mod v6.4 (COMPLETE - Compact Mobile Buttons)
+-- Eclipse Duels - Visual Mod v6.5 (COMPLETE - No Head Billboard)
 -- Original deobf by prince https://discord.gg/TBBAUZu8cW
 
 repeat task.wait() until game:IsLoaded()
@@ -16,7 +16,6 @@ local unwalkEnabled = false
 local medusaDebounce,medusaLastUsed,dropActive = false,0,false
 local autoLeftEnabled,autoRightEnabled = false,false
 local autoLeftSetVisual,autoRightSetVisual = nil,nil
-local speedLabel = nil
 local autoBatEnabled = false
 local autoSwingEnabled = true
 local autoBatSetVisual = nil
@@ -262,7 +261,6 @@ RunService.RenderStepped:Connect(function()
             if anyHeld then hrp.Velocity=Vector3.new(lastMoveDir.X*spd,hrp.Velocity.Y,lastMoveDir.Z*spd) end
         end
     end
-    if speedLabel then speedLabel.Text=string.format("Speed: %.1f",Vector3.new(hrp.Velocity.X,0,hrp.Velocity.Z).Magnitude) end
 end)
 
 local alConn,arConn=nil,nil;local alPhase,arPhase=1,1
@@ -319,13 +317,6 @@ local function startAutoRight()
             local d=AP_R2-hrp.Position;local mv=Vector3.new(d.X,0,d.Z).Unit;hum:Move(mv,false);hrp.AssemblyLinearVelocity=Vector3.new(mv.X*spd,hrp.AssemblyLinearVelocity.Y,mv.Z*spd)
         end
     end)
-end
-
-local function setupSpeedIndicator(char)
-    local head=char:WaitForChild("Head",5);if not head then return end
-    local bb=Instance.new("BillboardGui",head);bb.Size=UDim2.new(0,160,0,44);bb.StudsOffset=Vector3.new(0,3,0);bb.AlwaysOnTop=true
-    speedLabel=Instance.new("TextLabel",bb);speedLabel.Size=UDim2.new(1,0,0.55,0);speedLabel.BackgroundTransparency=1;speedLabel.Text="Speed: 0";speedLabel.TextColor3=Color3.fromRGB(255,255,255);speedLabel.Font=Enum.Font.GothamBlack;speedLabel.TextScaled=true;speedLabel.TextStrokeTransparency=0;speedLabel.TextStrokeColor3=Color3.fromRGB(0,0,0)
-    local discordLabel=Instance.new("TextLabel",bb);discordLabel.Size=UDim2.new(1,0,0.45,0);discordLabel.Position=UDim2.new(0,0,0.55,0);discordLabel.BackgroundTransparency=1;discordLabel.Text="https://discord.gg/3aNBgkKKXN";discordLabel.TextColor3=Color3.fromRGB(255,255,255);discordLabel.Font=Enum.Font.GothamBlack;discordLabel.TextScaled=true;discordLabel.TextStrokeTransparency=0;discordLabel.TextStrokeColor3=Color3.fromRGB(0,0,0)
 end
 
 local function startAntiRagdoll()
@@ -720,8 +711,7 @@ end
 function stopBodyLock() bodyLockEnabled=false;if bodyLockConn then bodyLockConn:Disconnect();bodyLockConn=nil end;local hum=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid");if hum then hum.AutoRotate=true end end
 function setBodyLock(on) bodyLockEnabled=on;if on then startBodyLock() else stopBodyLock() end;if setBodyLockVisual then setBodyLockVisual(on) end;pcall(saveConfig) end
 
-LP.CharacterAdded:Connect(function(char) task.wait(0.5);setupSpeedIndicator(char);if medusaCounterEnabled then setupMedusa(char) end;if batCounterEnabled then startBatCounter() end;if unwalkEnabled then task.wait(0.5);startUnwalk() end end)
-if LP.Character then setupSpeedIndicator(LP.Character) end
+LP.CharacterAdded:Connect(function(char) task.wait(0.5);if medusaCounterEnabled then setupMedusa(char) end;if batCounterEnabled then startBatCounter() end;if unwalkEnabled then task.wait(0.5);startUnwalk() end end)
 
 if mobileButtonsSize==nil then mobileButtonsSize=100 end;if mobileButtonShape==nil then mobileButtonShape="box" end;if mobileDragSmall==nil then mobileDragSmall=false end;if mobileMovingMode==nil then mobileMovingMode=false end
 mobBtnRefs=mobBtnRefs or {};mobLastLiveSave=mobLastLiveSave or 0;mobGuiRef=mobGuiRef or nil;mobBtnSavedContainerPos=mobBtnSavedContainerPos or nil;mobBtnSavedIndPos=mobBtnSavedIndPos or {};setMobileDragSmallVisual=setMobileDragSmallVisual or nil
@@ -767,14 +757,14 @@ end
 task.spawn(function() while task.wait(0.5) do pcall(function() saveMobileButtonPositions();saveConfig();saveMobileButtonsConfigOnly() end) end end)
 
 -- ============================================================
--- MOBILE BUTTONS v6.4 - COMPACT FOR PHONES
+-- MOBILE BUTTONS v6.5 - COMPACT FOR PHONES
 -- ============================================================
 function buildMobileButtons()
     destroyMobileButtons()
 
     local scale = (mobileButtonsSize or 100) / 100
-    local S = math.floor(42 * scale)          -- was 56
-    local GAP = math.floor(4 * scale)         -- was 6
+    local S = math.floor(42 * scale)
+    local GAP = math.floor(4 * scale)
     local COLS = 3
     local ROWS = 3
     local totalW = COLS * S + (COLS - 1) * GAP
@@ -841,7 +831,7 @@ function buildMobileButtons()
             btn.Position = UDim2.new(sp.xs, sp.xo, sp.ys, sp.yo)
         end
 
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, math.floor(10 * scale))  -- was 14
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, math.floor(10 * scale))
 
         local btnBg = Instance.new("ImageLabel", btn)
         btnBg.Size = UDim2.new(1, 0, 1, 0)
@@ -864,28 +854,26 @@ function buildMobileButtons()
 
         local stroke = Instance.new("UIStroke", btn)
         stroke.Color = STROKE_OFF
-        stroke.Thickness = 1.2  -- was 1.5
+        stroke.Thickness = 1.2
         stroke.Transparency = 0.05
         stroke.ZIndex = 3
 
-        -- EMOJI (compact)
         local emoji = Instance.new("TextLabel", btn)
         emoji.BackgroundTransparency = 1
         emoji.Text = def.emoji
-        emoji.TextSize = math.floor(11 * scale)  -- was 14
+        emoji.TextSize = math.floor(11 * scale)
         emoji.ZIndex = 5
         emoji.Size = UDim2.new(1, 0, 0.55, 0)
         emoji.Position = UDim2.new(0, 0, 0.02, 0)
         emoji.TextXAlignment = Enum.TextXAlignment.Center
         emoji.TextYAlignment = Enum.TextYAlignment.Bottom
 
-        -- LABEL (compact)
         local label = Instance.new("TextLabel", btn)
         label.BackgroundTransparency = 1
         label.Text = def.label
         label.TextColor3 = Color3.fromRGB(160, 140, 120)
         label.Font = Enum.Font.GothamBlack
-        label.TextSize = math.floor(6 * scale)  -- was 7
+        label.TextSize = math.floor(6 * scale)
         label.TextStrokeTransparency = 0.7
         label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
         label.ZIndex = 5
@@ -894,18 +882,16 @@ function buildMobileButtons()
         label.TextXAlignment = Enum.TextXAlignment.Center
         label.TextYAlignment = Enum.TextYAlignment.Top
 
-        -- STATUS DOT (compact)
         local dot = Instance.new("Frame", btn)
-        dot.Size = UDim2.new(0, math.floor(5 * scale), 0, math.floor(5 * scale))  -- was 6
+        dot.Size = UDim2.new(0, math.floor(5 * scale), 0, math.floor(5 * scale))
         dot.Position = UDim2.new(1, math.floor(-8 * scale), 0, math.floor(4 * scale))
         dot.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
         dot.BorderSizePixel = 0
         dot.ZIndex = 5
         Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
 
-        -- BOTTOM BAR
         local bar = Instance.new("Frame", btn)
-        bar.Size = UDim2.new(0, 0, 0, 2)  -- was 3
+        bar.Size = UDim2.new(0, 0, 0, 2)
         bar.Position = UDim2.new(0, 0, 1, -2)
         bar.BackgroundColor3 = ORANGE
         bar.BackgroundTransparency = 0.2
@@ -913,11 +899,10 @@ function buildMobileButtons()
         bar.ZIndex = 5
         Instance.new("UICorner", bar).CornerRadius = UDim.new(0, math.floor(10 * scale))
 
-        -- LOCK ICON (compact)
         local lockIcon = Instance.new("TextLabel", btn)
         lockIcon.BackgroundTransparency = 1
         lockIcon.Text = "🔒"
-        lockIcon.TextSize = math.floor(12 * scale)  -- was 16
+        lockIcon.TextSize = math.floor(12 * scale)
         lockIcon.ZIndex = 6
         lockIcon.Size = UDim2.new(1, 0, 1, 0)
         lockIcon.Position = UDim2.new(0, 0, 0, 0)
@@ -1205,7 +1190,7 @@ local function startAutoSwitchSpeed()
 end
 
 -- ============================================================
--- MAIN UI v6.4
+-- MAIN UI v6.5
 -- ============================================================
 local function buildGui()
     local BG=Color3.fromRGB(8,6,4);local BG2=Color3.fromRGB(14,10,6);local CARD=Color3.fromRGB(18,14,10)
