@@ -44,12 +44,12 @@ end
 --// ==============================
 
 -- ✅ URL cambiada por Eclipse Duels
-safeLoad("https://pastebin.com/raw/LcSbHG98", "Eclipse Duels")
+safeLoad("https://pastebin.com/raw/X70pTcFS", "Eclipse Intro")
 
 task.wait(0.3)
 
 pcall(function()
-    safeLoad("https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/MenuStart2e", "Pastebin Intro")
+    safeLoad("https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/MenuStart2e", "Pastebin Intro 2")
 end)
 
 task.wait(0.3)
