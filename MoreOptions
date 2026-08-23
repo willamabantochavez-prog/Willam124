@@ -3,7 +3,7 @@
 -- ═══════════════════════════════════════════════════
 
 local SCRIPTS = {
-    AutoHoney = "https://raw.githubusercontent.com/TU_USUARIO/TU_REPO/main/autohoney.lua",
+    AutoHoney = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/AutoHoney",
     ComingSoon1 = "",
     ComingSoon2 = "",
 }
