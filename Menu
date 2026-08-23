@@ -49,7 +49,7 @@ safeLoad("https://pastebin.com/raw/LcSbHG98", "Eclipse Duels")
 task.wait(0.3)
 
 pcall(function()
-    safeLoad("https://pastebin.com/raw/F0x8qjGd", "Pastebin Intro")
+    safeLoad("https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/MenuStart2e", "Pastebin Intro")
 end)
 
 task.wait(0.3)
