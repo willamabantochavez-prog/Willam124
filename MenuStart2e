@@ -37,7 +37,7 @@ end
 local scriptURLs = {
     ["OG Sniper"]    = "https://pastebin.com/raw/EqDevJSA",
     ["Eclipse Duels"] = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/DuelsSS",
-    ["Auto Code"]    = "https://pastebin.com/raw/aLvSrvx6",
+    ["Auto Code"]    = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/c0d3S8p35",
     ["Coming Soon"]  = nil,
 }
  
