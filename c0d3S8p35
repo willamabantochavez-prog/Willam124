@@ -1002,7 +1002,7 @@ ConsoleOutput:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateConsoleCanv
 task.defer(updateConsoleCanvas)
 
 -- ============================================================
--- AUTO BUY ENGINE (from Violet Hub)
+-- AUTO BUY ENGINE (from Violet Hub) - DEFINED BEFORE USE
 -- ============================================================
 
 local function isPromptValid(prompt)
@@ -1104,7 +1104,7 @@ local function stopAutoBuy()
 end
 
 -- ============================================================
--- ANCHOR ENGINE (from Violet Hub)
+-- ANCHOR ENGINE (from Violet Hub) - DEFINED BEFORE USE
 -- ============================================================
 
 local function startAnchor()
@@ -1151,7 +1151,7 @@ player.CharacterAdded:Connect(function()
 end)
 
 -- ============================================================
--- INSTANT BUY ENGINE (from Violet Hub)
+-- INSTANT BUY ENGINE (from Violet Hub) - DEFINED BEFORE USE
 -- ============================================================
 
 local function applyInstantBuy()
@@ -1180,7 +1180,7 @@ task.spawn(function()
     end
 end)
 
--- FARM PANEL
+-- FARM PANEL - NOW USES THE ENGINES DEFINED ABOVE
 local FarmPanel = Instance.new("ScrollingFrame")
 FarmPanel.Name = "FarmPanel"
 FarmPanel.Size = UDim2.new(1, 0, 1, 0)
