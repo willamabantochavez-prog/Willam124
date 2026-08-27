@@ -15,7 +15,7 @@ local SCRIPTS = {
 
 local BUTTON_DATA = {
     {key = "AutoHoney", text = "🍯 Auto Honey", active = true},
-    {key = "Script2", text = "⚔️ Fake Announcement", active = false},
+    {key = "Script2", text = "⚔️ Fake Announcement", active = true},
     {key = "Script3", text = "🛡️ Script 3", active = false},
     {key = "Script4", text = "💎 Script 4", active = false},
     {key = "Script5", text = "🎮 Script 5", active = false},
