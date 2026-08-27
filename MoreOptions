@@ -1,7 +1,31 @@
 local SCRIPTS = {
     AutoHoney = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/AutoHoney",
-    ComingSoon1 = "",
-    ComingSoon2 = "",
+    Script2 = "",  -- Agrega tu URL aquí
+    Script3 = "",  -- Agrega tu URL aquí
+    Script4 = "",  -- Agrega tu URL aquí
+    Script5 = "",  -- Agrega tu URL aquí
+    Script6 = "",  -- Agrega tu URL aquí
+    Script7 = "",  -- Agrega tu URL aquí
+    Script8 = "",  -- Agrega tu URL aquí
+    Script9 = "",  -- Agrega tu URL aquí
+    Script10 = "", -- Agrega tu URL aquí
+    Script11 = "", -- Agrega tu URL aquí
+    Script12 = "", -- Agrega tu URL aquí
+}
+
+local BUTTON_DATA = {
+    {key = "AutoHoney", text = "🍯 Auto Honey", active = true},
+    {key = "Script2", text = "⚔️ Script 2", active = false},
+    {key = "Script3", text = "🛡️ Script 3", active = false},
+    {key = "Script4", text = "💎 Script 4", active = false},
+    {key = "Script5", text = "🎮 Script 5", active = false},
+    {key = "Script6", text = "🚀 Script 6", active = false},
+    {key = "Script7", text = "⚡ Script 7", active = false},
+    {key = "Script8", text = "🔥 Script 8", active = false},
+    {key = "Script9", text = "🌟 Script 9", active = false},
+    {key = "Script10", text = "💫 Script 10", active = false},
+    {key = "Script11", text = "✨ Script 11", active = false},
+    {key = "Script12", text = "🎯 Script 12", active = false},
 }
 
 local Players = game:GetService("Players")
@@ -123,25 +147,50 @@ sep.BorderSizePixel = 0
 sep.ZIndex = 6
 sep.Parent = mainFrame
 
+-- ScrollingFrame para los botones
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Name = "ButtonScroll"
+scrollFrame.Size = UDim2.new(1, -8, 1, -44)
+scrollFrame.Position = UDim2.new(0, 4, 0, 40)
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.BorderSizePixel = 0
+scrollFrame.ScrollBarThickness = 4
+scrollFrame.ScrollBarImageColor3 = C.Yellow
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrollFrame.ZIndex = 6
+scrollFrame.Parent = mainFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 4)
+listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = scrollFrame
+
+local padding = Instance.new("UIPadding")
+padding.PaddingTop = UDim.new(0, 2)
+padding.PaddingBottom = UDim.new(0, 4)
+padding.Parent = scrollFrame
+
 local function executeScript(url)
     if url == "" or url == nil then return warn("⚠️ No hay script") end
     local s, e = pcall(function() loadstring(game:HttpGet(url))() end)
     if s then print("✅ OK") else warn("❌ " .. tostring(e)) end
 end
 
-local function createButton(name, text, posY, active, url, delay)
+local function createButton(data, index)
+    local delay = 0.1 + (index * 0.15)
     local btn = Instance.new("TextButton")
-    btn.Name = name
+    btn.Name = data.key .. "Btn"
     btn.Size = UDim2.new(0, 0, 0, 0)
-    btn.Position = UDim2.new(0.5, 0, 0, posY + 8)
-    btn.AnchorPoint = Vector2.new(0.5, 0)
     btn.BackgroundColor3 = C.DarkGray
     btn.BackgroundTransparency = 0.15
     btn.BorderSizePixel = 0
     btn.Text = ""
     btn.ZIndex = 6
     btn.AutoButtonColor = false
-    btn.Parent = mainFrame
+    btn.LayoutOrder = index
+    btn.Parent = scrollFrame
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
     
     local stroke = Instance.new("UIStroke")
@@ -152,8 +201,8 @@ local function createButton(name, text, posY, active, url, delay)
     local bar = Instance.new("Frame")
     bar.Size = UDim2.new(0, 2, 0.6, 0)
     bar.Position = UDim2.new(0, 5, 0.2, 0)
-    bar.BackgroundColor3 = active and C.Yellow or C.DarkGray
-    bar.BackgroundTransparency = active and 0 or 0.5
+    bar.BackgroundColor3 = data.active and C.Yellow or C.DarkGray
+    bar.BackgroundTransparency = data.active and 0 or 0.5
     bar.BorderSizePixel = 0
     bar.ZIndex = 7
     bar.Parent = btn
@@ -163,8 +212,8 @@ local function createButton(name, text, posY, active, url, delay)
     lbl.Size = UDim2.new(1, -40, 1, 0)
     lbl.Position = UDim2.new(0, 14, 0, 0)
     lbl.BackgroundTransparency = 1
-    lbl.Text = text
-    lbl.TextColor3 = active and C.White or C.Gray
+    lbl.Text = data.text
+    lbl.TextColor3 = data.active and C.White or C.Gray
     lbl.TextSize = 11
     lbl.Font = Enum.Font.GothamSemibold
     lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -175,9 +224,9 @@ local function createButton(name, text, posY, active, url, delay)
     icon.Size = UDim2.new(0, 20, 1, 0)
     icon.Position = UDim2.new(1, -24, 0, 0)
     icon.BackgroundTransparency = 1
-    icon.Text = active and "›" or "•"
-    icon.TextColor3 = active and C.Yellow or C.Gray
-    icon.TextSize = active and 16 or 12
+    icon.Text = data.active and "›" or "•"
+    icon.TextColor3 = data.active and C.Yellow or C.Gray
+    icon.TextSize = data.active and 16 or 12
     icon.Font = Enum.Font.GothamBold
     icon.ZIndex = 7
     icon.Parent = btn
@@ -185,12 +234,11 @@ local function createButton(name, text, posY, active, url, delay)
     task.spawn(function()
         task.wait(delay)
         TweenService:Create(btn, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Size = UDim2.new(1, -16, 0, 32),
-            Position = UDim2.new(0.5, 0, 0, posY)
+            Size = UDim2.new(1, -8, 0, 32)
         }):Play()
     end)
     
-    if active then
+    if data.active then
         btn.MouseEnter:Connect(function()
             TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(55, 55, 55)}):Play()
             TweenService:Create(stroke, TweenInfo.new(0.2), {Color = C.Yellow, Thickness = 1.5}):Play()
@@ -202,16 +250,16 @@ local function createButton(name, text, posY, active, url, delay)
             TweenService:Create(bar, TweenInfo.new(0.2), {BackgroundColor3 = C.Yellow}):Play()
         end)
         btn.MouseButton1Down:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.08), {Size = UDim2.new(1, -18, 0, 30)}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.08), {Size = UDim2.new(1, -10, 0, 30)}):Play()
         end)
         btn.MouseButton1Up:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.08), {Size = UDim2.new(1, -16, 0, 32)}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.08), {Size = UDim2.new(1, -8, 0, 32)}):Play()
         end)
         btn.MouseButton1Click:Connect(function()
             icon.Text = "◌"
             TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 60)}):Play()
             task.wait(0.3)
-            executeScript(url)
+            executeScript(SCRIPTS[data.key])
             task.wait(0.5)
             icon.Text = "✓"
             TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = C.DarkGray}):Play()
@@ -221,26 +269,27 @@ local function createButton(name, text, posY, active, url, delay)
     else
         btn.MouseButton1Click:Connect(function()
             for i = 1, 3 do
-                TweenService:Create(btn, TweenInfo.new(0.05), {Position = UDim2.new(0.5, 3, 0, posY)}):Play()
+                TweenService:Create(btn, TweenInfo.new(0.05), {Position = UDim2.new(0, 3, 0, 0)}):Play()
                 task.wait(0.05)
-                TweenService:Create(btn, TweenInfo.new(0.05), {Position = UDim2.new(0.5, -3, 0, posY)}):Play()
+                TweenService:Create(btn, TweenInfo.new(0.05), {Position = UDim2.new(0, -3, 0, 0)}):Play()
                 task.wait(0.05)
             end
-            TweenService:Create(btn, TweenInfo.new(0.05), {Position = UDim2.new(0.5, 0, 0, posY)}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.05), {Position = UDim2.new(0, 0, 0, 0)}):Play()
         end)
     end
     return btn
 end
 
-createButton("AutoHoneyBtn", "🍯 Auto Honey", 44, true, SCRIPTS.AutoHoney, 0.3)
-createButton("ComingSoon1Btn", "Coming Soon", 80, false, SCRIPTS.ComingSoon1, 0.5)
-createButton("ComingSoon2Btn", "Coming Soon", 116, false, SCRIPTS.ComingSoon2, 0.7)
+-- Crear los 12 botones
+for i, data in ipairs(BUTTON_DATA) do
+    createButton(data, i)
+end
 
 task.spawn(function()
     task.wait(0.1)
     TweenService:Create(mainFrame, TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, 155, 0, 185),
-        Position = UDim2.new(0.5, -77, 0.5, -92)
+        Size = UDim2.new(0, 165, 0, 280),
+        Position = UDim2.new(0.5, -82, 0.5, -140)
     }):Play()
     task.wait(0.1)
     title.TextTransparency = 1
@@ -276,4 +325,4 @@ UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then update(input) end
 end)
 
-print("✅ UI cargada!")
+print("✅ UI cargada con 12 opciones y scroll!")
