@@ -67,6 +67,7 @@ local _selectedBG = savedConfig.selectedBG
 local _anchorPosition = nil
 local _anchorConnection = nil
 local _anchorRespawnConn = nil
+local _autoBuyConnection = nil
 local _waitingForKeybind = nil
 
 local getupvalues = (debug and debug.getupvalues) or getupvalues
@@ -1130,7 +1131,7 @@ AnchorToggle.Activated:Connect(function() toggleAnchor() end)
 AnchorToggle.MouseButton1Click:Connect(function() toggleAnchor() end)
 AnchorToggle.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggleAnchor() end end)
 
--- AUTO BUY CARD (Externo)
+-- AUTO BUY CARD (BL Auto Buy integrado inline)
 local AutoBuyCard = Instance.new("Frame")
 AutoBuyCard.Size = UDim2.new(1, 0, 0, 52)
 AutoBuyCard.BackgroundColor3 = COLORS.Row; AutoBuyCard.BackgroundTransparency = 0.4
@@ -1139,7 +1140,7 @@ addCorner(AutoBuyCard, 10)
 local abS = addStroke(AutoBuyCard, COLORS.Border, 1, 0.4)
 table.insert(themed.cards, AutoBuyCard); table.insert(themed.cardStrokes, abS)
 
-makeLabel(AutoBuyCard, "Auto Buy [External]", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
+makeLabel(AutoBuyCard, "Auto Buy [BL]", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
 
 local ABKFrame = Instance.new("Frame")
 ABKFrame.Size = UDim2.fromOffset(46, 20); ABKFrame.Position = UDim2.fromOffset(12, 28)
@@ -1172,6 +1173,7 @@ local ABTStroke = addStroke(AutoBuyToggle, _autoBuyEnabled and COLORS.Accent or 
 table.insert(themed.toggleButtons, {btn = AutoBuyToggle, isOn = function() return _autoBuyEnabled end})
 table.insert(themed.toggleStrokes, {stroke = ABTStroke, isOn = function() return _autoBuyEnabled end})
 
+-- BL Auto Buy: lógica inline con ON/OFF funcional
 local function toggleAutoBuy(state)
     if state == nil then state = not _autoBuyEnabled end
     _autoBuyEnabled = state; savedConfig.autoBuyEnabled = state; saveConfig()
@@ -1182,14 +1184,27 @@ local function toggleAutoBuy(state)
     ABTStroke.Color = state and t.Accent or t.Border; ABTStroke.Transparency = state and 0.4 or 0.7
 
     if state then
-        pcall(function()
-            loadstring(game:HttpGet("https://pastebin.com/raw/ursM2x2i"))()
+        -- ON: crear conexión Stepped para activar ProximityPrompts
+        if _autoBuyConnection then _autoBuyConnection:Disconnect() end
+        _autoBuyConnection = RunService.Stepped:Connect(function()
+            if not _autoBuyEnabled then return end
+            for _, prompt in pairs(workspace:GetDescendants()) do
+                if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+                    pcall(function()
+                        prompt.HoldDuration = 0
+                        prompt:InputHoldBegin()
+                        prompt:InputHoldEnd()
+                    end)
+                end
+            end
         end)
-        if ConsoleOutput then appendConsoleStatus("Auto Buy [External]", true) end
+        if ConsoleOutput then appendConsoleStatus("Auto Buy [BL]", true) end
     else
-        pcall(function() if _G.StopAutoBuy then _G.StopAutoBuy() end end)
-        pcall(function() if _G.AutoBuyActive then _G.AutoBuyActive = false end end)
-        pcall(function() if _G.StopAura then _G.StopAura() end end)
+        -- OFF: desconectar y limpiar
+        if _autoBuyConnection then
+            _autoBuyConnection:Disconnect()
+            _autoBuyConnection = nil
+        end
         if ConsoleOutput then appendConsoleStatus("Auto Buy", false) end
     end
 end
@@ -1819,6 +1834,7 @@ if getgenv then
         end
         if _anchorConnection then _anchorConnection:Disconnect() end
         if _anchorRespawnConn then _anchorRespawnConn:Disconnect() end
+        if _autoBuyConnection then _autoBuyConnection:Disconnect() end
         if GUI then GUI:Destroy() end
     end
 end
@@ -1837,4 +1853,4 @@ task.defer(function()
     }):Play()
 end)
 
-print("Eclipse Auto Codes v3.3 | Auto Buy External")
+print("Eclipse Auto Codes v3.3 | BL Auto Buy Inline")
