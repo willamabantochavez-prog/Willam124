@@ -18,6 +18,7 @@ local savedConfig = {
     retypeInvalid = false, riddleSolver = false,
     anchorEnabled = false, anchorKeybind = "Z",
     autoBuyEnabled = false, autoBuyKeybind = "X",
+    instantBuyEnabled = false, instantBuyKeybind = "C",
     antiLagEnabled = false, uiSize = "Medium", selectedBG = 1,
 }
 pcall(function()
@@ -61,12 +62,18 @@ local _anchorEnabled = savedConfig.anchorEnabled
 local _anchorKeybind = savedConfig.anchorKeybind
 local _autoBuyEnabled = savedConfig.autoBuyEnabled
 local _autoBuyKeybind = savedConfig.autoBuyKeybind
+local _instantBuyEnabled = savedConfig.instantBuyEnabled
+local _instantBuyKeybind = savedConfig.instantBuyKeybind
 local _antiLagEnabled = savedConfig.antiLagEnabled
 local _currentUISize = savedConfig.uiSize
 local _selectedBG = savedConfig.selectedBG
-local _anchorPosition = nil
 local _anchorConnection = nil
 local _waitingForKeybind = nil
+
+-- Auto Buy Engine variables
+local _autoBuyRunning = false
+local _autoBuyConn = nil
+local _promptCache = {}
 
 local getupvalues = (debug and debug.getupvalues) or getupvalues
 local getconns    = getconnections or (debug and debug.getconnections)
@@ -922,7 +929,6 @@ Plus.TextColor3 = COLORS.Text; Plus.Font = Enum.Font.GothamBold
 Plus.ZIndex = 8; Plus.Parent = CounterShell; addCorner(Plus, 4)
 table.insert(themed.counterBtns, Plus)
 
--- FIX: Solo Activated, sin MouseButton1Click para evitar doble-fire
 local lastDecr = 0
 local function decr()
     if tick() - lastDecr < 0.15 then return end; lastDecr = tick()
@@ -995,6 +1001,185 @@ end
 ConsoleOutput:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateConsoleCanvas)
 task.defer(updateConsoleCanvas)
 
+-- ============================================================
+-- AUTO BUY ENGINE (from Violet Hub)
+-- ============================================================
+
+local function isPromptValid(prompt)
+    if not (prompt and prompt:IsA("ProximityPrompt")) then return false end
+    local parent = prompt.Parent
+    if not parent or parent.Name ~= "PromptAttachment" then return false end
+    local parent2 = parent.Parent
+    if not parent2 or parent2.Name ~= "Part" then return false end
+    return true
+end
+
+local function getPromptPosition(prompt)
+    if not prompt then return nil end
+    local parent = prompt.Parent
+    if parent and parent:IsA("Attachment") and parent.Name == "PromptAttachment" then
+        local part = parent.Parent
+        if part and part:IsA("BasePart") then
+            return part.Position
+        end
+    end
+    return nil
+end
+
+local function isPromptOnScreen(prompt)
+    local pos = getPromptPosition(prompt)
+    if not pos then return false end
+    local _, onScreen = workspace.CurrentCamera:WorldToViewportPoint(pos)
+    return onScreen
+end
+
+local function holdPrompt(prompt)
+    if not prompt then return end
+    pcall(function()
+        prompt:InputHoldBegin()
+    end)
+end
+
+local function releasePrompt(prompt)
+    if not prompt then return end
+    pcall(function()
+        prompt:InputHoldEnd()
+    end)
+end
+
+local function cachePrompt(prompt)
+    if isPromptValid(prompt) and not _promptCache[prompt] then
+        _promptCache[prompt] = true
+    end
+end
+
+local function startAutoBuy()
+    if _autoBuyRunning then return end
+    _autoBuyRunning = true
+
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        cachePrompt(obj)
+    end
+
+    if _autoBuyConn then _autoBuyConn:Disconnect() end
+    _autoBuyConn = Workspace.DescendantAdded:Connect(cachePrompt)
+
+    task.spawn(function()
+        while _autoBuyRunning and _autoBuyEnabled do
+            local char = player.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if root then
+                for prompt, _ in pairs(_promptCache) do
+                    if prompt and prompt.Parent and isPromptValid(prompt) then
+                        local pos = getPromptPosition(prompt)
+                        if pos then
+                            local dist = (root.Position - pos).Magnitude
+                            local onScreen = isPromptOnScreen(prompt)
+                            if dist > 15 or not onScreen then
+                                releasePrompt(prompt)
+                            else
+                                holdPrompt(prompt)
+                            end
+                        end
+                    else
+                        _promptCache[prompt] = nil
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function stopAutoBuy()
+    _autoBuyRunning = false
+    if _autoBuyConn then
+        _autoBuyConn:Disconnect()
+        _autoBuyConn = nil
+    end
+    for prompt, _ in pairs(_promptCache) do
+        pcall(function() releasePrompt(prompt) end)
+    end
+    _promptCache = {}
+end
+
+-- ============================================================
+-- ANCHOR ENGINE (from Violet Hub)
+-- ============================================================
+
+local function startAnchor()
+    if _anchorConnection then _anchorConnection:Disconnect() end
+    _anchorConnection = RunService.Heartbeat:Connect(function()
+        if not _anchorEnabled then return end
+        local char = player.Character
+        if not char then return end
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Anchored = true
+            end
+        end
+    end)
+end
+
+local function stopAnchor()
+    if _anchorConnection then
+        _anchorConnection:Disconnect()
+        _anchorConnection = nil
+    end
+    local char = player.Character
+    if char then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Anchored = false
+            end
+        end
+    end
+end
+
+player.CharacterAdded:Connect(function()
+    task.wait(0.3)
+    if _anchorEnabled then
+        local char = player.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Anchored = true
+                end
+            end
+        end
+    end
+end)
+
+-- ============================================================
+-- INSTANT BUY ENGINE (from Violet Hub)
+-- ============================================================
+
+local function applyInstantBuy()
+    if not _instantBuyEnabled then return end
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            obj.HoldDuration = 0
+            obj.MaxActivationDistance = 20
+        end
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(obj)
+    if obj:IsA("ProximityPrompt") and _instantBuyEnabled then
+        obj.HoldDuration = 0
+        obj.MaxActivationDistance = 20
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if _instantBuyEnabled then
+            pcall(applyInstantBuy)
+        end
+    end
+end)
+
 -- FARM PANEL
 local FarmPanel = Instance.new("ScrollingFrame")
 FarmPanel.Name = "FarmPanel"
@@ -1003,7 +1188,7 @@ FarmPanel.BackgroundTransparency = 1
 FarmPanel.Visible = false
 FarmPanel.ScrollBarThickness = 3
 FarmPanel.ScrollBarImageColor3 = COLORS.Dim
-FarmPanel.CanvasSize = UDim2.new(0, 0, 0, 200)
+FarmPanel.CanvasSize = UDim2.new(0, 0, 0, 280)
 FarmPanel.ZIndex = 5
 FarmPanel.Parent = PanelContainer
 tabPanels["FARM"] = FarmPanel
@@ -1016,6 +1201,7 @@ FPLayout.Padding = UDim.new(0, 8); FPLayout.Parent = FarmPanel
 local farmTitle = makeLabel(FarmPanel, "FARM", UDim2.new(1, 0, 0, 20), UDim2.fromOffset(0, 0), 13, COLORS.Accent, Enum.Font.GothamBold)
 themed.farmTitle = farmTitle
 
+-- ANCHOR CARD
 local AnchorCard = Instance.new("Frame")
 AnchorCard.Size = UDim2.new(1, 0, 0, 52)
 AnchorCard.BackgroundColor3 = COLORS.Row; AnchorCard.BackgroundTransparency = 0.4
@@ -1024,7 +1210,7 @@ addCorner(AnchorCard, 10)
 local anchS = addStroke(AnchorCard, COLORS.Border, 1, 0.4)
 table.insert(themed.cards, AnchorCard); table.insert(themed.cardStrokes, anchS)
 
-makeLabel(AnchorCard, "Anchor Position", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
+makeLabel(AnchorCard, "Anchor Character", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
 
 local AKFrame = Instance.new("Frame")
 AKFrame.Size = UDim2.fromOffset(46, 20); AKFrame.Position = UDim2.fromOffset(12, 28)
@@ -1066,25 +1252,10 @@ local function toggleAnchor(state)
     AnchorToggle.TextColor3 = state and t.TabTextOn or t.Dim
     ATStroke.Color = state and t.Accent or t.Border; ATStroke.Transparency = state and 0.4 or 0.7
     if state then
-        local char = player.Character
-        if char then
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if root then
-                _anchorPosition = root.CFrame
-                if _anchorConnection then _anchorConnection:Disconnect() end
-                _anchorConnection = RunService.Heartbeat:Connect(function()
-                    if root and root.Parent and _anchorPosition then
-                        root.CFrame = _anchorPosition
-                        root.Velocity = Vector3.zero
-                        root.RotVelocity = Vector3.zero
-                    end
-                end)
-            end
-        end
+        startAnchor()
         if ConsoleOutput then appendConsoleStatus("Anchor", true) end
     else
-        if _anchorConnection then _anchorConnection:Disconnect(); _anchorConnection = nil end
-        _anchorPosition = nil
+        stopAnchor()
         if ConsoleOutput then appendConsoleStatus("Anchor", false) end
     end
 end
@@ -1092,6 +1263,69 @@ AnchorToggle.Activated:Connect(function() toggleAnchor() end)
 AnchorToggle.MouseButton1Click:Connect(function() toggleAnchor() end)
 AnchorToggle.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggleAnchor() end end)
 
+-- INSTANT BUY CARD (NEW)
+local InstantBuyCard = Instance.new("Frame")
+InstantBuyCard.Size = UDim2.new(1, 0, 0, 52)
+InstantBuyCard.BackgroundColor3 = COLORS.Row; InstantBuyCard.BackgroundTransparency = 0.4
+InstantBuyCard.BorderSizePixel = 0; InstantBuyCard.ZIndex = 6; InstantBuyCard.Parent = FarmPanel
+addCorner(InstantBuyCard, 10)
+local ibS = addStroke(InstantBuyCard, COLORS.Border, 1, 0.4)
+table.insert(themed.cards, InstantBuyCard); table.insert(themed.cardStrokes, ibS)
+
+makeLabel(InstantBuyCard, "Instant Buy", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
+makeLabel(InstantBuyCard, "No hold duration", UDim2.fromOffset(150, 14), UDim2.fromOffset(12, 26), 8, COLORS.Dim, Enum.Font.GothamMedium)
+
+local IBKFrame = Instance.new("Frame")
+IBKFrame.Size = UDim2.fromOffset(46, 20); IBKFrame.Position = UDim2.fromOffset(12, 28)
+IBKFrame.BackgroundColor3 = COLORS.Control; IBKFrame.ZIndex = 7; IBKFrame.Parent = InstantBuyCard
+addCorner(IBKFrame, 5)
+local IBKStroke = addStroke(IBKFrame, COLORS.Accent, 1, 0.6)
+table.insert(themed.keybindFrames, IBKFrame); table.insert(themed.keybindStrokes, IBKStroke)
+
+local IBKLabel = Instance.new("TextLabel")
+IBKLabel.Size = UDim2.fromScale(1, 1); IBKLabel.BackgroundTransparency = 1
+IBKLabel.Text = "[".._instantBuyKeybind.."]"; IBKLabel.TextSize = 9
+IBKLabel.TextColor3 = COLORS.Accent; IBKLabel.Font = Enum.Font.GothamBold
+IBKLabel.ZIndex = 8; IBKLabel.Parent = IBKFrame
+table.insert(themed.keybindLabels, IBKLabel)
+
+local IBKBtn = Instance.new("TextButton")
+IBKBtn.Size = UDim2.fromScale(1, 1); IBKBtn.BackgroundTransparency = 1
+IBKBtn.Text = ""; IBKBtn.ZIndex = 9; IBKBtn.Parent = IBKFrame
+IBKBtn.MouseButton1Click:Connect(function() _waitingForKeybind = "instantBuy"; IBKLabel.Text = "..."; IBKLabel.TextColor3 = COLORS.Red end)
+
+local InstantBuyToggle = Instance.new("TextButton")
+InstantBuyToggle.Size = UDim2.fromOffset(50, 26); InstantBuyToggle.Position = UDim2.new(1, -58, 0, 12)
+InstantBuyToggle.BackgroundColor3 = _instantBuyEnabled and COLORS.Accent or COLORS.Control
+InstantBuyToggle.BorderSizePixel = 0; InstantBuyToggle.AutoButtonColor = false
+InstantBuyToggle.Text = _instantBuyEnabled and "ON" or "OFF"
+InstantBuyToggle.TextSize = 9; InstantBuyToggle.TextColor3 = _instantBuyEnabled and COLORS.TabTextOn or COLORS.Dim
+InstantBuyToggle.Font = Enum.Font.GothamBold; InstantBuyToggle.ZIndex = 8; InstantBuyToggle.Parent = InstantBuyCard
+addCorner(InstantBuyToggle, 8)
+local IBTStroke = addStroke(InstantBuyToggle, _instantBuyEnabled and COLORS.Accent or COLORS.Border, 1, _instantBuyEnabled and 0.4 or 0.7)
+table.insert(themed.toggleButtons, {btn = InstantBuyToggle, isOn = function() return _instantBuyEnabled end})
+table.insert(themed.toggleStrokes, {stroke = IBTStroke, isOn = function() return _instantBuyEnabled end})
+
+local function toggleInstantBuy(state)
+    if state == nil then state = not _instantBuyEnabled end
+    _instantBuyEnabled = state; savedConfig.instantBuyEnabled = state; saveConfig()
+    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
+    InstantBuyToggle.Text = state and "ON" or "OFF"
+    InstantBuyToggle.BackgroundColor3 = state and t.Accent or t.Control
+    InstantBuyToggle.TextColor3 = state and t.TabTextOn or t.Dim
+    IBTStroke.Color = state and t.Accent or t.Border; IBTStroke.Transparency = state and 0.4 or 0.7
+    if state then
+        applyInstantBuy()
+        if ConsoleOutput then appendConsoleStatus("Instant Buy", true) end
+    else
+        if ConsoleOutput then appendConsoleStatus("Instant Buy", false) end
+    end
+end
+InstantBuyToggle.Activated:Connect(function() toggleInstantBuy() end)
+InstantBuyToggle.MouseButton1Click:Connect(function() toggleInstantBuy() end)
+InstantBuyToggle.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggleInstantBuy() end end)
+
+-- AUTO BUY CARD
 local AutoBuyCard = Instance.new("Frame")
 AutoBuyCard.Size = UDim2.new(1, 0, 0, 52)
 AutoBuyCard.BackgroundColor3 = COLORS.Row; AutoBuyCard.BackgroundTransparency = 0.4
@@ -1101,6 +1335,7 @@ local abS = addStroke(AutoBuyCard, COLORS.Border, 1, 0.4)
 table.insert(themed.cards, AutoBuyCard); table.insert(themed.cardStrokes, abS)
 
 makeLabel(AutoBuyCard, "Auto Buy", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
+makeLabel(AutoBuyCard, "Hold nearby prompts", UDim2.fromOffset(150, 14), UDim2.fromOffset(12, 26), 8, COLORS.Dim, Enum.Font.GothamMedium)
 
 local ABKFrame = Instance.new("Frame")
 ABKFrame.Size = UDim2.fromOffset(46, 20); ABKFrame.Position = UDim2.fromOffset(12, 28)
@@ -1141,8 +1376,13 @@ local function toggleAutoBuy(state)
     AutoBuyToggle.BackgroundColor3 = state and t.Accent or t.Control
     AutoBuyToggle.TextColor3 = state and t.TabTextOn or t.Dim
     ABTStroke.Color = state and t.Accent or t.Border; ABTStroke.Transparency = state and 0.4 or 0.7
-    if state then if ConsoleOutput then appendConsoleStatus("Auto Buy", true) end
-    else if ConsoleOutput then appendConsoleStatus("Auto Buy", false) end end
+    if state then
+        startAutoBuy()
+        if ConsoleOutput then appendConsoleStatus("Auto Buy", true) end
+    else
+        stopAutoBuy()
+        if ConsoleOutput then appendConsoleStatus("Auto Buy", false) end
+    end
 end
 AutoBuyToggle.Activated:Connect(function() toggleAutoBuy() end)
 AutoBuyToggle.MouseButton1Click:Connect(function() toggleAutoBuy() end)
@@ -1382,11 +1622,15 @@ UserInputService.InputBegan:Connect(function(input, processed)
             elseif _waitingForKeybind == "autoBuy" then
                 _autoBuyKeybind = key; savedConfig.autoBuyKeybind = key
                 ABKLabel.Text = "["..key.."]"; ABKLabel.TextColor3 = t.Accent
+            elseif _waitingForKeybind == "instantBuy" then
+                _instantBuyKeybind = key; savedConfig.instantBuyKeybind = key
+                IBKLabel.Text = "["..key.."]"; IBKLabel.TextColor3 = t.Accent
             end
             _waitingForKeybind = nil; saveConfig(); return
         end
         if key == _anchorKeybind then toggleAnchor()
-        elseif key == _autoBuyKeybind then toggleAutoBuy() end
+        elseif key == _autoBuyKeybind then toggleAutoBuy()
+        elseif key == _instantBuyKeybind then toggleInstantBuy() end
     end
 end)
 
@@ -1769,11 +2013,18 @@ if getgenv then
             getgenv().ACECodeSniperNotifyConnection = nil
         end
         if _anchorConnection then _anchorConnection:Disconnect() end
+        if _autoBuyConn then _autoBuyConn:Disconnect() end
+        stopAutoBuy()
+        stopAnchor()
         if GUI then GUI:Destroy() end
     end
 end
 
 if _antiLagEnabled then task.defer(function() applyAntiLag(true) end) end
+if _instantBuyEnabled then task.defer(function() applyInstantBuy() end) end
+if _autoBuyEnabled then task.defer(function() startAutoBuy() end) end
+if _anchorEnabled then task.defer(function() startAnchor() end) end
+
 task.defer(function()
     InterfaceScale.Scale = SizeScales[_currentUISize] or 0.92
     applyFullTheme(_selectedBG)
@@ -1787,4 +2038,4 @@ task.defer(function()
     }):Play()
 end)
 
-print("Eclipse Auto Codes v3.0 | Counter fixed: 1,2,3,4,5,6...")
+print("Eclipse Auto Codes v3.1 | Farm engines updated")
