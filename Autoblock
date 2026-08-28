@@ -1,0 +1,681 @@
+-- Generated: 2026-06-27
+-- Complete Instant Blocker GUI with Avatar Listing, Scrolling, Dragging, and Auto-Block Logic
+-- VISUAL THEME: Eclipse Block (Orange Eclipse)
+
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+if not player then
+    Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+    player = Players.LocalPlayer
+end
+
+-- ==================== CONFIGURATION ====================
+local BLOCK_DELAY = 0.7
+local AUTO_BLOCK_INTERVAL = 1.5
+local BLOCK_ALL_COOLDOWN = 0.8
+
+-- ==================== ECLIPSE COLOR PALETTE ====================
+local ECLIPSE = {
+    bgDark       = Color3.fromRGB(12, 10, 8),
+    bgPanel      = Color3.fromRGB(18, 15, 12),
+    bgCard       = Color3.fromRGB(24, 20, 16),
+    bgCardHover  = Color3.fromRGB(35, 28, 20),
+    bgButton     = Color3.fromRGB(30, 25, 18),
+    bgButtonHov  = Color3.fromRGB(45, 35, 22),
+    border       = Color3.fromRGB(180, 100, 40),
+    borderLight  = Color3.fromRGB(220, 130, 55),
+    glow         = Color3.fromRGB(255, 130, 40),
+    glowSoft     = Color3.fromRGB(200, 110, 45),
+    accent       = Color3.fromRGB(255, 150, 50),
+    accentDark   = Color3.fromRGB(180, 85, 25),
+    textWhite    = Color3.fromRGB(245, 240, 235),
+    textGrey     = Color3.fromRGB(160, 145, 130),
+    textMuted    = Color3.fromRGB(120, 105, 90),
+    green        = Color3.fromRGB(50, 200, 80),
+    red          = Color3.fromRGB(220, 55, 45),
+    redDark      = Color3.fromRGB(140, 35, 25),
+    separator    = Color3.fromRGB(140, 80, 30),
+}
+
+-- ==================== CORE BLOCKING ENGINE ====================
+local function fastClick()
+    task.wait(BLOCK_DELAY)
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    local viewport = cam.ViewportSize
+    local x = viewport.X / 2
+    local y = (viewport.Y / 2) + 23
+
+    for _ = 1, 8 do
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+        task.wait(0.008)
+    end
+end
+
+local function blockPlayer(plr)
+    if not plr or plr == player or not plr.Parent then return end
+    pcall(function()
+        StarterGui:SetCore("PromptBlockPlayer", plr)
+        fastClick()
+    end)
+end
+
+local function blockAllPlayers()
+    local playersToBlock = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player then
+            table.insert(playersToBlock, p)
+        end
+    end
+    for _, p in ipairs(playersToBlock) do
+        blockPlayer(p)
+        task.wait(BLOCK_ALL_COOLDOWN)
+    end
+end
+
+-- ==================== AUTO-BLOCK FOR "BRAINROT" ITEMS ====================
+local function hasBrainrotItem(plr)
+    local char = plr.Character
+    if not char then return false end
+    for _, item in ipairs(char:GetChildren()) do
+        if item:IsA("Tool") then
+            local name = item.Name:lower()
+            if name:find("animal") or name:find("monkey") or name:find("brainrot") or name:find("banana") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- ==================== VISUAL HELPERS ====================
+local function addCorner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 10)
+    c.Parent = parent
+    return c
+end
+
+local function addStroke(parent, thickness, color, transparency)
+    local s = Instance.new("UIStroke")
+    s.Color = color or ECLIPSE.border
+    s.Thickness = thickness or 1.5
+    s.Transparency = transparency or 0.2
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = parent
+    return s
+end
+
+local function addGlow(parent, color)
+    local s = Instance.new("UIStroke")
+    s.Color = color or ECLIPSE.glow
+    s.Thickness = 2
+    s.Transparency = 0.55
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = parent
+    return s
+end
+
+local function addShadow(parent)
+    local img = Instance.new("ImageLabel")
+    img.Name = "Shadow"
+    img.BackgroundTransparency = 1
+    img.Image = "rbxassetid://1316045217"
+    img.ImageColor3 = Color3.new(0, 0, 0)
+    img.ImageTransparency = 0.55
+    img.ScaleType = Enum.ScaleType.Slice
+    img.SliceCenter = Rect.new(10, 10, 118, 118)
+    img.Size = UDim2.new(1, 12, 1, 12)
+    img.Position = UDim2.new(0, -6, 0, -6)
+    img.ZIndex = parent.ZIndex - 1
+    img.Parent = parent
+    return img
+end
+
+local function tweenColor(obj, color, duration)
+    TweenService:Create(obj, TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quint), {BackgroundColor3 = color}):Play()
+end
+
+local function tweenStrokeColor(obj, color, duration)
+    TweenService:Create(obj, TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quint), {Color = color}):Play()
+end
+
+local function setupHover(btn, normalColor, hoverColor, strokeObj, normalStroke, hoverStroke)
+    btn.MouseEnter:Connect(function()
+        tweenColor(btn, hoverColor, 0.2)
+        if strokeObj then tweenStrokeColor(strokeObj, hoverStroke or ECLIPSE.glow, 0.2) end
+    end)
+    btn.MouseLeave:Connect(function()
+        tweenColor(btn, normalColor, 0.2)
+        if strokeObj then tweenStrokeColor(strokeObj, normalStroke or ECLIPSE.border, 0.2) end
+    end)
+end
+
+local function animateEntry(frame, delay)
+    local origPos = frame.Position
+    frame.Position = UDim2.new(origPos.X.Scale, origPos.X.Offset, origPos.Y.Scale, origPos.Y.Offset + 15)
+    frame.BackgroundTransparency = 1
+    task.delay(delay or 0, function()
+        TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Position = origPos,
+            BackgroundTransparency = 0
+        }):Play()
+    end)
+end
+
+-- ==================== GUI CREATION ====================
+local gui = Instance.new("ScreenGui")
+gui.Name = "InstantBlocker"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.IgnoreGuiInset = true
+
+pcall(function()
+    if game:GetService("CoreGui"):FindFirstChild("InstantBlocker") then
+        game:GetService("CoreGui"):FindFirstChild("InstantBlocker"):Destroy()
+    end
+end)
+gui.Parent = (gethui and gethui()) or player:WaitForChild("PlayerGui")
+
+-- ==================== BACKGROUND IMAGE ====================
+local bgImage = Instance.new("ImageLabel")
+bgImage.Name = "BackgroundImage"
+bgImage.Size = UDim2.new(1, 0, 1, 0)
+bgImage.Position = UDim2.new(0, 0, 0, 0)
+bgImage.BackgroundTransparency = 1
+bgImage.Image = "rbxassetid://112002576136361"
+bgImage.ScaleType = Enum.ScaleType.Crop
+bgImage.ZIndex = 0
+bgImage.Parent = gui
+
+local bgOverlay = Instance.new("Frame")
+bgOverlay.Name = "BackgroundOverlay"
+bgOverlay.Size = UDim2.new(1, 0, 1, 0)
+bgOverlay.Position = UDim2.new(0, 0, 0, 0)
+bgOverlay.BackgroundColor3 = Color3.fromRGB(8, 6, 4)
+bgOverlay.BackgroundTransparency = 0.3
+bgOverlay.BorderSizePixel = 0
+bgOverlay.ZIndex = 0
+bgOverlay.Parent = gui
+
+-- ==================== MAIN FRAME ====================
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 270, 0, 340)
+mainFrame.Position = UDim2.new(0.5, -135, 0.5, -170)
+mainFrame.BackgroundColor3 = ECLIPSE.bgDark
+mainFrame.BackgroundTransparency = 0.12
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = false
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = gui
+
+addCorner(mainFrame, 12)
+addStroke(mainFrame, 1.5, ECLIPSE.border, 0.15)
+addGlow(mainFrame, ECLIPSE.glow)
+addShadow(mainFrame)
+
+-- ==================== HEADER ====================
+local header = Instance.new("TextLabel")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0, 34)
+header.Position = UDim2.new(0, 0, 0, 0)
+header.BackgroundColor3 = ECLIPSE.bgPanel
+header.BackgroundTransparency = 0.1
+header.BorderSizePixel = 0
+header.Font = Enum.Font.GothamBlack
+header.Text = "    Eclipse Block"
+header.TextColor3 = ECLIPSE.accent
+header.TextSize = 13
+header.TextXAlignment = Enum.TextXAlignment.Left
+header.TextYAlignment = Enum.TextYAlignment.Center
+header.Parent = mainFrame
+addCorner(header, 12)
+
+-- Header bottom fill (flatten bottom corners)
+local headerFill = Instance.new("Frame")
+headerFill.Size = UDim2.new(1, 0, 0, 8)
+headerFill.Position = UDim2.new(0, 0, 1, -8)
+headerFill.BackgroundColor3 = ECLIPSE.bgPanel
+headerFill.BackgroundTransparency = 0.1
+headerFill.BorderSizePixel = 0
+headerFill.ZIndex = 2
+headerFill.Parent = header
+
+-- ==================== LOGO ====================
+local logoImg = Instance.new("ImageLabel")
+logoImg.Name = "Logo"
+logoImg.Size = UDim2.new(0, 20, 0, 20)
+logoImg.Position = UDim2.new(0, 8, 0.5, -10)
+logoImg.BackgroundTransparency = 1
+logoImg.Image = "rbxassetid://104937666038724"
+logoImg.ScaleType = Enum.ScaleType.Fit
+logoImg.ZIndex = 5
+logoImg.Parent = header
+
+-- ==================== COLLAPSE BUTTON ====================
+local collapseBtn = Instance.new("TextButton")
+collapseBtn.Name = "CollapseBtn"
+collapseBtn.Size = UDim2.new(0, 22, 0, 22)
+collapseBtn.Position = UDim2.new(0, 32, 0.5, -11)
+collapseBtn.BackgroundColor3 = ECLIPSE.bgButton
+collapseBtn.BorderSizePixel = 0
+collapseBtn.Font = Enum.Font.GothamBlack
+collapseBtn.Text = "▼"
+collapseBtn.TextColor3 = ECLIPSE.accent
+collapseBtn.TextSize = 10
+collapseBtn.AutoButtonColor = false
+collapseBtn.ZIndex = 5
+collapseBtn.Parent = header
+addCorner(collapseBtn, 6)
+local collapseStroke = addStroke(collapseBtn, 1, ECLIPSE.border, 0.3)
+setupHover(collapseBtn, ECLIPSE.bgButton, ECLIPSE.bgButtonHov, collapseStroke, ECLIPSE.border, ECLIPSE.glow)
+
+-- ==================== SETTINGS BUTTON ====================
+local settingsBtn = Instance.new("TextButton")
+settingsBtn.Name = "SettingsBtn"
+settingsBtn.Size = UDim2.new(0, 24, 0, 24)
+settingsBtn.Position = UDim2.new(1, -30, 0.5, -12)
+settingsBtn.BackgroundColor3 = ECLIPSE.bgButton
+settingsBtn.BorderSizePixel = 0
+settingsBtn.Font = Enum.Font.GothamBlack
+settingsBtn.Text = "⚙"
+settingsBtn.TextColor3 = ECLIPSE.accent
+settingsBtn.TextSize = 14
+settingsBtn.AutoButtonColor = false
+settingsBtn.ZIndex = 5
+settingsBtn.Parent = header
+addCorner(settingsBtn, 12)
+local settingsStroke = addStroke(settingsBtn, 1, ECLIPSE.border, 0.3)
+setupHover(settingsBtn, ECLIPSE.bgButton, ECLIPSE.bgButtonHov, settingsStroke, ECLIPSE.border, ECLIPSE.glow)
+
+-- ==================== SEPARATOR ====================
+local separator = Instance.new("Frame")
+separator.Name = "Separator"
+separator.Size = UDim2.new(1, -10, 0, 1)
+separator.Position = UDim2.new(0, 5, 0, 34)
+separator.BackgroundColor3 = ECLIPSE.separator
+separator.BackgroundTransparency = 0.3
+separator.BorderSizePixel = 0
+separator.Parent = mainFrame
+
+-- ==================== CONTENT CONTAINER ====================
+local contentContainer = Instance.new("Frame")
+contentContainer.Name = "ContentContainer"
+contentContainer.Size = UDim2.new(1, 0, 1, -34)
+contentContainer.Position = UDim2.new(0, 0, 0, 34)
+contentContainer.BackgroundTransparency = 1
+contentContainer.ClipsDescendants = true
+contentContainer.Parent = mainFrame
+
+-- ==================== SCROLLING FRAME ====================
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Name = "PlayerList"
+scrollFrame.Size = UDim2.new(1, -10, 0, 180)
+scrollFrame.Position = UDim2.new(0, 5, 0, 5)
+scrollFrame.BackgroundColor3 = ECLIPSE.bgPanel
+scrollFrame.BackgroundTransparency = 0.15
+scrollFrame.BorderSizePixel = 0
+scrollFrame.ClipsDescendants = true
+scrollFrame.ScrollBarThickness = 3
+scrollFrame.ScrollBarImageColor3 = ECLIPSE.accent
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrollFrame.VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right
+scrollFrame.Parent = contentContainer
+addCorner(scrollFrame, 8)
+addStroke(scrollFrame, 1, ECLIPSE.border, 0.4)
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Name = "ListLayout"
+listLayout.FillDirection = Enum.FillDirection.Vertical
+listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+listLayout.SortOrder = Enum.SortOrder.Name
+listLayout.Padding = UDim.new(0, 4)
+listLayout.Parent = scrollFrame
+
+-- ==================== AUTO-BLOCK TOGGLE ====================
+local autoBlockBtn = Instance.new("TextButton")
+autoBlockBtn.Name = "AutoBlockBtn"
+autoBlockBtn.Size = UDim2.new(1, -10, 0, 30)
+autoBlockBtn.Position = UDim2.new(0, 5, 0, 190)
+autoBlockBtn.BackgroundColor3 = ECLIPSE.bgButton
+autoBlockBtn.BorderSizePixel = 0
+autoBlockBtn.Font = Enum.Font.GothamBlack
+autoBlockBtn.Text = "AUTO BLOCK STEAL: OFF"
+autoBlockBtn.TextColor3 = ECLIPSE.textWhite
+autoBlockBtn.TextSize = 10
+autoBlockBtn.AutoButtonColor = false
+autoBlockBtn.Parent = contentContainer
+addCorner(autoBlockBtn, 8)
+local autoBlockStroke = addStroke(autoBlockBtn, 1, ECLIPSE.border, 0.3)
+setupHover(autoBlockBtn, ECLIPSE.bgButton, ECLIPSE.bgButtonHov, autoBlockStroke, ECLIPSE.border, ECLIPSE.glow)
+
+-- ==================== BOTTOM CONTAINER ====================
+local bottomContainer = Instance.new("Frame")
+bottomContainer.Name = "BottomContainer"
+bottomContainer.Size = UDim2.new(1, 0, 0, 30)
+bottomContainer.Position = UDim2.new(0, 0, 1, -30)
+bottomContainer.BackgroundTransparency = 1
+bottomContainer.Parent = contentContainer
+
+-- ==================== BLOCK ALL BUTTON ====================
+local blockAllBtn = Instance.new("TextButton")
+blockAllBtn.Name = "BlockAllBtn"
+blockAllBtn.Size = UDim2.new(0, 170, 1, 0)
+blockAllBtn.Position = UDim2.new(0, 5, 0, 0)
+blockAllBtn.BackgroundColor3 = ECLIPSE.accentDark
+blockAllBtn.BorderSizePixel = 0
+blockAllBtn.Font = Enum.Font.GothamBlack
+blockAllBtn.Text = "BLOCK ALL"
+blockAllBtn.TextColor3 = ECLIPSE.textWhite
+blockAllBtn.TextSize = 12
+blockAllBtn.AutoButtonColor = false
+blockAllBtn.Parent = bottomContainer
+addCorner(blockAllBtn, 8)
+local blockAllStroke = addStroke(blockAllBtn, 1, ECLIPSE.border, 0.2)
+local blockAllGlow = addGlow(blockAllBtn, ECLIPSE.glowSoft)
+setupHover(blockAllBtn, ECLIPSE.accentDark, ECLIPSE.accent, blockAllStroke, ECLIPSE.border, ECLIPSE.glow)
+
+-- ==================== P KEY BUTTON ====================
+local pKeyBtn = Instance.new("TextButton")
+pKeyBtn.Name = "PKeyBtn"
+pKeyBtn.Size = UDim2.new(0, 55, 1, 0)
+pKeyBtn.Position = UDim2.new(1, -60, 0, 0)
+pKeyBtn.BackgroundColor3 = ECLIPSE.bgButton
+pKeyBtn.BorderSizePixel = 0
+pKeyBtn.Font = Enum.Font.GothamBlack
+pKeyBtn.Text = "[P]"
+pKeyBtn.TextColor3 = ECLIPSE.accent
+pKeyBtn.TextSize = 12
+pKeyBtn.AutoButtonColor = false
+pKeyBtn.Parent = bottomContainer
+addCorner(pKeyBtn, 8)
+local pKeyStroke = addStroke(pKeyBtn, 1, ECLIPSE.border, 0.3)
+setupHover(pKeyBtn, ECLIPSE.bgButton, ECLIPSE.bgButtonHov, pKeyStroke, ECLIPSE.border, ECLIPSE.glow)
+
+-- ==================== FOOTER ====================
+local footerText = Instance.new("TextLabel")
+footerText.Name = "FooterText"
+footerText.Size = UDim2.new(1, 0, 0, 16)
+footerText.Position = UDim2.new(0, 0, 1, -16)
+footerText.BackgroundTransparency = 1
+footerText.Font = Enum.Font.GothamBold
+footerText.Text = "discord.gg/kanyehub"
+footerText.TextColor3 = ECLIPSE.accent
+footerText.TextSize = 9
+footerText.TextTransparency = 0.5
+footerText.TextXAlignment = Enum.TextXAlignment.Center
+footerText.TextYAlignment = Enum.TextYAlignment.Center
+footerText.Parent = contentContainer
+
+-- ==================== STATE VARIABLES ====================
+local isCollapsed = false
+local autoBlockEnabled = false
+local autoBlockConnection = nil
+local isBlockingAll = false
+
+-- ==================== PLAYER LIST RENDERER ====================
+local function createPlayerEntry(plr)
+    local frame = Instance.new("Frame")
+    frame.Name = plr.Name
+    frame.Size = UDim2.new(1, -5, 0, 48)
+    frame.BackgroundColor3 = ECLIPSE.bgCard
+    frame.BackgroundTransparency = 0.05
+    frame.BorderSizePixel = 0
+    frame.ClipsDescendants = false
+    frame.Parent = scrollFrame
+    addCorner(frame, 8)
+    local frameStroke = addStroke(frame, 1, ECLIPSE.border, 0.5)
+
+    -- Avatar Image
+    local avatar = Instance.new("ImageLabel")
+    avatar.Name = "Avatar"
+    avatar.Size = UDim2.new(0, 34, 0, 34)
+    avatar.Position = UDim2.new(0, 6, 0.5, -17)
+    avatar.BackgroundColor3 = ECLIPSE.bgPanel
+    avatar.BackgroundTransparency = 0.3
+    avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. plr.UserId .. "&w=60&h=60"
+    avatar.ScaleType = Enum.ScaleType.Fit
+    avatar.Parent = frame
+    addCorner(avatar, 17)
+
+    -- Display Name
+    local displayName = Instance.new("TextLabel")
+    displayName.Name = "DisplayName"
+    displayName.Size = UDim2.new(1, -110, 0, 18)
+    displayName.Position = UDim2.new(0, 46, 0, 3)
+    displayName.BackgroundTransparency = 1
+    displayName.Font = Enum.Font.GothamBold
+    displayName.Text = plr.DisplayName
+    displayName.TextColor3 = ECLIPSE.textWhite
+    displayName.TextSize = 12
+    displayName.TextXAlignment = Enum.TextXAlignment.Left
+    displayName.TextYAlignment = Enum.TextYAlignment.Bottom
+    displayName.TextTruncate = Enum.TextTruncate.AtEnd
+    displayName.Parent = frame
+
+    -- Username
+    local username = Instance.new("TextLabel")
+    username.Name = "Username"
+    username.Size = UDim2.new(1, -110, 0, 16)
+    username.Position = UDim2.new(0, 46, 0, 22)
+    username.BackgroundTransparency = 1
+    username.Font = Enum.Font.Gotham
+    username.Text = "@" .. plr.Name
+    username.TextColor3 = ECLIPSE.textMuted
+    username.TextSize = 10
+    username.TextXAlignment = Enum.TextXAlignment.Left
+    username.TextYAlignment = Enum.TextYAlignment.Top
+    username.TextTruncate = Enum.TextTruncate.AtEnd
+    username.Parent = frame
+
+    -- Block Button
+    local blockBtn = Instance.new("TextButton")
+    blockBtn.Name = "BlockBtn"
+    blockBtn.Size = UDim2.new(0, 58, 0, 24)
+    blockBtn.Position = UDim2.new(1, -64, 0.5, -12)
+    blockBtn.BackgroundColor3 = ECLIPSE.bgButton
+    blockBtn.BorderSizePixel = 0
+    blockBtn.Font = Enum.Font.GothamBlack
+    blockBtn.Text = "Block"
+    blockBtn.TextColor3 = ECLIPSE.textWhite
+    blockBtn.TextSize = 10
+    blockBtn.AutoButtonColor = false
+    blockBtn.Parent = frame
+    addCorner(blockBtn, 6)
+    local blockStroke = addStroke(blockBtn, 1, ECLIPSE.border, 0.3)
+    setupHover(blockBtn, ECLIPSE.bgButton, ECLIPSE.redDark, blockStroke, ECLIPSE.border, ECLIPSE.red)
+
+    blockBtn.MouseButton1Click:Connect(function()
+        if isBlockingAll then return end
+        -- Flash feedback
+        TweenService:Create(blockBtn, TweenInfo.new(0.08), {BackgroundColor3 = ECLIPSE.red}):Play()
+        task.delay(0.25, function()
+            TweenService:Create(blockBtn, TweenInfo.new(0.2), {BackgroundColor3 = ECLIPSE.bgButton}):Play()
+        end)
+        task.spawn(function()
+            blockPlayer(plr)
+        end)
+    end)
+
+    -- Hover effect on card
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            TweenService:Create(frame, TweenInfo.new(0.2), {BackgroundColor3 = ECLIPSE.bgCardHover}):Play()
+        end
+    end)
+    frame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            TweenService:Create(frame, TweenInfo.new(0.2), {BackgroundColor3 = ECLIPSE.bgCard}):Play()
+        end
+    end)
+
+    return frame
+end
+
+local function rebuildPlayerList()
+    for _, child in ipairs(scrollFrame:GetChildren()) do
+        if child:IsA("Frame") and child.Name ~= "ListLayout" then
+            child:Destroy()
+        end
+    end
+
+    local playerList = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player then
+            table.insert(playerList, p)
+        end
+    end
+    table.sort(playerList, function(a, b)
+        return a.DisplayName:lower() < b.DisplayName:lower()
+    end)
+
+    for _, p in ipairs(playerList) do
+        createPlayerEntry(p)
+    end
+
+    task.wait(0.1)
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 4)
+end
+
+-- ==================== UI EVENT BINDINGS ====================
+collapseBtn.MouseButton1Click:Connect(function()
+    isCollapsed = not isCollapsed
+    contentContainer.Visible = not isCollapsed
+    collapseBtn.Text = isCollapsed and "▶" or "▼"
+    local targetSize = isCollapsed and UDim2.new(0, 270, 0, 34) or UDim2.new(0, 270, 0, 340)
+    TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {Size = targetSize}):Play()
+end)
+
+settingsBtn.MouseButton1Click:Connect(function()
+    -- Placeholder for settings popup
+end)
+
+autoBlockBtn.MouseButton1Click:Connect(function()
+    autoBlockEnabled = not autoBlockEnabled
+    autoBlockBtn.Text = "AUTO BLOCK STEAL: " .. (autoBlockEnabled and "ON" or "OFF")
+
+    if autoBlockEnabled then
+        TweenService:Create(autoBlockBtn, TweenInfo.new(0.25), {BackgroundColor3 = ECLIPSE.redDark}):Play()
+        TweenService:Create(autoBlockStroke, TweenInfo.new(0.25), {Color = ECLIPSE.red}):Play()
+    else
+        TweenService:Create(autoBlockBtn, TweenInfo.new(0.25), {BackgroundColor3 = ECLIPSE.bgButton}):Play()
+        TweenService:Create(autoBlockStroke, TweenInfo.new(0.25), {Color = ECLIPSE.border}):Play()
+    end
+
+    if autoBlockEnabled and not autoBlockConnection then
+        autoBlockConnection = RunService.Heartbeat:Connect(function()
+            if not autoBlockEnabled then return end
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= player and p.Character and p.Character.Parent then
+                    if hasBrainrotItem(p) then
+                        task.spawn(function()
+                            blockPlayer(p)
+                        end)
+                    end
+                end
+            end
+        end)
+    elseif not autoBlockEnabled and autoBlockConnection then
+        autoBlockConnection:Disconnect()
+        autoBlockConnection = nil
+    end
+end)
+
+blockAllBtn.MouseButton1Click:Connect(function()
+    if isBlockingAll then return end
+    isBlockingAll = true
+    blockAllBtn.Text = "BLOCKING..."
+    TweenService:Create(blockAllBtn, TweenInfo.new(0.2), {BackgroundColor3 = ECLIPSE.red}):Play()
+    TweenService:Create(blockAllStroke, TweenInfo.new(0.2), {Color = ECLIPSE.red}):Play()
+    task.spawn(function()
+        blockAllPlayers()
+        isBlockingAll = false
+        blockAllBtn.Text = "BLOCK ALL"
+        TweenService:Create(blockAllBtn, TweenInfo.new(0.3), {BackgroundColor3 = ECLIPSE.accentDark}):Play()
+        TweenService:Create(blockAllStroke, TweenInfo.new(0.3), {Color = ECLIPSE.border}):Play()
+    end)
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.P and not isBlockingAll then
+        task.spawn(function()
+            blockAllPlayers()
+        end)
+    end
+end)
+
+-- ==================== PLAYER LIST UPDATES ====================
+Players.PlayerAdded:Connect(function()
+    rebuildPlayerList()
+end)
+
+Players.PlayerRemoving:Connect(function()
+    rebuildPlayerList()
+end)
+
+task.wait(0.5)
+rebuildPlayerList()
+
+-- ==================== GUI DRAGGING ENHANCEMENT ====================
+local dragging = false
+local dragInput = nil
+local dragStart = nil
+local startPos = nil
+
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+header.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- ==================== ENTRY ANIMATION ====================
+animateEntry(mainFrame, 0.1)
+
+-- ==================== CLEANUP ====================
+player:GetPropertyChangedSignal("Parent"):Connect(function()
+    if not player.Parent then
+        if autoBlockConnection then
+            autoBlockConnection:Disconnect()
+            autoBlockConnection = nil
+        end
+        gui:Destroy()
+    end
+end)
+
+print("Eclipse Block GUI loaded successfully!")
