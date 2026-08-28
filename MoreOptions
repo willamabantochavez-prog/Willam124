@@ -1,8 +1,8 @@
 local SCRIPTS = {
     AutoHoney = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/AutoHoney",
     Script2 = "https://pastebin.com/raw/FKtdyQJD",
-    Script3 = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/ApFF",
-    Script4 = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/Autoblock",
+    Script3 = "",
+    Script4 = "",
     Script5 = "",
     Script6 = "",
     Script7 = "",
