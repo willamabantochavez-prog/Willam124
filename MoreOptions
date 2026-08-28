@@ -1,16 +1,16 @@
 local SCRIPTS = {
     AutoHoney = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/AutoHoney",
-    Script2 = "https://pastebin.com/raw/FKtdyQJD",  -- Agrega tu URL aquí
-    Script3 = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/ApFF",  -- Agrega tu URL aquí
-    Script4 = "",  -- Agrega tu URL aquí
-    Script5 = "",  -- Agrega tu URL aquí
-    Script6 = "",  -- Agrega tu URL aquí
-    Script7 = "",  -- Agrega tu URL aquí
-    Script8 = "",  -- Agrega tu URL aquí
-    Script9 = "",  -- Agrega tu URL aquí
-    Script10 = "", -- Agrega tu URL aquí
-    Script11 = "", -- Agrega tu URL aquí
-    Script12 = "", -- Agrega tu URL aquí
+    Script2 = "https://pastebin.com/raw/FKtdyQJD",
+    Script3 = "https://raw.githubusercontent.com/willamabantochavez-prog/Willam124/refs/heads/main/ApFF",
+    Script4 = "",
+    Script5 = "",
+    Script6 = "",
+    Script7 = "",
+    Script8 = "",
+    Script9 = "",
+    Script10 = "",
+    Script11 = "",
+    Script12 = "",
 }
 
 local BUTTON_DATA = {
@@ -147,7 +147,6 @@ sep.BorderSizePixel = 0
 sep.ZIndex = 6
 sep.Parent = mainFrame
 
--- ScrollingFrame para los botones
 local scrollFrame = Instance.new("ScrollingFrame")
 scrollFrame.Name = "ButtonScroll"
 scrollFrame.Size = UDim2.new(1, -8, 1, -44)
@@ -280,7 +279,6 @@ local function createButton(data, index)
     return btn
 end
 
--- Crear los 12 botones
 for i, data in ipairs(BUTTON_DATA) do
     createButton(data, i)
 end
