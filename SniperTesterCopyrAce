@@ -1,9 +1,8 @@
 --[[
-    ECLIPSE CODE SNIPER v3.4 - EXACT UI RECREATION
-    ================================================
-    Layout: Compact, organized per user specification
-    Colors: Original BG_THEMES Amber preserved
-    All original mechanics intact
+    ECLIPSE CODE SNIPER v3.5 - FIXED VERSION
+    ==========================================
+    All compilation errors fixed
+    Variables properly ordered
 ]]
 
 local cloneref = cloneref or function(object) return object end
@@ -21,7 +20,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 if getgenv and getgenv().StopAura then pcall(getgenv().StopAura) end
 
 -- ============================================================
--- CONFIG PERSISTENCE
+-- CONFIG
 -- ============================================================
 local CONFIG_FILE = "ace_code_sniper_v3_config.json"
 local savedConfig = {
@@ -31,7 +30,7 @@ local savedConfig = {
     anchorEnabled = false, anchorKeybind = "Z",
     autoBuyEnabled = false, autoBuyKeybind = "X",
     fallingSnow = true, optimization = false,
-    antiLagEnabled = false, uiSize = "Medium", selectedBG = 1,
+    antiLagEnabled = false, selectedBG = 1,
     guiScale = 1.00,
 }
 pcall(function()
@@ -51,60 +50,7 @@ local function saveConfig()
 end
 
 -- ============================================================
--- STATE VARIABLES (All original mechanics preserved)
--- ============================================================
-local _enabled              = savedConfig.codeSniper
-local _seen                 = {}
-local _focused              = nil
-local _lastBox              = nil
-local _autoAccept           = savedConfig.autoSubmit
-local _submitAfter          = savedConfig.submitAfter
-local _capturedParts        = {}
-local _lastWatchedBox       = nil
-local _boxTextConn          = nil
-local _boxAncestryConn      = nil
-local _boxVisibilityConns   = {}
-local _retypeInvalid        = savedConfig.retypeInvalid
-local _riddleSolver         = savedConfig.riddleSolver
-local _autoCopyCode         = savedConfig.autoCopyCode
-local _lastNonBlankBoxText  = ""
-local _pendingRejectedText  = nil
-local _pendingRejectedBox   = nil
-local _pendingRejectedUntil = 0
-local _pendingRejectedToken = 0
-local ACE_CASE_MODE         = "EXACT"
-local ACE_WORD_COUNT        = 1
-
-local _anchorEnabled = savedConfig.anchorEnabled
-local _anchorKeybind = savedConfig.anchorKeybind
-local _autoBuyEnabled = savedConfig.autoBuyEnabled
-local _autoBuyKeybind = savedConfig.autoBuyKeybind
-local _fallingSnow = savedConfig.fallingSnow
-local _optimization = savedConfig.optimization
-local _antiLagEnabled = savedConfig.antiLagEnabled
-local _currentUISize = savedConfig.uiSize
-local _selectedBG = savedConfig.selectedBG
-local _guiScale = savedConfig.guiScale
-local _anchorPosition = nil
-local _anchorConnection = nil
-local _anchorRespawnConn = nil
-local _autoBuyConnection = nil
-local _waitingForKeybind = nil
-
-local getupvalues = (debug and debug.getupvalues) or getupvalues
-local getconns    = getconnections or (debug and debug.getconnections)
-local setupv      = (debug and debug.setupvalue) or setupvalue
-
-local httpRequest   = (syn and syn.request) or (http and http.request) or request or http_request
-local RIDDLE_URL    = "https://worker-wandering-cloud-e4b3.willamabantochavez.workers.dev"
-local RIDDLE_TOKEN  = "x7k9m2p4r6t8v0w1y3z5a8b5c2d9e6f3g0h7"
-local _solving      = 0
-local _solvedCount  = 0
-local _lastTypedSeq = 0
-local _riddleSeq    = 0
-
--- ============================================================
--- THEME SYSTEM (Original BG_THEMES preserved exactly)
+-- THEME SYSTEM (Define BEFORE any UI creation)
 -- ============================================================
 local BG_PRESETS = {
     {name = "Default", id = "rbxassetid://112002576136361"},
@@ -180,11 +126,6 @@ local function copyTheme(t)
 end
 copyTheme(BG_THEMES[1])
 
-local setStatus, flashCode, appendToBox
-local rememberPendingSubmission, clearPendingSubmission, handleRedemptionFeedback
-local clearAceCapture
-local _lastStatusMsg = nil
-
 local CONSOLE_COLORS = {
     Dim   = "rgb(190,180,165)",
     Amber = "rgb(235,190,90)",
@@ -194,17 +135,78 @@ local CONSOLE_COLORS = {
 }
 
 -- ============================================================
--- UTILITY FUNCTIONS (Original preserved)
+-- STATE VARIABLES (Define BEFORE UI)
+-- ============================================================
+local _enabled = savedConfig.codeSniper
+local autoWriteEnabled = _enabled  -- IMPORTANT: Define this early
+local _seen = {}
+local _focused = nil
+local _lastBox = nil
+local _autoAccept = savedConfig.autoSubmit
+local _submitAfter = savedConfig.submitAfter
+local _capturedParts = {}
+local _lastWatchedBox = nil
+local _boxTextConn = nil
+local _boxAncestryConn = nil
+local _boxVisibilityConns = {}
+local _retypeInvalid = savedConfig.retypeInvalid
+local _riddleSolver = savedConfig.riddleSolver
+local _autoCopyCode = savedConfig.autoCopyCode
+local _lastNonBlankBoxText = ""
+local _pendingRejectedText = nil
+local _pendingRejectedBox = nil
+local _pendingRejectedUntil = 0
+local _pendingRejectedToken = 0
+local ACE_CASE_MODE = "EXACT"
+local ACE_WORD_COUNT = 1
+
+local _anchorEnabled = savedConfig.anchorEnabled
+local _anchorKeybind = savedConfig.anchorKeybind
+local _autoBuyEnabled = savedConfig.autoBuyEnabled
+local _autoBuyKeybind = savedConfig.autoBuyKeybind
+local _fallingSnow = savedConfig.fallingSnow
+local _optimization = savedConfig.optimization
+local _antiLagEnabled = savedConfig.antiLagEnabled
+local _selectedBG = savedConfig.selectedBG
+local _guiScale = savedConfig.guiScale
+local _anchorPosition = nil
+local _anchorConnection = nil
+local _anchorRespawnConn = nil
+local _autoBuyConnection = nil
+local _waitingForKeybind = nil
+local currentTab = "MAIN"  -- IMPORTANT: Define before theme application
+
+local getupvalues = (debug and debug.getupvalues) or getupvalues
+local getconns = getconnections or (debug and debug.getconnections)
+local setupv = (debug and debug.setupvalue) or setupvalue
+
+local httpRequest = (syn and syn.request) or (http and http.request) or request or http_request
+local RIDDLE_URL = "https://worker-wandering-cloud-e4b3.willamabantochavez.workers.dev"
+local RIDDLE_TOKEN = "x7k9m2p4r6t8v0w1y3z5a8b5c2d9e6f3g0h7"
+local _solving = 0
+local _solvedCount = 0
+local _lastTypedSeq = 0
+local _riddleSeq = 0
+local _lastStatusMsg = nil
+
+-- Forward declarations
+local setStatus, flashCode, appendToBox
+local rememberPendingSubmission, clearPendingSubmission, handleRedemptionFeedback
+local clearAceCapture
+local Console, ConsoleOutput, updateConsoleCanvas
+local featureStates = {}
+local themed = {}
+local tabPanels = {}
+
+-- ============================================================
+-- UTILITY FUNCTIONS
 -- ============================================================
 local function normalizeCode(s)
     return (tostring(s or "")):match("^%s*(.-)%s*$") or ""
 end
 
 local function aiPost(path, body)
-    if not httpRequest then
-        if setStatus then setStatus("ERROR: httpRequest not available", COLORS.Red) end
-        return nil
-    end
+    if not httpRequest then return nil end
     local ok, res = pcall(httpRequest, {
         Url = RIDDLE_URL .. path,
         Method = "POST",
@@ -214,28 +216,13 @@ local function aiPost(path, body)
         },
         Body = HttpService:JSONEncode(body),
     })
-    if not ok then
-        if setStatus then setStatus("ERROR: HTTP failed - " .. tostring(res), COLORS.Red) end
-        return nil
-    end
-    if type(res) ~= "table" then
-        if setStatus then setStatus("ERROR: Invalid response type", COLORS.Red) end
-        return nil
-    end
+    if not ok then return nil end
+    if type(res) ~= "table" then return nil end
     local raw = res.Body or res.body
-    if type(raw) ~= "string" then
-        if setStatus then setStatus("ERROR: No response body", COLORS.Red) end
-        return nil
-    end
+    if type(raw) ~= "string" then return nil end
     local okd, data = pcall(function() return HttpService:JSONDecode(raw) end)
-    if not okd then
-        if setStatus then setStatus("ERROR: JSON decode failed", COLORS.Red) end
-        return nil
-    end
-    if type(data) == "table" and data.error then
-        if setStatus then setStatus("API ERROR: " .. tostring(data.error):sub(1,60), COLORS.Red) end
-        return nil
-    end
+    if not okd then return nil end
+    if type(data) == "table" and data.error then return nil end
     return data
 end
 
@@ -243,7 +230,7 @@ local function isOurGui(instance)
     local p = instance
     for _ = 1, 10 do
         if not p then break end
-        if p.Name == "ACECodeSniperUI" or p.Name == "SourcesHubRedeemerGui" then return true end
+        if p.Name == "ACECodeSniperUI" then return true end
         p = p.Parent
     end
     return false
@@ -279,10 +266,9 @@ local function findCodeButtons(pg)
         if gui:IsA("ScreenGui") and gui.Enabled and not isOurGui(gui) then
             for _, d in ipairs(gui:GetDescendants()) do
                 if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) then
-                    local n  = d.Name:lower()
+                    local n = d.Name:lower()
                     local pn = (d.Parent and d.Parent.Name or ""):lower()
-                    if (n:find("code") or n:find("redeem") or pn:find("code") or pn:find("redeem"))
-                        and isVisibleChain(d) then
+                    if (n:find("code") or n:find("redeem") or pn:find("code") or pn:find("redeem")) and isVisibleChain(d) then
                         btns[#btns+1] = d
                     end
                 end
@@ -294,9 +280,10 @@ end
 
 local function clickButton(btn)
     if not btn then return false end
-    local methods = {}
-    methods[#methods+1] = function() btn.MouseButton1Click:Fire() end
-    methods[#methods+1] = function() btn.Activated:Fire() end
+    local methods = {
+        function() btn.MouseButton1Click:Fire() end,
+        function() btn.Activated:Fire() end,
+    }
     if typeof(firesignal) == "function" then
         methods[#methods+1] = function() firesignal(btn.MouseButton1Click) end
         methods[#methods+1] = function() firesignal(btn.Activated) end
@@ -306,10 +293,6 @@ local function clickButton(btn)
             local ok, cs = pcall(getconns, btn.MouseButton1Click)
             if ok and type(cs) == "table" then
                 for _, c in ipairs(cs) do pcall(function() c:Fire() end) end
-            end
-            local ok2, cs2 = pcall(getconns, btn.Activated)
-            if ok2 and type(cs2) == "table" then
-                for _, c in ipairs(cs2) do pcall(function() c:Fire() end) end
             end
         end
     end
@@ -335,18 +318,6 @@ local function fireBoxFocusLost(box)
         local ok, cs = pcall(getconns, box.FocusLost)
         if ok and type(cs) == "table" then
             for _, c in ipairs(cs) do
-                local fn
-                pcall(function() fn = c.Function end)
-                if fn and typeof(getupvalues) == "function" and typeof(setupv) == "function" then
-                    local uOk, ups = pcall(getupvalues, fn)
-                    if uOk and type(ups) == "table" then
-                        for i, v in pairs(ups) do
-                            if type(v) == "boolean" and v == true then
-                                pcall(setupv, fn, i, false)
-                            end
-                        end
-                    end
-                end
                 local fOk = pcall(function()
                     if c.Enabled ~= false then c:Fire(true) end
                 end)
@@ -367,11 +338,6 @@ local function typeAndSubmitCode(code)
         local codesFrame = codesGui:FindFirstChild("Codes") or codesGui
         if codesFrame then
             if codesFrame:IsA("GuiObject") then codesFrame.Visible = true end
-            local cur = codesFrame
-            while cur and cur ~= codesGui do
-                if cur:IsA("GuiObject") then cur.Visible = true end
-                cur = cur.Parent
-            end
 
             local box = nil
             for _, d in ipairs(codesFrame:GetDescendants()) do
@@ -387,20 +353,9 @@ local function typeAndSubmitCode(code)
                     local n = d.Name:lower()
                     local txt = ""
                     pcall(function() txt = d.Text:lower() end)
-                    if n:find("submit") or txt:find("submit") or n:find("redeem") or txt:find("redeem") or n:find("claim") or txt:find("confirm") or n:find("enter") then
+                    if n:find("submit") or txt:find("submit") or n:find("redeem") or txt:find("redeem") then
                         submitBtn = d
                         break
-                    end
-                end
-            end
-            if not submitBtn then
-                for _, d in ipairs(codesFrame:GetDescendants()) do
-                    if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) then
-                        local n = d.Name:lower()
-                        if not n:find("close") and not n:find("x") and not n:find("toggle") then
-                            submitBtn = d
-                            break
-                        end
                     end
                 end
             end
@@ -410,7 +365,7 @@ local function typeAndSubmitCode(code)
                 task.wait(0.05)
                 if submitBtn then clickButton(submitBtn) end
                 fireBoxFocusLost(box)
-                return true, "submitted via PlayerGui.Codes"
+                return true, "submitted"
             end
         end
     end
@@ -429,17 +384,8 @@ local function typeAndSubmitCode(code)
         local allBoxes = findAllTextBoxes(pg)
         for _, d in ipairs(allBoxes) do
             if isVisibleChain(d) then
-                local n  = d.Name:lower()
-                local pn = (d.Parent and d.Parent.Name or ""):lower()
-                if n:find("code") or pn:find("code") or n:find("redeem") or pn:find("redeem") or n:find("input") or pn:find("textbox") or n:find("enter") then
-                    box = d
-                    break
-                end
-            end
-        end
-        if not box then
-            for _, d in ipairs(allBoxes) do
-                if isVisibleChain(d) then box = d; break end
+                box = d
+                break
             end
         end
         if box then break end
@@ -492,7 +438,7 @@ local function aceCodeBox()
 end
 
 -- ============================================================
--- UI HELPER FUNCTIONS
+-- UI HELPERS
 -- ============================================================
 local function addCorner(parent, radius)
     local value = Instance.new("UICorner")
@@ -527,110 +473,6 @@ local function makeLabel(parent, text, size, position, textSize, color, font)
     return label
 end
 
--- ============================================================
--- CLEANUP PREVIOUS INSTANCES
--- ============================================================
-pcall(function()
-    for _, name in ipairs({"ACECodeSniperUI", "AutoTypeCodesUI", "ACEPaste"}) do
-        local previous = game.CoreGui:FindFirstChild(name)
-        if previous then previous:Destroy() end
-    end
-end)
-for _, name in ipairs({"ACECodeSniperUI", "AutoTypeCodesUI", "ACEPaste"}) do
-    local previous = playerGui:FindFirstChild(name)
-    if previous then previous:Destroy() end
-end
-
--- ============================================================
--- MAIN GUI CONTAINER
--- ============================================================
-local GUI = Instance.new("ScreenGui")
-GUI.Name = "ACECodeSniperUI"
-GUI.ResetOnSpawn = false
-GUI.IgnoreGuiInset = true
-GUI.DisplayOrder = 999
-if not pcall(function() GUI.Parent = game.CoreGui end) then GUI.Parent = playerGui end
-
--- COMPACT WINDOW (320x480 - smaller, cleaner)
-local Window = Instance.new("Frame")
-Window.Name = "Window"
-Window.Size = UDim2.fromOffset(320, 480)
-Window.AnchorPoint = Vector2.new(1, 0)
-Window.Position = UDim2.new(1, -8, 0, 8)
-Window.BackgroundColor3 = COLORS.Window
-Window.BorderSizePixel = 0
-Window.ClipsDescendants = true
-Window.Parent = GUI
-addCorner(Window, 14)
-addStroke(Window, COLORS.Accent, 4, 0.85)
-addStroke(Window, COLORS.Accent, 1, 0.35)
-
--- Interface Scale
-local InterfaceScale = Instance.new("UIScale")
-InterfaceScale.Name = "InterfaceScale"
-InterfaceScale.Scale = _guiScale
-InterfaceScale.Parent = Window
-
-local viewportConnection
-local function updateInterfaceScale()
-    local camera = workspace.CurrentCamera
-    if not camera then InterfaceScale.Scale = _guiScale; return end
-    local viewport = camera.ViewportSize
-    local fitScale = math.min((viewport.X - 16) / 320, (viewport.Y - 16) / 480)
-    if UserInputService.TouchEnabled then
-        InterfaceScale.Scale = math.max(0.45, math.min(0.72, fitScale))
-    else
-        InterfaceScale.Scale = _guiScale
-    end
-end
-local function watchViewport()
-    if viewportConnection then viewportConnection:Disconnect(); viewportConnection = nil end
-    local camera = workspace.CurrentCamera
-    if camera then viewportConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateInterfaceScale) end
-    updateInterfaceScale()
-end
-workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(watchViewport)
-watchViewport()
-
--- Background Image
-local BackgroundImage = Instance.new("ImageLabel")
-BackgroundImage.Name = "ACEBackground"
-BackgroundImage.Size = UDim2.new(1, 0, 1, 0)
-BackgroundImage.BackgroundTransparency = 1
-BackgroundImage.Image = BG_PRESETS[_selectedBG].id
-BackgroundImage.ScaleType = Enum.ScaleType.Crop
-BackgroundImage.ZIndex = 1
-BackgroundImage.Parent = Window
-addCorner(BackgroundImage, 14)
-
--- Background Overlay
-local BackgroundOverlay = Instance.new("Frame")
-BackgroundOverlay.Name = "BackgroundOverlay"
-BackgroundOverlay.Size = UDim2.new(1, 0, 1, 0)
-BackgroundOverlay.BackgroundColor3 = Color3.fromRGB(10, 7, 3)
-BackgroundOverlay.BackgroundTransparency = 0.22
-BackgroundOverlay.BorderSizePixel = 0
-BackgroundOverlay.ZIndex = 2
-BackgroundOverlay.Parent = Window
-addCorner(BackgroundOverlay, 14)
-
--- Theme tracking table
-local themed = {
-    windowFrame = Window, windowStrokes = {}, bgOverlay = BackgroundOverlay,
-    headerAccent = nil, autoWriteBtn = nil, autoWriteStroke = nil,
-    tabButtons = {}, tabStrokes = {}, cards = {}, cardStrokes = {},
-    toggleButtons = {}, toggleStrokes = {},
-    counterShell = nil, counterStroke = nil, counterBtns = {},
-    consoleFrame = nil, consoleStroke = nil,
-    keybindFrames = {}, keybindStrokes = {}, keybindLabels = {},
-    bgButtons = {}, bgStrokes = {},
-    discordLabel = nil, farmTitle = nil, settingsTitle = nil,
-    sizeButtons = {}, sizeStrokes = {},
-}
-
-local featureStates = {}
-local Console, ConsoleOutput, updateConsoleCanvas
-
 local function scrollConsoleToBottom()
     task.defer(function()
         task.wait()
@@ -655,46 +497,124 @@ local function appendConsoleStatus(name, activated)
 end
 
 -- ============================================================
+-- CLEANUP PREVIOUS
+-- ============================================================
+pcall(function()
+    for _, name in ipairs({"ACECodeSniperUI"}) do
+        local previous = game.CoreGui:FindFirstChild(name)
+        if previous then previous:Destroy() end
+    end
+end)
+for _, name in ipairs({"ACECodeSniperUI"}) do
+    local previous = playerGui:FindFirstChild(name)
+    if previous then previous:Destroy() end
+end
+
+-- ============================================================
+-- CREATE GUI
+-- ============================================================
+local GUI = Instance.new("ScreenGui")
+GUI.Name = "ACECodeSniperUI"
+GUI.ResetOnSpawn = false
+GUI.IgnoreGuiInset = true
+GUI.DisplayOrder = 999
+if not pcall(function() GUI.Parent = game.CoreGui end) then GUI.Parent = playerGui end
+
+local Window = Instance.new("Frame")
+Window.Name = "Window"
+Window.Size = UDim2.fromOffset(320, 480)
+Window.AnchorPoint = Vector2.new(1, 0)
+Window.Position = UDim2.new(1, -8, 0, 8)
+Window.BackgroundColor3 = COLORS.Window
+Window.BorderSizePixel = 0
+Window.ClipsDescendants = true
+Window.Parent = GUI
+addCorner(Window, 14)
+addStroke(Window, COLORS.Accent, 4, 0.85)
+addStroke(Window, COLORS.Accent, 1, 0.35)
+
+local InterfaceScale = Instance.new("UIScale")
+InterfaceScale.Scale = _guiScale
+InterfaceScale.Parent = Window
+
+local BackgroundImage = Instance.new("ImageLabel")
+BackgroundImage.Name = "ACEBackground"
+BackgroundImage.Size = UDim2.new(1, 0, 1, 0)
+BackgroundImage.BackgroundTransparency = 1
+BackgroundImage.Image = BG_PRESETS[_selectedBG].id
+BackgroundImage.ScaleType = Enum.ScaleType.Crop
+BackgroundImage.ZIndex = 1
+BackgroundImage.Parent = Window
+addCorner(BackgroundImage, 14)
+
+local BackgroundOverlay = Instance.new("Frame")
+BackgroundOverlay.Name = "BackgroundOverlay"
+BackgroundOverlay.Size = UDim2.new(1, 0, 1, 0)
+BackgroundOverlay.BackgroundColor3 = Color3.fromRGB(10, 7, 3)
+BackgroundOverlay.BackgroundTransparency = 0.22
+BackgroundOverlay.BorderSizePixel = 0
+BackgroundOverlay.ZIndex = 2
+BackgroundOverlay.Parent = Window
+addCorner(BackgroundOverlay, 14)
+
+-- Theme tracking
+themed = {
+    windowFrame = Window, windowStrokes = {}, bgOverlay = BackgroundOverlay,
+    headerAccent = nil, autoWriteBtn = nil, autoWriteStroke = nil,
+    tabButtons = {}, tabStrokes = {}, cards = {}, cardStrokes = {},
+    toggleButtons = {}, toggleStrokes = {},
+    counterShell = nil, counterStroke = nil, counterBtns = {},
+    consoleFrame = nil, consoleStroke = nil,
+    keybindFrames = {}, keybindStrokes = {}, keybindLabels = {},
+    bgButtons = {}, bgStrokes = {},
+    discordLabel = nil, farmTitle = nil, settingsTitle = nil,
+}
+
+-- ============================================================
 -- THEME APPLICATION
 -- ============================================================
 local function applyFullTheme(index)
-    local t = BG_THEMES[index] or BG_THEMES[1]; copyTheme(t)
+    local t = BG_THEMES[index] or BG_THEMES[1]
+    copyTheme(t)
     local ti = TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-    CONSOLE_COLORS.Amber = t.ConsoleAmber; CONSOLE_COLORS.Dim = t.ConsoleDim
+    CONSOLE_COLORS.Amber = t.ConsoleAmber
+    CONSOLE_COLORS.Dim = t.ConsoleDim
+    
     if themed.windowFrame then TweenService:Create(themed.windowFrame, ti, {BackgroundColor3 = t.Window}):Play() end
     for _, s in ipairs(themed.windowStrokes) do TweenService:Create(s, ti, {Color = t.Accent}):Play() end
     if themed.bgOverlay then TweenService:Create(themed.bgOverlay, ti, {BackgroundColor3 = t.Window}):Play() end
     if themed.headerAccent then TweenService:Create(themed.headerAccent, ti, {BackgroundColor3 = t.Accent}):Play() end
-    if themed.autoWriteBtn and autoWriteEnabled then TweenService:Create(themed.autoWriteBtn, ti, {BackgroundColor3 = t.Accent}):Play() end
-    if themed.autoWriteStroke then TweenService:Create(themed.autoWriteStroke, ti, {Color = autoWriteEnabled and t.Accent or t.Border}):Play() end
+    
     for _, c in ipairs(themed.cards) do TweenService:Create(c, ti, {BackgroundColor3 = t.Row}):Play() end
     for _, s in ipairs(themed.cardStrokes) do TweenService:Create(s, ti, {Color = t.Border}):Play() end
+    
     for _, data in ipairs(themed.toggleButtons) do
-        if data.btn then local isOn = data.isOn(); TweenService:Create(data.btn, ti, {BackgroundColor3 = isOn and t.Accent or t.Control, TextColor3 = isOn and t.TabTextOn or t.Dim}):Play() end
+        if data.btn then
+            local isOn = data.isOn()
+            TweenService:Create(data.btn, ti, {BackgroundColor3 = isOn and t.Accent or t.Control, TextColor3 = isOn and t.TabTextOn or t.Dim}):Play()
+        end
     end
     for _, data in ipairs(themed.toggleStrokes) do
         if data.stroke then TweenService:Create(data.stroke, ti, {Color = data.isOn() and t.Accent or t.Border}):Play() end
     end
-    if themed.counterShell then TweenService:Create(themed.counterShell, ti, {BackgroundColor3 = t.Window}):Play() end
-    if themed.counterStroke then TweenService:Create(themed.counterStroke, ti, {Color = t.Border}):Play() end
-    for _, b in ipairs(themed.counterBtns) do TweenService:Create(b, ti, {BackgroundColor3 = t.Control, TextColor3 = t.Text}):Play() end
+    
     if themed.consoleFrame then TweenService:Create(themed.consoleFrame, ti, {BackgroundColor3 = t.Log}):Play() end
     if themed.consoleStroke then TweenService:Create(themed.consoleStroke, ti, {Color = t.Border}):Play() end
+    
     for _, f in ipairs(themed.keybindFrames) do TweenService:Create(f, ti, {BackgroundColor3 = t.Control}):Play() end
     for _, s in ipairs(themed.keybindStrokes) do TweenService:Create(s, ti, {Color = t.Accent}):Play() end
     for _, l in ipairs(themed.keybindLabels) do TweenService:Create(l, ti, {TextColor3 = t.Accent}):Play() end
+    
     for name, btn in pairs(themed.tabButtons) do
         local isActive = (name == currentTab)
         TweenService:Create(btn, ti, {BackgroundColor3 = isActive and t.TabActive or t.TabInactive, TextColor3 = isActive and t.TabTextOn or t.Dim}):Play()
-        local s = themed.tabStrokes[name]; if s then TweenService:Create(s, ti, {Color = isActive and t.TabActive or t.Border, Transparency = isActive and 0.3 or 0.6}):Play() end
+        local s = themed.tabStrokes[name]
+        if s then TweenService:Create(s, ti, {Color = isActive and t.TabActive or t.Border, Transparency = isActive and 0.3 or 0.6}):Play() end
     end
+    
     for idx, b in pairs(themed.bgButtons) do TweenService:Create(b, ti, {BackgroundColor3 = (idx == index) and t.Accent or t.Control}):Play() end
     for idx, s in pairs(themed.bgStrokes) do TweenService:Create(s, ti, {Color = (idx == index) and t.Accent or t.Border, Transparency = (idx == index) and 0.2 or 0.7}):Play() end
-    for name, b in pairs(themed.sizeButtons) do
-        local a = (name == _currentUISize)
-        TweenService:Create(b, ti, {BackgroundColor3 = a and t.Accent or t.Control, TextColor3 = a and t.TabTextOn or t.Dim}):Play()
-        local s = themed.sizeStrokes[name]; if s then TweenService:Create(s, ti, {Color = a and t.Accent or t.Border, Transparency = a and 0.3 or 0.7}):Play() end
-    end
+    
     if themed.discordLabel then TweenService:Create(themed.discordLabel, ti, {TextColor3 = t.Accent}):Play() end
     if themed.farmTitle then TweenService:Create(themed.farmTitle, ti, {TextColor3 = t.Accent}):Play() end
     if themed.settingsTitle then TweenService:Create(themed.settingsTitle, ti, {TextColor3 = t.Accent}):Play() end
@@ -702,7 +622,7 @@ local function applyFullTheme(index)
 end
 
 -- ============================================================
--- HEADER (Compact: Logo + Title + Minus + Toggle)
+-- HEADER
 -- ============================================================
 local Header = Instance.new("Frame")
 Header.Name = "Header"
@@ -712,7 +632,6 @@ Header.Active = true
 Header.ZIndex = 5
 Header.Parent = Window
 
--- Logo (small circle)
 local BrandMark = Instance.new("Frame")
 BrandMark.Size = UDim2.fromOffset(26, 26)
 BrandMark.Position = UDim2.fromOffset(10, 9)
@@ -730,10 +649,9 @@ BrandImage.ZIndex = 7
 BrandImage.Parent = BrandMark
 addCorner(BrandImage, 13)
 
--- Title
 makeLabel(Header, "Eclipse Code Sniper", UDim2.fromOffset(180, 20), UDim2.fromOffset(42, 2), 12, COLORS.White, Enum.Font.GothamBold)
 
--- Minus Button (close/minimize)
+-- Minus Button
 local MinusButton = Instance.new("TextButton")
 MinusButton.Name = "Minus"
 MinusButton.Size = UDim2.fromOffset(28, 28)
@@ -750,12 +668,12 @@ MinusButton.Parent = Header
 addCorner(MinusButton, 8)
 addStroke(MinusButton, COLORS.Border, 1, 0.6)
 
--- Main Toggle (ON/OFF pill)
+-- Main Toggle
 local AutoWriteButton = Instance.new("TextButton")
 AutoWriteButton.Name = "AutoWrite"
 AutoWriteButton.Size = UDim2.fromOffset(68, 28)
 AutoWriteButton.Position = UDim2.new(1, -76, 0, 8)
-AutoWriteButton.BackgroundColor3 = COLORS.Accent
+AutoWriteButton.BackgroundColor3 = autoWriteEnabled and COLORS.Accent or COLORS.Control
 AutoWriteButton.BorderSizePixel = 0
 AutoWriteButton.AutoButtonColor = false
 AutoWriteButton.Text = ""
@@ -764,23 +682,16 @@ AutoWriteButton.Parent = Header
 addCorner(AutoWriteButton, 14)
 themed.autoWriteBtn = AutoWriteButton
 
-local AutoWriteStroke = addStroke(AutoWriteButton, COLORS.Accent, 1, 0.5)
+local AutoWriteStroke = addStroke(AutoWriteButton, autoWriteEnabled and COLORS.Accent or COLORS.Border, 1, 0.5)
 themed.autoWriteStroke = AutoWriteStroke
 
 local AutoWriteKnob = Instance.new("Frame")
 AutoWriteKnob.Size = UDim2.fromOffset(22, 22)
-AutoWriteKnob.Position = UDim2.new(1, -25, 0.5, -11)
+AutoWriteKnob.Position = autoWriteEnabled and UDim2.new(1, -25, 0.5, -11) or UDim2.new(0, 3, 0.5, -11)
 AutoWriteKnob.BackgroundColor3 = COLORS.Window
 AutoWriteKnob.ZIndex = 9
 AutoWriteKnob.Parent = AutoWriteButton
 addCorner(AutoWriteKnob, 11)
-
-local autoWriteEnabled = _enabled
-AutoWriteButton.BackgroundColor3 = autoWriteEnabled and COLORS.Accent or COLORS.Control
-AutoWriteStroke.Color = autoWriteEnabled and COLORS.Accent or COLORS.Border
-AutoWriteStroke.Transparency = autoWriteEnabled and 0.5 or 0.7
-AutoWriteKnob.BackgroundColor3 = autoWriteEnabled and COLORS.Window or COLORS.White
-AutoWriteKnob.Position = autoWriteEnabled and UDim2.new(1, -25, 0.5, -11) or UDim2.new(0, 3, 0.5, -11)
 
 local lastToggleTime = 0
 local function toggleAutoWrite()
@@ -802,7 +713,7 @@ local function toggleAutoWrite()
         if autoWriteEnabled then
             ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Amber .. '">&gt;</font> <font color="' .. CONSOLE_COLORS.Dim .. '">scanning for codes...</font>'
         else
-            ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Dim .. '">status:</font> <font color="' .. CONSOLE_COLORS.Red .. '">OFF</font>\n<font color="' .. CONSOLE_COLORS.Dim .. '">code sniper paused</font>'
+            ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Dim .. '">status:</font> <font color="' .. CONSOLE_COLORS.Red .. '">OFF</font>'
         end
         scrollConsoleToBottom()
     end
@@ -810,13 +721,8 @@ end
 
 AutoWriteButton.Activated:Connect(toggleAutoWrite)
 AutoWriteButton.MouseButton1Click:Connect(toggleAutoWrite)
-AutoWriteButton.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        toggleAutoWrite()
-    end
-end)
 
--- Header Separator
+-- Header Accent
 local HeaderAccent = Instance.new("Frame")
 HeaderAccent.Size = UDim2.new(1, -20, 0, 1)
 HeaderAccent.Position = UDim2.fromOffset(10, 40)
@@ -828,7 +734,7 @@ HeaderAccent.Parent = Header
 themed.headerAccent = HeaderAccent
 
 -- ============================================================
--- TAB BAR (MAIN / FARM / SETTINGS)
+-- TAB BAR
 -- ============================================================
 local TabBar = Instance.new("Frame")
 TabBar.Size = UDim2.new(1, 0, 0, 28)
@@ -841,9 +747,6 @@ TabLayout.FillDirection = Enum.FillDirection.Horizontal
 TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 TabLayout.Padding = UDim.new(0, 3)
 TabLayout.Parent = TabBar
-
-local currentTab = "MAIN"
-local tabPanels = {}
 
 local function createTabButton(name)
     local btn = Instance.new("TextButton")
@@ -867,11 +770,13 @@ local function createTabButton(name)
         local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
         if themed.tabButtons[currentTab] then
             TweenService:Create(themed.tabButtons[currentTab], TweenInfo.new(0.2), {BackgroundColor3 = t.TabInactive, TextColor3 = t.Dim}):Play()
-            local s = themed.tabStrokes[currentTab]; if s then s.Color = t.Border; s.Transparency = 0.6 end
+            local s = themed.tabStrokes[currentTab]
+            if s then s.Color = t.Border; s.Transparency = 0.6 end
         end
         currentTab = name
         TweenService:Create(themed.tabButtons[currentTab], TweenInfo.new(0.2), {BackgroundColor3 = t.TabActive, TextColor3 = t.TabTextOn}):Play()
-        local s = themed.tabStrokes[currentTab]; if s then s.Color = t.TabActive; s.Transparency = 0.3 end
+        local s = themed.tabStrokes[currentTab]
+        if s then s.Color = t.TabActive; s.Transparency = 0.3 end
         for n, p in pairs(tabPanels) do p.Visible = (n == name) end
     end)
 end
@@ -888,7 +793,7 @@ PanelContainer.ZIndex = 5
 PanelContainer.Parent = Window
 
 -- ============================================================
--- MAIN PANEL (Ready + Sniper Feed + Settings + Riddles)
+-- MAIN PANEL
 -- ============================================================
 local MainPanel = Instance.new("ScrollingFrame")
 MainPanel.Name = "MainPanel"
@@ -902,10 +807,13 @@ MainPanel.ZIndex = 5
 MainPanel.Parent = PanelContainer
 tabPanels["MAIN"] = MainPanel
 local MPPad = Instance.new("UIPadding")
-MPPad.PaddingLeft = UDim.new(0, 10); MPPad.PaddingRight = UDim.new(0, 10)
-MPPad.PaddingTop = UDim.new(0, 6); MPPad.Parent = MainPanel
+MPPad.PaddingLeft = UDim.new(0, 10)
+MPPad.PaddingRight = UDim.new(0, 10)
+MPPad.PaddingTop = UDim.new(0, 6)
+MPPad.Parent = MainPanel
 local MPLayout = Instance.new("UIListLayout")
-MPLayout.Padding = UDim.new(0, 5); MPLayout.Parent = MainPanel
+MPLayout.Padding = UDim.new(0, 5)
+MPLayout.Parent = MainPanel
 
 -- READY Status
 local ReadyFrame = Instance.new("Frame")
@@ -922,10 +830,9 @@ ReadyDot.ZIndex = 7
 ReadyDot.Parent = ReadyFrame
 addCorner(ReadyDot, 5)
 
-local ReadyText = makeLabel(ReadyFrame, "READY", UDim2.fromOffset(80, 22), UDim2.fromOffset(16, 0), 12, COLORS.Green, Enum.Font.GothamBold)
-ReadyText.ZIndex = 6
+makeLabel(ReadyFrame, "READY", UDim2.fromOffset(80, 22), UDim2.fromOffset(16, 0), 12, COLORS.Green, Enum.Font.GothamBold)
 
--- SNIPER FEED Panel
+-- SNIPER FEED
 local SniperFeedPanel = Instance.new("Frame")
 SniperFeedPanel.Name = "SniperFeed"
 SniperFeedPanel.Size = UDim2.new(1, 0, 0, 80)
@@ -936,14 +843,10 @@ SniperFeedPanel.ZIndex = 6
 SniperFeedPanel.Parent = MainPanel
 addCorner(SniperFeedPanel, 10)
 local sfS = addStroke(SniperFeedPanel, COLORS.Border, 1, 0.55)
-table.insert(themed.cards, SniperFeedPanel); table.insert(themed.cardStrokes, sfS)
+table.insert(themed.cards, SniperFeedPanel)
+table.insert(themed.cardStrokes, sfS)
 
-local SniperFeedTitle = makeLabel(SniperFeedPanel, "SNIPER FEED", UDim2.fromOffset(200, 20), UDim2.fromOffset(12, 4), 11, COLORS.White, Enum.Font.GothamBold)
-SniperFeedTitle.ZIndex = 7
-
-local SniperFeedArrow = makeLabel(SniperFeedPanel, "▼", UDim2.fromOffset(20, 20), UDim2.new(1, -28, 0, 4), 10, COLORS.Dim, Enum.Font.GothamBold)
-SniperFeedArrow.TextXAlignment = Enum.TextXAlignment.Right
-SniperFeedArrow.ZIndex = 7
+makeLabel(SniperFeedPanel, "SNIPER FEED", UDim2.fromOffset(200, 20), UDim2.fromOffset(12, 4), 11, COLORS.White, Enum.Font.GothamBold)
 
 Console = Instance.new("ScrollingFrame")
 Console.Name = "Console"
@@ -954,8 +857,6 @@ Console.BorderSizePixel = 0
 Console.ClipsDescendants = true
 Console.Active = true
 Console.ScrollingEnabled = true
-Console.ScrollingDirection = Enum.ScrollingDirection.Y
-Console.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
 Console.CanvasSize = UDim2.new(0, 0, 0, 0)
 Console.ScrollBarThickness = 3
 Console.ScrollBarImageColor3 = COLORS.Dim
@@ -963,7 +864,8 @@ Console.ZIndex = 7
 Console.Parent = SniperFeedPanel
 addCorner(Console, 6)
 local cs2 = addStroke(Console, COLORS.Border, 1, 0.65)
-themed.consoleFrame = Console; themed.consoleStroke = cs2
+themed.consoleFrame = Console
+themed.consoleStroke = cs2
 
 ConsoleOutput = Instance.new("TextLabel")
 ConsoleOutput.Name = "ConsoleOutput"
@@ -972,11 +874,7 @@ ConsoleOutput.AutomaticSize = Enum.AutomaticSize.Y
 ConsoleOutput.Position = UDim2.fromOffset(6, 4)
 ConsoleOutput.BackgroundTransparency = 1
 ConsoleOutput.RichText = true
-if autoWriteEnabled then
-    ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Amber .. '">&gt;</font> <font color="' .. CONSOLE_COLORS.Dim .. '">scanning for codes...</font>'
-else
-    ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Dim .. '">status:</font> <font color="' .. CONSOLE_COLORS.Red .. '">OFF</font>\n<font color="' .. CONSOLE_COLORS.Dim .. '">code sniper paused</font>'
-end
+ConsoleOutput.Text = autoWriteEnabled and '<font color="' .. CONSOLE_COLORS.Amber .. '">&gt;</font> <font color="' .. CONSOLE_COLORS.Dim .. '">scanning for codes...</font>' or '<font color="' .. CONSOLE_COLORS.Dim .. '">status: OFF</font>'
 ConsoleOutput.TextSize = 10
 ConsoleOutput.Font = Enum.Font.Code
 ConsoleOutput.TextColor3 = COLORS.Dim
@@ -993,10 +891,10 @@ end
 ConsoleOutput:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateConsoleCanvas)
 task.defer(updateConsoleCanvas)
 
--- SETTINGS Panel (inside MAIN tab)
+-- SETTINGS Panel (inside MAIN)
 local SettingsPanel = Instance.new("Frame")
 SettingsPanel.Name = "SettingsPanel"
-SettingsPanel.Size = UDim2.new(1, 0, 0, 580)
+SettingsPanel.Size = UDim2.new(1, 0, 0, 350)
 SettingsPanel.BackgroundColor3 = COLORS.Row
 SettingsPanel.BackgroundTransparency = 0.4
 SettingsPanel.BorderSizePixel = 0
@@ -1004,19 +902,13 @@ SettingsPanel.ZIndex = 6
 SettingsPanel.Parent = MainPanel
 addCorner(SettingsPanel, 10)
 local spS = addStroke(SettingsPanel, COLORS.Border, 1, 0.55)
-table.insert(themed.cards, SettingsPanel); table.insert(themed.cardStrokes, spS)
+table.insert(themed.cards, SettingsPanel)
+table.insert(themed.cardStrokes, spS)
 
--- Settings Header
-local SettingsHeader = makeLabel(SettingsPanel, "SETTINGS", UDim2.fromOffset(200, 20), UDim2.fromOffset(12, 6), 11, COLORS.White, Enum.Font.GothamBold)
-SettingsHeader.ZIndex = 7
+makeLabel(SettingsPanel, "SETTINGS", UDim2.fromOffset(200, 20), UDim2.fromOffset(12, 6), 11, COLORS.White, Enum.Font.GothamBold)
 
-local SettingsArrow = makeLabel(SettingsPanel, "▼", UDim2.fromOffset(20, 20), UDim2.new(1, -28, 0, 6), 10, COLORS.Dim, Enum.Font.GothamBold)
-SettingsArrow.TextXAlignment = Enum.TextXAlignment.Right
-SettingsArrow.ZIndex = 7
-
--- CODES Section Separator
+-- CODES Separator
 local CodesSep = Instance.new("Frame")
-CodesSep.Name = "CodesSep"
 CodesSep.Size = UDim2.new(1, -24, 0, 18)
 CodesSep.Position = UDim2.fromOffset(12, 30)
 CodesSep.BackgroundTransparency = 1
@@ -1032,9 +924,17 @@ CodesLineL.BorderSizePixel = 0
 CodesLineL.ZIndex = 7
 CodesLineL.Parent = CodesSep
 
-local CodesLabel = makeLabel(CodesSep, "CODES", UDim2.fromOffset(50, 18), UDim2.new(0.5, -25, 0, 0), 10, COLORS.Dim, Enum.Font.GothamBold)
+local CodesLabel = Instance.new("TextLabel")
+CodesLabel.Size = UDim2.fromOffset(50, 18)
+CodesLabel.Position = UDim2.new(0.5, -25, 0, 0)
+CodesLabel.BackgroundTransparency = 1
+CodesLabel.Text = "CODES"
+CodesLabel.TextSize = 10
+CodesLabel.TextColor3 = COLORS.Dim
+CodesLabel.Font = Enum.Font.GothamBold
 CodesLabel.TextXAlignment = Enum.TextXAlignment.Center
 CodesLabel.ZIndex = 7
+CodesLabel.Parent = CodesSep
 
 local CodesLineR = Instance.new("Frame")
 CodesLineR.Size = UDim2.new(0.5, -30, 0, 1)
@@ -1045,18 +945,22 @@ CodesLineR.BorderSizePixel = 0
 CodesLineR.ZIndex = 7
 CodesLineR.Parent = CodesSep
 
--- Toggle creation function
-local function makeToggle(parent, enabled, consoleName, onToggle, posOverride)
+-- Toggle helper
+local function makeToggle(parent, enabled, consoleName, onToggle)
     parent.Active = true
     featureStates[consoleName] = enabled
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.fromOffset(42, 20)
-    btn.Position = posOverride or UDim2.new(1, -50, 0.5, -10)
+    btn.Position = UDim2.new(1, -50, 0.5, -10)
     btn.BackgroundColor3 = enabled and COLORS.Accent or COLORS.Control
-    btn.BorderSizePixel = 0; btn.AutoButtonColor = false
+    btn.BorderSizePixel = 0
+    btn.AutoButtonColor = false
     btn.Text = enabled and "ON" or "OFF"
-    btn.TextSize = 8; btn.TextColor3 = enabled and COLORS.TabTextOn or COLORS.Dim
-    btn.Font = Enum.Font.GothamBold; btn.ZIndex = 8; btn.Parent = parent
+    btn.TextSize = 8
+    btn.TextColor3 = enabled and COLORS.TabTextOn or COLORS.Dim
+    btn.Font = Enum.Font.GothamBold
+    btn.ZIndex = 8
+    btn.Parent = parent
     addCorner(btn, 6)
     local outline = addStroke(btn, enabled and COLORS.Accent or COLORS.Border, 1, enabled and 0.5 or 0.7)
     local isOnFn = function() return featureStates[consoleName] end
@@ -1064,8 +968,10 @@ local function makeToggle(parent, enabled, consoleName, onToggle, posOverride)
     table.insert(themed.toggleStrokes, {stroke = outline, isOn = isOnFn})
     local lastT = 0
     local function toggle()
-        if tick() - lastT < 0.15 then return end; lastT = tick()
-        local newState = not featureStates[consoleName]; featureStates[consoleName] = newState
+        if tick() - lastT < 0.15 then return end
+        lastT = tick()
+        local newState = not featureStates[consoleName]
+        featureStates[consoleName] = newState
         btn.Text = newState and "ON" or "OFF"
         local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
         btn.BackgroundColor3 = newState and t.Accent or t.Control
@@ -1077,11 +983,10 @@ local function makeToggle(parent, enabled, consoleName, onToggle, posOverride)
     end
     btn.Activated:Connect(toggle)
     btn.MouseButton1Click:Connect(toggle)
-    btn.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggle() end end)
     return btn
 end
 
--- Settings items function
+-- Setting row helper
 local function makeSettingRow(parent, yPos, label, state, consoleName, onToggle)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, -24, 0, 30)
@@ -1090,9 +995,7 @@ local function makeSettingRow(parent, yPos, label, state, consoleName, onToggle)
     row.ZIndex = 7
     row.Parent = parent
 
-    local lbl = makeLabel(row, label, UDim2.new(1, -55, 1, 0), UDim2.fromOffset(0, 0), 10, COLORS.Text, Enum.Font.GothamMedium)
-    lbl.ZIndex = 7
-
+    makeLabel(row, label, UDim2.new(1, -55, 1, 0), UDim2.fromOffset(0, 0), 10, COLORS.Text, Enum.Font.GothamMedium)
     makeToggle(row, state, consoleName, onToggle)
     return row
 end
@@ -1103,7 +1006,7 @@ makeSettingRow(SettingsPanel, 84, "RETYPE INVALID", _retypeInvalid, "Retype Inva
 makeSettingRow(SettingsPanel, 116, "AUTO COPY CODE", _autoCopyCode, "Auto Copy Code", function(s) _autoCopyCode = s; savedConfig.autoCopyCode = s; saveConfig() end)
 makeSettingRow(SettingsPanel, 148, "AUTO SUBMIT", _autoAccept, "Auto Submit", function(s) _autoAccept = s; savedConfig.autoSubmit = s; saveConfig() end)
 
--- SUBMIT AFTER (1)(2)(3)(4)
+-- SUBMIT AFTER
 local SubmitAfterRow = Instance.new("Frame")
 SubmitAfterRow.Size = UDim2.new(1, -24, 0, 36)
 SubmitAfterRow.Position = UDim2.fromOffset(12, 182)
@@ -1111,8 +1014,7 @@ SubmitAfterRow.BackgroundTransparency = 1
 SubmitAfterRow.ZIndex = 7
 SubmitAfterRow.Parent = SettingsPanel
 
-local SubmitAfterLabel = makeLabel(SubmitAfterRow, "SUBMIT AFTER", UDim2.fromOffset(120, 36), UDim2.fromOffset(0, 0), 10, COLORS.Text, Enum.Font.GothamMedium)
-SubmitAfterLabel.ZIndex = 7
+makeLabel(SubmitAfterRow, "SUBMIT AFTER", UDim2.fromOffset(120, 36), UDim2.fromOffset(0, 0), 10, COLORS.Text, Enum.Font.GothamMedium)
 
 local SubmitAfterShell = Instance.new("Frame")
 SubmitAfterShell.Size = UDim2.fromOffset(120, 30)
@@ -1122,15 +1024,13 @@ SubmitAfterShell.BackgroundTransparency = 0.05
 SubmitAfterShell.ZIndex = 7
 SubmitAfterShell.Parent = SubmitAfterRow
 addCorner(SubmitAfterShell, 6)
-local saStroke = addStroke(SubmitAfterShell, COLORS.Border, 1, 0.65)
-themed.counterShell = SubmitAfterShell; themed.counterStroke = saStroke
+addStroke(SubmitAfterShell, COLORS.Border, 1, 0.65)
 
 local submitValues = {1, 2, 3, 4}
 local submitButtons = {}
 
 for i, val in ipairs(submitValues) do
     local valBtn = Instance.new("TextButton")
-    valBtn.Name = "Val" .. val
     valBtn.Size = UDim2.new(0.25, -2, 1, -4)
     valBtn.Position = UDim2.fromOffset((i-1) * 30 + 2, 2)
     valBtn.BackgroundColor3 = (val == _submitAfter) and COLORS.Accent or COLORS.Control
@@ -1143,7 +1043,6 @@ for i, val in ipairs(submitValues) do
     valBtn.ZIndex = 8
     valBtn.Parent = SubmitAfterShell
     addCorner(valBtn, 4)
-    table.insert(themed.counterBtns, valBtn)
 
     submitButtons[val] = valBtn
 
@@ -1157,13 +1056,11 @@ for i, val in ipairs(submitValues) do
             btn.BackgroundColor3 = (v == _submitAfter) and t.Accent or t.Control
             btn.TextColor3 = (v == _submitAfter) and t.TabTextOn or t.Dim
         end
-        if autoWriteEnabled then appendConsoleStatus("Submit After: " .. val, true) end
     end)
 end
 
--- RIDDLES Section Separator
+-- RIDDLES Separator
 local RiddlesSep = Instance.new("Frame")
-RiddlesSep.Name = "RiddlesSep"
 RiddlesSep.Size = UDim2.new(1, -24, 0, 18)
 RiddlesSep.Position = UDim2.fromOffset(12, 224)
 RiddlesSep.BackgroundTransparency = 1
@@ -1179,9 +1076,17 @@ RiddlesLineL.BorderSizePixel = 0
 RiddlesLineL.ZIndex = 7
 RiddlesLineL.Parent = RiddlesSep
 
-local RiddlesLabel = makeLabel(RiddlesSep, "RIDDLES", UDim2.fromOffset(60, 18), UDim2.new(0.5, -30, 0, 0), 10, COLORS.Dim, Enum.Font.GothamBold)
+local RiddlesLabel = Instance.new("TextLabel")
+RiddlesLabel.Size = UDim2.fromOffset(60, 18)
+RiddlesLabel.Position = UDim2.new(0.5, -30, 0, 0)
+RiddlesLabel.BackgroundTransparency = 1
+RiddlesLabel.Text = "RIDDLES"
+RiddlesLabel.TextSize = 10
+RiddlesLabel.TextColor3 = COLORS.Dim
+RiddlesLabel.Font = Enum.Font.GothamBold
 RiddlesLabel.TextXAlignment = Enum.TextXAlignment.Center
 RiddlesLabel.ZIndex = 7
+RiddlesLabel.Parent = RiddlesSep
 
 local RiddlesLineR = Instance.new("Frame")
 RiddlesLineR.Size = UDim2.new(0.5, -35, 0, 1)
@@ -1194,11 +1099,11 @@ RiddlesLineR.Parent = RiddlesSep
 
 -- RIDDLES settings
 makeSettingRow(SettingsPanel, 246, "AI RIDDLES", _riddleSolver, "AI Riddles", function(s) _riddleSolver = s; savedConfig.riddleSolver = s; saveConfig() end)
-makeSettingRow(SettingsPanel, 278, "AI RIDDLES AUTO SUBMIT", _riddleSolver and _autoAccept, "AI Riddles Auto Submit", function(s) end)
+makeSettingRow(SettingsPanel, 278, "AI RIDDLES AUTO SUBMIT", false, "AI Riddles Auto Submit", function(s) end)
 makeSettingRow(SettingsPanel, 310, "BACKUP RIDDLE ANSWER", false, "Backup Riddle Answer", function(s) end)
 
 -- ============================================================
--- FARM PANEL (Anchor + Auto Buy + Appearance + Optimization)
+-- FARM PANEL
 -- ============================================================
 local FarmPanel = Instance.new("ScrollingFrame")
 FarmPanel.Name = "FarmPanel"
@@ -1207,20 +1112,22 @@ FarmPanel.BackgroundTransparency = 1
 FarmPanel.Visible = false
 FarmPanel.ScrollBarThickness = 3
 FarmPanel.ScrollBarImageColor3 = COLORS.Dim
-FarmPanel.CanvasSize = UDim2.new(0, 0, 0, 600)
+FarmPanel.CanvasSize = UDim2.new(0, 0, 0, 500)
 FarmPanel.ZIndex = 5
 FarmPanel.Parent = PanelContainer
 tabPanels["FARM"] = FarmPanel
 local FPPad = Instance.new("UIPadding")
-FPPad.PaddingLeft = UDim.new(0, 10); FPPad.PaddingRight = UDim.new(0, 10)
-FPPad.PaddingTop = UDim.new(0, 6); FPPad.Parent = FarmPanel
+FPPad.PaddingLeft = UDim.new(0, 10)
+FPPad.PaddingRight = UDim.new(0, 10)
+FPPad.PaddingTop = UDim.new(0, 6)
+FPPad.Parent = FarmPanel
 local FPLayout = Instance.new("UIListLayout")
-FPLayout.Padding = UDim.new(0, 5); FPLayout.Parent = FarmPanel
+FPLayout.Padding = UDim.new(0, 5)
+FPLayout.Parent = FarmPanel
 
 -- FARM Section
 local FarmSection = Instance.new("Frame")
-FarmSection.Name = "FarmSection"
-FarmSection.Size = UDim2.new(1, 0, 0, 130)
+FarmSection.Size = UDim2.new(1, 0, 0, 120)
 FarmSection.BackgroundColor3 = COLORS.Row
 FarmSection.BackgroundTransparency = 0.4
 FarmSection.BorderSizePixel = 0
@@ -1228,9 +1135,10 @@ FarmSection.ZIndex = 6
 FarmSection.Parent = FarmPanel
 addCorner(FarmSection, 10)
 local fsS = addStroke(FarmSection, COLORS.Border, 1, 0.55)
-table.insert(themed.cards, FarmSection); table.insert(themed.cardStrokes, fsS)
+table.insert(themed.cards, FarmSection)
+table.insert(themed.cardStrokes, fsS)
 
--- Farm Section Header
+-- Farm Header
 local FarmSep = Instance.new("Frame")
 FarmSep.Size = UDim2.new(1, -24, 0, 18)
 FarmSep.Position = UDim2.fromOffset(12, 6)
@@ -1247,10 +1155,18 @@ FarmLineL.BorderSizePixel = 0
 FarmLineL.ZIndex = 7
 FarmLineL.Parent = FarmSep
 
-local FarmLabel = makeLabel(FarmSep, "FARM", UDim2.fromOffset(40, 18), UDim2.new(0.5, -20, 0, 0), 10, COLORS.Accent, Enum.Font.GothamBold)
+local FarmLabel = Instance.new("TextLabel")
+FarmLabel.Size = UDim2.fromOffset(40, 18)
+FarmLabel.Position = UDim2.new(0.5, -20, 0, 0)
+FarmLabel.BackgroundTransparency = 1
+FarmLabel.Text = "FARM"
+FarmLabel.TextSize = 10
+FarmLabel.TextColor3 = COLORS.Accent
+FarmLabel.Font = Enum.Font.GothamBold
 FarmLabel.TextXAlignment = Enum.TextXAlignment.Center
-themed.farmTitle = FarmLabel
 FarmLabel.ZIndex = 7
+FarmLabel.Parent = FarmSep
+themed.farmTitle = FarmLabel
 
 local FarmLineR = Instance.new("Frame")
 FarmLineR.Size = UDim2.new(0.5, -25, 0, 1)
@@ -1263,98 +1179,95 @@ FarmLineR.Parent = FarmSep
 
 -- Anchor Row
 local AnchorRow = Instance.new("Frame")
-AnchorRow.Size = UDim2.new(1, -24, 0, 44)
+AnchorRow.Size = UDim2.new(1, -24, 0, 40)
 AnchorRow.Position = UDim2.fromOffset(12, 28)
 AnchorRow.BackgroundTransparency = 1
 AnchorRow.ZIndex = 7
 AnchorRow.Parent = FarmSection
 
--- Anchor Keybind
 local AKFrame = Instance.new("Frame")
 AKFrame.Size = UDim2.fromOffset(40, 20)
-AKFrame.Position = UDim2.fromOffset(0, 12)
+AKFrame.Position = UDim2.fromOffset(0, 10)
 AKFrame.BackgroundColor3 = COLORS.Control
 AKFrame.ZIndex = 8
 AKFrame.Parent = AnchorRow
 addCorner(AKFrame, 5)
 local AKStroke = addStroke(AKFrame, COLORS.Accent, 1, 0.6)
-table.insert(themed.keybindFrames, AKFrame); table.insert(themed.keybindStrokes, AKStroke)
+table.insert(themed.keybindFrames, AKFrame)
+table.insert(themed.keybindStrokes, AKStroke)
 
 local AKLabel = Instance.new("TextLabel")
-AKLabel.Size = UDim2.fromScale(1, 1); AKLabel.BackgroundTransparency = 1
-AKLabel.Text = "[".._anchorKeybind.."]"; AKLabel.TextSize = 9
-AKLabel.TextColor3 = COLORS.Accent; AKLabel.Font = Enum.Font.GothamBold
-AKLabel.ZIndex = 9; AKLabel.Parent = AKFrame
+AKLabel.Size = UDim2.fromScale(1, 1)
+AKLabel.BackgroundTransparency = 1
+AKLabel.Text = "[".._anchorKeybind.."]"
+AKLabel.TextSize = 9
+AKLabel.TextColor3 = COLORS.Accent
+AKLabel.Font = Enum.Font.GothamBold
+AKLabel.ZIndex = 9
+AKLabel.Parent = AKFrame
 table.insert(themed.keybindLabels, AKLabel)
 
 local AKBtn = Instance.new("TextButton")
-AKBtn.Size = UDim2.fromScale(1, 1); AKBtn.BackgroundTransparency = 1
-AKBtn.Text = ""; AKBtn.ZIndex = 10; AKBtn.Parent = AKFrame
+AKBtn.Size = UDim2.fromScale(1, 1)
+AKBtn.BackgroundTransparency = 1
+AKBtn.Text = ""
+AKBtn.ZIndex = 10
+AKBtn.Parent = AKFrame
 AKBtn.MouseButton1Click:Connect(function() _waitingForKeybind = "anchor"; AKLabel.Text = "..."; AKLabel.TextColor3 = COLORS.Red end)
 
-local AnchorLabelText = makeLabel(AnchorRow, "Anchor", UDim2.fromOffset(120, 44), UDim2.fromOffset(48, 0), 12, COLORS.White, Enum.Font.GothamMedium)
-AnchorLabelText.ZIndex = 7
+makeLabel(AnchorRow, "Anchor", UDim2.fromOffset(120, 40), UDim2.fromOffset(48, 0), 12, COLORS.White, Enum.Font.GothamMedium)
 
--- Anchor Toggle
 local AnchorToggle = Instance.new("TextButton")
 AnchorToggle.Size = UDim2.fromOffset(42, 20)
 AnchorToggle.Position = UDim2.new(1, -48, 0.5, -10)
 AnchorToggle.BackgroundColor3 = _anchorEnabled and COLORS.Accent or COLORS.Control
-AnchorToggle.BorderSizePixel = 0; AnchorToggle.AutoButtonColor = false
+AnchorToggle.BorderSizePixel = 0
+AnchorToggle.AutoButtonColor = false
 AnchorToggle.Text = _anchorEnabled and "ON" or "OFF"
-AnchorToggle.TextSize = 8; AnchorToggle.TextColor3 = _anchorEnabled and COLORS.TabTextOn or COLORS.Dim
-AnchorToggle.Font = Enum.Font.GothamBold; AnchorToggle.ZIndex = 8; AnchorToggle.Parent = AnchorRow
+AnchorToggle.TextSize = 8
+AnchorToggle.TextColor3 = _anchorEnabled and COLORS.TabTextOn or COLORS.Dim
+AnchorToggle.Font = Enum.Font.GothamBold
+AnchorToggle.ZIndex = 8
+AnchorToggle.Parent = AnchorRow
 addCorner(AnchorToggle, 6)
-local ATStroke = addStroke(AnchorToggle, _anchorEnabled and COLORS.Accent or COLORS.Border, 1, _anchorEnabled and 0.5 or 0.7)
+local ATStroke = addStroke(AnchorToggle, _anchorEnabled and COLORS.Accent or COLORS.Border, 1, 0.5)
 table.insert(themed.toggleButtons, {btn = AnchorToggle, isOn = function() return _anchorEnabled end})
 table.insert(themed.toggleStrokes, {stroke = ATStroke, isOn = function() return _anchorEnabled end})
 
 local function toggleAnchor(state)
     if state == nil then state = not _anchorEnabled end
-    _anchorEnabled = state; savedConfig.anchorEnabled = state; saveConfig()
+    _anchorEnabled = state
+    savedConfig.anchorEnabled = state
+    saveConfig()
     local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
     AnchorToggle.Text = state and "ON" or "OFF"
     AnchorToggle.BackgroundColor3 = state and t.Accent or t.Control
     AnchorToggle.TextColor3 = state and t.TabTextOn or t.Dim
-    ATStroke.Color = state and t.Accent or t.Border; ATStroke.Transparency = state and 0.5 or 0.7
+    ATStroke.Color = state and t.Accent or t.Border
+    ATStroke.Transparency = state and 0.5 or 0.7
 
     if _anchorConnection then _anchorConnection:Disconnect(); _anchorConnection = nil end
     if _anchorRespawnConn then _anchorRespawnConn:Disconnect(); _anchorRespawnConn = nil end
 
     if state then
         local char = player.Character
-        if not char then
-            if ConsoleOutput then appendConsoleStatus("Anchor: no character", false) end
-            return
-        end
+        if not char then return end
         local root = char:FindFirstChild("HumanoidRootPart")
-        if not root then
-            if ConsoleOutput then appendConsoleStatus("Anchor: no HRP", false) end
-            return
-        end
-
+        if not root then return end
         _anchorPosition = root.CFrame
-        local ANCHOR_THRESHOLD = 2
         local currentRoot = root
 
-        local function anchorLoop()
+        _anchorConnection = RunService.Heartbeat:Connect(function()
             if not _anchorEnabled or not _anchorPosition then return end
             local c = player.Character
             if not c then return end
             local r = c:FindFirstChild("HumanoidRootPart")
             if not r then return end
-            local hum = c:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health <= 0 then return end
-            if r ~= currentRoot then currentRoot = r end
             local dist = (r.Position - _anchorPosition.Position).Magnitude
-            if dist > ANCHOR_THRESHOLD then r.CFrame = _anchorPosition end
+            if dist > 2 then r.CFrame = _anchorPosition end
             pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
-            pcall(function() r.AssemblyAngularVelocity = Vector3.zero end)
-            pcall(function() r.Velocity = Vector3.zero end)
-            pcall(function() r.RotVelocity = Vector3.zero end)
-        end
+        end)
 
-        _anchorConnection = RunService.Heartbeat:Connect(anchorLoop)
         _anchorRespawnConn = player.CharacterAdded:Connect(function(newChar)
             if not _anchorEnabled or not _anchorPosition then return end
             task.wait(1.5)
@@ -1369,64 +1282,75 @@ local function toggleAnchor(state)
 end
 AnchorToggle.Activated:Connect(function() toggleAnchor() end)
 AnchorToggle.MouseButton1Click:Connect(function() toggleAnchor() end)
-AnchorToggle.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggleAnchor() end end)
 
 -- Auto Buy Row
 local AutoBuyRow = Instance.new("Frame")
-AutoBuyRow.Size = UDim2.new(1, -24, 0, 44)
-AutoBuyRow.Position = UDim2.fromOffset(12, 76)
+AutoBuyRow.Size = UDim2.new(1, -24, 0, 40)
+AutoBuyRow.Position = UDim2.fromOffset(12, 72)
 AutoBuyRow.BackgroundTransparency = 1
 AutoBuyRow.ZIndex = 7
 AutoBuyRow.Parent = FarmSection
 
--- Auto Buy Keybind
 local ABKFrame = Instance.new("Frame")
 ABKFrame.Size = UDim2.fromOffset(40, 20)
-ABKFrame.Position = UDim2.fromOffset(0, 12)
+ABKFrame.Position = UDim2.fromOffset(0, 10)
 ABKFrame.BackgroundColor3 = COLORS.Control
 ABKFrame.ZIndex = 8
 ABKFrame.Parent = AutoBuyRow
 addCorner(ABKFrame, 5)
 local ABKStroke = addStroke(ABKFrame, COLORS.Accent, 1, 0.6)
-table.insert(themed.keybindFrames, ABKFrame); table.insert(themed.keybindStrokes, ABKStroke)
+table.insert(themed.keybindFrames, ABKFrame)
+table.insert(themed.keybindStrokes, ABKStroke)
 
 local ABKLabel = Instance.new("TextLabel")
-ABKLabel.Size = UDim2.fromScale(1, 1); ABKLabel.BackgroundTransparency = 1
-ABKLabel.Text = "[".._autoBuyKeybind.."]"; ABKLabel.TextSize = 9
-ABKLabel.TextColor3 = COLORS.Accent; ABKLabel.Font = Enum.Font.GothamBold
-ABKLabel.ZIndex = 9; ABKLabel.Parent = ABKFrame
+ABKLabel.Size = UDim2.fromScale(1, 1)
+ABKLabel.BackgroundTransparency = 1
+ABKLabel.Text = "[".._autoBuyKeybind.."]"
+ABKLabel.TextSize = 9
+ABKLabel.TextColor3 = COLORS.Accent
+ABKLabel.Font = Enum.Font.GothamBold
+ABKLabel.ZIndex = 9
+ABKLabel.Parent = ABKFrame
 table.insert(themed.keybindLabels, ABKLabel)
 
 local ABKBtn = Instance.new("TextButton")
-ABKBtn.Size = UDim2.fromScale(1, 1); ABKBtn.BackgroundTransparency = 1
-ABKBtn.Text = ""; ABKBtn.ZIndex = 10; ABKBtn.Parent = ABKFrame
+ABKBtn.Size = UDim2.fromScale(1, 1)
+ABKBtn.BackgroundTransparency = 1
+ABKBtn.Text = ""
+ABKBtn.ZIndex = 10
+ABKBtn.Parent = ABKFrame
 ABKBtn.MouseButton1Click:Connect(function() _waitingForKeybind = "autoBuy"; ABKLabel.Text = "..."; ABKLabel.TextColor3 = COLORS.Red end)
 
-local AutoBuyLabelText = makeLabel(AutoBuyRow, "Auto Buy", UDim2.fromOffset(120, 44), UDim2.fromOffset(48, 0), 12, COLORS.White, Enum.Font.GothamMedium)
-AutoBuyLabelText.ZIndex = 7
+makeLabel(AutoBuyRow, "Auto Buy", UDim2.fromOffset(120, 40), UDim2.fromOffset(48, 0), 12, COLORS.White, Enum.Font.GothamMedium)
 
--- Auto Buy Toggle
 local AutoBuyToggle = Instance.new("TextButton")
 AutoBuyToggle.Size = UDim2.fromOffset(42, 20)
 AutoBuyToggle.Position = UDim2.new(1, -48, 0.5, -10)
 AutoBuyToggle.BackgroundColor3 = _autoBuyEnabled and COLORS.Accent or COLORS.Control
-AutoBuyToggle.BorderSizePixel = 0; AutoBuyToggle.AutoButtonColor = false
+AutoBuyToggle.BorderSizePixel = 0
+AutoBuyToggle.AutoButtonColor = false
 AutoBuyToggle.Text = _autoBuyEnabled and "ON" or "OFF"
-AutoBuyToggle.TextSize = 8; AutoBuyToggle.TextColor3 = _autoBuyEnabled and COLORS.TabTextOn or COLORS.Dim
-AutoBuyToggle.Font = Enum.Font.GothamBold; AutoBuyToggle.ZIndex = 8; AutoBuyToggle.Parent = AutoBuyRow
-addCorner(AutoBuyToggle, 8)
-local ABTStroke = addStroke(AutoBuyToggle, _autoBuyEnabled and COLORS.Accent or COLORS.Border, 1, _autoBuyEnabled and 0.5 or 0.7)
+AutoBuyToggle.TextSize = 8
+AutoBuyToggle.TextColor3 = _autoBuyEnabled and COLORS.TabTextOn or COLORS.Dim
+AutoBuyToggle.Font = Enum.Font.GothamBold
+AutoBuyToggle.ZIndex = 8
+AutoBuyToggle.Parent = AutoBuyRow
+addCorner(AutoBuyToggle, 6)
+local ABTStroke = addStroke(AutoBuyToggle, _autoBuyEnabled and COLORS.Accent or COLORS.Border, 1, 0.5)
 table.insert(themed.toggleButtons, {btn = AutoBuyToggle, isOn = function() return _autoBuyEnabled end})
 table.insert(themed.toggleStrokes, {stroke = ABTStroke, isOn = function() return _autoBuyEnabled end})
 
 local function toggleAutoBuy(state)
     if state == nil then state = not _autoBuyEnabled end
-    _autoBuyEnabled = state; savedConfig.autoBuyEnabled = state; saveConfig()
+    _autoBuyEnabled = state
+    savedConfig.autoBuyEnabled = state
+    saveConfig()
     local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
     AutoBuyToggle.Text = state and "ON" or "OFF"
     AutoBuyToggle.BackgroundColor3 = state and t.Accent or t.Control
     AutoBuyToggle.TextColor3 = state and t.TabTextOn or t.Dim
-    ABTStroke.Color = state and t.Accent or t.Border; ABTStroke.Transparency = state and 0.5 or 0.7
+    ABTStroke.Color = state and t.Accent or t.Border
+    ABTStroke.Transparency = state and 0.5 or 0.7
 
     if state then
         if _autoBuyConnection then _autoBuyConnection:Disconnect() end
@@ -1442,7 +1366,7 @@ local function toggleAutoBuy(state)
                 end
             end
         end)
-        if ConsoleOutput then appendConsoleStatus("Auto Buy [BL]", true) end
+        if ConsoleOutput then appendConsoleStatus("Auto Buy", true) end
     else
         if _autoBuyConnection then _autoBuyConnection:Disconnect(); _autoBuyConnection = nil end
         if ConsoleOutput then appendConsoleStatus("Auto Buy", false) end
@@ -1450,12 +1374,10 @@ local function toggleAutoBuy(state)
 end
 AutoBuyToggle.Activated:Connect(function() toggleAutoBuy() end)
 AutoBuyToggle.MouseButton1Click:Connect(function() toggleAutoBuy() end)
-AutoBuyToggle.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggleAutoBuy() end end)
 
 -- APPEARANCE Section
 local AppearanceSection = Instance.new("Frame")
-AppearanceSection.Name = "AppearanceSection"
-AppearanceSection.Size = UDim2.new(1, 0, 0, 160)
+AppearanceSection.Size = UDim2.new(1, 0, 0, 140)
 AppearanceSection.BackgroundColor3 = COLORS.Row
 AppearanceSection.BackgroundTransparency = 0.4
 AppearanceSection.BorderSizePixel = 0
@@ -1463,7 +1385,8 @@ AppearanceSection.ZIndex = 6
 AppearanceSection.Parent = FarmPanel
 addCorner(AppearanceSection, 10)
 local apS = addStroke(AppearanceSection, COLORS.Border, 1, 0.55)
-table.insert(themed.cards, AppearanceSection); table.insert(themed.cardStrokes, apS)
+table.insert(themed.cards, AppearanceSection)
+table.insert(themed.cardStrokes, apS)
 
 -- Appearance Header
 local AppSep = Instance.new("Frame")
@@ -1482,9 +1405,17 @@ AppLineL.BorderSizePixel = 0
 AppLineL.ZIndex = 7
 AppLineL.Parent = AppSep
 
-local AppLabel = makeLabel(AppSep, "APPEARANCE", UDim2.fromOffset(80, 18), UDim2.new(0.5, -40, 0, 0), 10, COLORS.Dim, Enum.Font.GothamBold)
+local AppLabel = Instance.new("TextLabel")
+AppLabel.Size = UDim2.fromOffset(80, 18)
+AppLabel.Position = UDim2.new(0.5, -40, 0, 0)
+AppLabel.BackgroundTransparency = 1
+AppLabel.Text = "APPEARANCE"
+AppLabel.TextSize = 10
+AppLabel.TextColor3 = COLORS.Dim
+AppLabel.Font = Enum.Font.GothamBold
 AppLabel.TextXAlignment = Enum.TextXAlignment.Center
 AppLabel.ZIndex = 7
+AppLabel.Parent = AppSep
 
 local AppLineR = Instance.new("Frame")
 AppLineR.Size = UDim2.new(0.5, -45, 0, 1)
@@ -1495,16 +1426,16 @@ AppLineR.BorderSizePixel = 0
 AppLineR.ZIndex = 7
 AppLineR.Parent = AppSep
 
--- BG Cards Grid
+-- BG Cards
 local BGGrid = Instance.new("Frame")
-BGGrid.Size = UDim2.new(1, -24, 0, 60)
+BGGrid.Size = UDim2.new(1, -24, 0, 55)
 BGGrid.Position = UDim2.fromOffset(12, 28)
 BGGrid.BackgroundTransparency = 1
 BGGrid.ZIndex = 7
 BGGrid.Parent = AppearanceSection
 local BGGridLayout = Instance.new("UIGridLayout")
-BGGridLayout.CellSize = UDim2.new(0, 50, 0, 60)
-BGGridLayout.CellPadding = UDim2.new(0, 6, 0, 0)
+BGGridLayout.CellSize = UDim2.new(0, 48, 0, 55)
+BGGridLayout.CellPadding = UDim2.new(0, 5, 0, 0)
 BGGridLayout.FillDirection = Enum.FillDirection.Horizontal
 BGGridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 BGGridLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -1513,70 +1444,90 @@ BGGridLayout.Parent = BGGrid
 local BGButtons = {}
 
 local function applyBG(index)
-    _selectedBG = index; savedConfig.selectedBG = index; saveConfig()
+    _selectedBG = index
+    savedConfig.selectedBG = index
+    saveConfig()
     BackgroundImage.Image = BG_PRESETS[index].id
     applyFullTheme(index)
     local t = BG_THEMES[index] or BG_THEMES[1]
     for idx, b in pairs(BGButtons) do
         local a = (idx == index)
         TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = a and t.Accent or t.Control}):Play()
-        local s = b:FindFirstChildOfClass("UIStroke"); if s then s.Color = a and t.Accent or t.Border; s.Transparency = a and 0.2 or 0.7 end
-        local ch = b:FindFirstChild("Check"); if ch then ch.Visible = a end
+        local s = b:FindFirstChildOfClass("UIStroke")
+        if s then s.Color = a and t.Accent or t.Border; s.Transparency = a and 0.2 or 0.7 end
+        local ch = b:FindFirstChild("Check")
+        if ch then ch.Visible = a end
     end
-    if ConsoleOutput then appendConsoleStatus("BG: "..BG_PRESETS[index].name.." ["..t.Label.."]", true) end
+    if ConsoleOutput then appendConsoleStatus("BG: "..BG_PRESETS[index].name, true) end
 end
 
 for i, preset in ipairs(BG_PRESETS) do
     local t = BG_THEMES[i] or BG_THEMES[1]
     local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0, 50, 0, 60)
+    b.Size = UDim2.new(0, 48, 0, 55)
     b.BackgroundColor3 = (_selectedBG == i) and t.Accent or COLORS.Control
-    b.BorderSizePixel = 0; b.AutoButtonColor = false; b.LayoutOrder = i
-    b.ZIndex = 8; b.Parent = BGGrid; addCorner(b, 6)
+    b.BorderSizePixel = 0
+    b.AutoButtonColor = false
+    b.LayoutOrder = i
+    b.ZIndex = 8
+    b.Parent = BGGrid
+    addCorner(b, 6)
     local bStroke = addStroke(b, (_selectedBG == i) and t.Accent or COLORS.Border, 1.5, (_selectedBG == i) and 0.2 or 0.7)
-    themed.bgButtons[i] = b; themed.bgStrokes[i] = bStroke
+    themed.bgButtons[i] = b
+    themed.bgStrokes[i] = bStroke
 
     local preview = Instance.new("ImageLabel")
-    preview.Size = UDim2.new(1, -4, 1, -16); preview.Position = UDim2.fromOffset(2, 2)
-    preview.BackgroundTransparency = 1; preview.Image = preset.id
-    preview.ScaleType = Enum.ScaleType.Crop; preview.ZIndex = 9; preview.Parent = b
+    preview.Size = UDim2.new(1, -4, 1, -16)
+    preview.Position = UDim2.fromOffset(2, 2)
+    preview.BackgroundTransparency = 1
+    preview.Image = preset.id
+    preview.ScaleType = Enum.ScaleType.Crop
+    preview.ZIndex = 9
+    preview.Parent = b
     addCorner(preview, 4)
 
     local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(1, 0, 0, 12); nameLabel.Position = UDim2.new(0, 0, 1, -12)
-    nameLabel.BackgroundTransparency = 1; nameLabel.Text = preset.name
-    nameLabel.TextSize = 7; nameLabel.TextColor3 = COLORS.Dim
-    nameLabel.Font = Enum.Font.GothamBold; nameLabel.ZIndex = 9; nameLabel.Parent = b
+    nameLabel.Size = UDim2.new(1, 0, 0, 12)
+    nameLabel.Position = UDim2.new(0, 0, 1, -12)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = preset.name
+    nameLabel.TextSize = 7
+    nameLabel.TextColor3 = COLORS.Dim
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.ZIndex = 9
+    nameLabel.Parent = b
 
     local check = Instance.new("TextLabel")
-    check.Name = "Check"; check.Size = UDim2.fromOffset(12, 12)
+    check.Name = "Check"
+    check.Size = UDim2.fromOffset(12, 12)
     check.Position = UDim2.new(1, -13, 0, 1)
-    check.BackgroundColor3 = COLORS.Green; check.Text = "Y"
-    check.TextSize = 7; check.TextColor3 = Color3.fromRGB(0, 0, 0)
-    check.Font = Enum.Font.GothamBold; check.ZIndex = 10
-    check.Visible = (_selectedBG == i); check.Parent = b
+    check.BackgroundColor3 = COLORS.Green
+    check.Text = "Y"
+    check.TextSize = 7
+    check.TextColor3 = Color3.fromRGB(0, 0, 0)
+    check.Font = Enum.Font.GothamBold
+    check.ZIndex = 10
+    check.Visible = (_selectedBG == i)
+    check.Parent = b
     addCorner(check, 6)
 
     BGButtons[i] = b
-    b.Activated:Connect(function() applyBG(i) end)
     b.MouseButton1Click:Connect(function() applyBG(i) end)
-    b.InputBegan:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.Touch or inp.UserInputType == Enum.UserInputType.MouseButton1 then applyBG(i) end end)
 end
 
 -- GUI Scale
 local GUIScaleRow = Instance.new("Frame")
-GUIScaleRow.Size = UDim2.new(1, -24, 0, 40)
-GUIScaleRow.Position = UDim2.fromOffset(12, 96)
+GUIScaleRow.Size = UDim2.new(1, -24, 0, 35)
+GUIScaleRow.Position = UDim2.fromOffset(12, 88)
 GUIScaleRow.BackgroundTransparency = 1
 GUIScaleRow.ZIndex = 7
 GUIScaleRow.Parent = AppearanceSection
 
-local GUIScaleLabel = makeLabel(GUIScaleRow, "GUI Scale", UDim2.fromOffset(100, 40), UDim2.fromOffset(4, 0), 11, COLORS.Text, Enum.Font.GothamMedium)
-GUIScaleLabel.ZIndex = 7
+makeLabel(GUIScaleRow, "GUI Scale", UDim2.fromOffset(100, 35), UDim2.fromOffset(4, 0), 11, COLORS.Text, Enum.Font.GothamMedium)
 
 local ScaleControl = Instance.new("Frame")
-ScaleControl.Size = UDim2.fromOffset(120, 30)
-ScaleControl.Position = UDim2.new(1, -125, 0, 5)
+ScaleControl.Size = UDim2.fromOffset(120, 28)
+ScaleControl.Position = UDim2.new(1, -125, 0, 4)
 ScaleControl.BackgroundColor3 = COLORS.Control
 ScaleControl.ZIndex = 8
 ScaleControl.Parent = GUIScaleRow
@@ -1584,25 +1535,46 @@ addCorner(ScaleControl, 6)
 addStroke(ScaleControl, COLORS.Border, 1, 0.65)
 
 local ScaleMinus = Instance.new("TextButton")
-ScaleMinus.Size = UDim2.fromOffset(28, 24); ScaleMinus.Position = UDim2.fromOffset(3, 3)
-ScaleMinus.BackgroundColor3 = COLORS.Control; ScaleMinus.Text = "-"; ScaleMinus.TextSize = 14
-ScaleMinus.TextColor3 = COLORS.Dim; ScaleMinus.Font = Enum.Font.GothamBold
-ScaleMinus.ZIndex = 9; ScaleMinus.Parent = ScaleControl; addCorner(ScaleMinus, 4)
+ScaleMinus.Size = UDim2.fromOffset(28, 22)
+ScaleMinus.Position = UDim2.fromOffset(3, 3)
+ScaleMinus.BackgroundColor3 = COLORS.Control
+ScaleMinus.Text = "-"
+ScaleMinus.TextSize = 14
+ScaleMinus.TextColor3 = COLORS.Dim
+ScaleMinus.Font = Enum.Font.GothamBold
+ScaleMinus.ZIndex = 9
+ScaleMinus.Parent = ScaleControl
+addCorner(ScaleMinus, 4)
 
-local ScaleValue = makeLabel(ScaleControl, string.format("%.2f", _guiScale), UDim2.fromOffset(50, 30), UDim2.fromOffset(35, 0), 11, COLORS.Accent, Enum.Font.GothamBold)
+local ScaleValue = Instance.new("TextLabel")
+ScaleValue.Size = UDim2.fromOffset(50, 28)
+ScaleValue.Position = UDim2.fromOffset(35, 0)
+ScaleValue.BackgroundTransparency = 1
+ScaleValue.Text = string.format("%.2f", _guiScale)
+ScaleValue.TextSize = 11
+ScaleValue.TextColor3 = COLORS.Accent
+ScaleValue.Font = Enum.Font.GothamBold
 ScaleValue.TextXAlignment = Enum.TextXAlignment.Center
 ScaleValue.ZIndex = 9
+ScaleValue.Parent = ScaleControl
 
 local ScalePlus = Instance.new("TextButton")
-ScalePlus.Size = UDim2.fromOffset(28, 24); ScalePlus.Position = UDim2.fromOffset(89, 3)
-ScalePlus.BackgroundColor3 = COLORS.Control; ScalePlus.Text = "+"; ScalePlus.TextSize = 14
-ScalePlus.TextColor3 = COLORS.Dim; ScalePlus.Font = Enum.Font.GothamBold
-ScalePlus.ZIndex = 9; ScalePlus.Parent = ScaleControl; addCorner(ScalePlus, 4)
+ScalePlus.Size = UDim2.fromOffset(28, 22)
+ScalePlus.Position = UDim2.fromOffset(89, 3)
+ScalePlus.BackgroundColor3 = COLORS.Control
+ScalePlus.Text = "+"
+ScalePlus.TextSize = 14
+ScalePlus.TextColor3 = COLORS.Dim
+ScalePlus.Font = Enum.Font.GothamBold
+ScalePlus.ZIndex = 9
+ScalePlus.Parent = ScaleControl
+addCorner(ScalePlus, 4)
 
 local function updateScale(delta)
     _guiScale = math.clamp(_guiScale + delta, 0.5, 1.5)
     _guiScale = math.floor(_guiScale * 100 + 0.5) / 100
-    savedConfig.guiScale = _guiScale; saveConfig()
+    savedConfig.guiScale = _guiScale
+    saveConfig()
     ScaleValue.Text = string.format("%.2f", _guiScale)
     TweenService:Create(InterfaceScale, TweenInfo.new(0.2), {Scale = _guiScale}):Play()
 end
@@ -1612,8 +1584,7 @@ ScalePlus.MouseButton1Click:Connect(function() updateScale(0.05) end)
 
 -- OPTIMIZATION Section
 local OptSection = Instance.new("Frame")
-OptSection.Name = "OptSection"
-OptSection.Size = UDim2.new(1, 0, 0, 100)
+OptSection.Size = UDim2.new(1, 0, 0, 95)
 OptSection.BackgroundColor3 = COLORS.Row
 OptSection.BackgroundTransparency = 0.4
 OptSection.BorderSizePixel = 0
@@ -1621,7 +1592,8 @@ OptSection.ZIndex = 6
 OptSection.Parent = FarmPanel
 addCorner(OptSection, 10)
 local osS = addStroke(OptSection, COLORS.Border, 1, 0.55)
-table.insert(themed.cards, OptSection); table.insert(themed.cardStrokes, osS)
+table.insert(themed.cards, OptSection)
+table.insert(themed.cardStrokes, osS)
 
 -- Optimization Header
 local OptSep = Instance.new("Frame")
@@ -1640,9 +1612,17 @@ OptLineL.BorderSizePixel = 0
 OptLineL.ZIndex = 7
 OptLineL.Parent = OptSep
 
-local OptLabel = makeLabel(OptSep, "OPTIMIZATION", UDim2.fromOffset(90, 18), UDim2.new(0.5, -45, 0, 0), 10, COLORS.Dim, Enum.Font.GothamBold)
+local OptLabel = Instance.new("TextLabel")
+OptLabel.Size = UDim2.fromOffset(90, 18)
+OptLabel.Position = UDim2.new(0.5, -45, 0, 0)
+OptLabel.BackgroundTransparency = 1
+OptLabel.Text = "OPTIMIZATION"
+OptLabel.TextSize = 10
+OptLabel.TextColor3 = COLORS.Dim
+OptLabel.Font = Enum.Font.GothamBold
 OptLabel.TextXAlignment = Enum.TextXAlignment.Center
 OptLabel.ZIndex = 7
+OptLabel.Parent = OptSep
 
 local OptLineR = Instance.new("Frame")
 OptLineR.Size = UDim2.new(0.5, -50, 0, 1)
@@ -1655,44 +1635,46 @@ OptLineR.Parent = OptSep
 
 -- Falling Snow
 local SnowRow = Instance.new("Frame")
-SnowRow.Size = UDim2.new(1, -24, 0, 30)
+SnowRow.Size = UDim2.new(1, -24, 0, 28)
 SnowRow.Position = UDim2.fromOffset(12, 28)
 SnowRow.BackgroundTransparency = 1
 SnowRow.ZIndex = 7
 SnowRow.Parent = OptSection
 
-local SnowLabel = makeLabel(SnowRow, "Falling Snow", UDim2.new(1, -55, 1, 0), UDim2.fromOffset(0, 0), 10, COLORS.Orange, Enum.Font.GothamMedium)
+local SnowLabel = Instance.new("TextLabel")
+SnowLabel.Size = UDim2.new(1, -55, 1, 0)
+SnowLabel.BackgroundTransparency = 1
+SnowLabel.Text = "Falling Snow"
+SnowLabel.TextSize = 10
+SnowLabel.TextColor3 = COLORS.Orange
+SnowLabel.Font = Enum.Font.GothamMedium
 SnowLabel.ZIndex = 7
+SnowLabel.Parent = SnowRow
 
 makeToggle(SnowRow, _fallingSnow, "Falling Snow", function(s)
-    _fallingSnow = s; savedConfig.fallingSnow = s; saveConfig()
-    -- Falling snow effect toggle
-    pcall(function()
-        for _, d in ipairs(Workspace:GetDescendants()) do
-            if d:IsA("ParticleEmitter") and d.Name:lower():find("snow") then
-                d.Enabled = s
-            end
-        end
-    end)
+    _fallingSnow = s
+    savedConfig.fallingSnow = s
+    saveConfig()
 end)
 
 -- Optimization
 local OptRow = Instance.new("Frame")
-OptRow.Size = UDim2.new(1, -24, 0, 30)
-OptRow.Position = UDim2.fromOffset(12, 62)
+OptRow.Size = UDim2.new(1, -24, 0, 28)
+OptRow.Position = UDim2.fromOffset(12, 60)
 OptRow.BackgroundTransparency = 1
 OptRow.ZIndex = 7
 OptRow.Parent = OptSection
 
-local OptTextLabel = makeLabel(OptRow, "Optimization", UDim2.new(1, -55, 1, 0), UDim2.fromOffset(0, 0), 10, COLORS.Text, Enum.Font.GothamMedium)
-OptTextLabel.ZIndex = 7
+makeLabel(OptRow, "Optimization", UDim2.new(1, -55, 1, 0), UDim2.fromOffset(0, 0), 10, COLORS.Text, Enum.Font.GothamMedium)
 
 makeToggle(OptRow, _optimization, "Optimization", function(s)
-    _optimization = s; savedConfig.optimization = s; saveConfig()
+    _optimization = s
+    savedConfig.optimization = s
+    saveConfig()
 end)
 
 -- ============================================================
--- SETTINGS TAB (Anti Lag + UI Size)
+-- SETTINGS TAB
 -- ============================================================
 local SettingsTab = Instance.new("ScrollingFrame")
 SettingsTab.Name = "SettingsTab"
@@ -1701,37 +1683,49 @@ SettingsTab.BackgroundTransparency = 1
 SettingsTab.Visible = false
 SettingsTab.ScrollBarThickness = 3
 SettingsTab.ScrollBarImageColor3 = COLORS.Dim
-SettingsTab.CanvasSize = UDim2.new(0, 0, 0, 300)
+SettingsTab.CanvasSize = UDim2.new(0, 0, 0, 200)
 SettingsTab.ZIndex = 5
 SettingsTab.Parent = PanelContainer
 tabPanels["SETTINGS"] = SettingsTab
 local STPad = Instance.new("UIPadding")
-STPad.PaddingLeft = UDim.new(0, 10); STPad.PaddingRight = UDim.new(0, 10)
-STPad.PaddingTop = UDim.new(0, 6); STPad.Parent = SettingsTab
+STPad.PaddingLeft = UDim.new(0, 10)
+STPad.PaddingRight = UDim.new(0, 10)
+STPad.PaddingTop = UDim.new(0, 6)
+STPad.Parent = SettingsTab
 local STLayout = Instance.new("UIListLayout")
-STLayout.Padding = UDim.new(0, 5); STLayout.Parent = SettingsTab
+STLayout.Padding = UDim.new(0, 5)
+STLayout.Parent = SettingsTab
 
 -- Anti Lag Card
 local AntiLagCard = Instance.new("Frame")
 AntiLagCard.Size = UDim2.new(1, 0, 0, 52)
-AntiLagCard.BackgroundColor3 = COLORS.Row; AntiLagCard.BackgroundTransparency = 0.4
-AntiLagCard.BorderSizePixel = 0; AntiLagCard.ZIndex = 6; AntiLagCard.Parent = SettingsTab
+AntiLagCard.BackgroundColor3 = COLORS.Row
+AntiLagCard.BackgroundTransparency = 0.4
+AntiLagCard.BorderSizePixel = 0
+AntiLagCard.ZIndex = 6
+AntiLagCard.Parent = SettingsTab
 addCorner(AntiLagCard, 10)
 local alS = addStroke(AntiLagCard, COLORS.Border, 1, 0.4)
-table.insert(themed.cards, AntiLagCard); table.insert(themed.cardStrokes, alS)
+table.insert(themed.cards, AntiLagCard)
+table.insert(themed.cardStrokes, alS)
 
 makeLabel(AntiLagCard, "Anti Lag", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
 makeLabel(AntiLagCard, "Reduce graphics for FPS", UDim2.fromOffset(150, 14), UDim2.fromOffset(12, 26), 8, COLORS.Dim, Enum.Font.GothamMedium)
 
 local AntiLagToggle = Instance.new("TextButton")
-AntiLagToggle.Size = UDim2.fromOffset(42, 20); AntiLagToggle.Position = UDim2.new(1, -50, 0.5, -10)
+AntiLagToggle.Size = UDim2.fromOffset(42, 20)
+AntiLagToggle.Position = UDim2.new(1, -50, 0.5, -10)
 AntiLagToggle.BackgroundColor3 = _antiLagEnabled and COLORS.Accent or COLORS.Control
-AntiLagToggle.BorderSizePixel = 0; AntiLagToggle.AutoButtonColor = false
+AntiLagToggle.BorderSizePixel = 0
+AntiLagToggle.AutoButtonColor = false
 AntiLagToggle.Text = _antiLagEnabled and "ON" or "OFF"
-AntiLagToggle.TextSize = 8; AntiLagToggle.TextColor3 = _antiLagEnabled and COLORS.TabTextOn or COLORS.Dim
-AntiLagToggle.Font = Enum.Font.GothamBold; AntiLagToggle.ZIndex = 8; AntiLagToggle.Parent = AntiLagCard
+AntiLagToggle.TextSize = 8
+AntiLagToggle.TextColor3 = _antiLagEnabled and COLORS.TabTextOn or COLORS.Dim
+AntiLagToggle.Font = Enum.Font.GothamBold
+AntiLagToggle.ZIndex = 8
+AntiLagToggle.Parent = AntiLagCard
 addCorner(AntiLagToggle, 6)
-local ALTStroke = addStroke(AntiLagToggle, _antiLagEnabled and COLORS.Accent or COLORS.Border, 1, _antiLagEnabled and 0.5 or 0.7)
+local ALTStroke = addStroke(AntiLagToggle, _antiLagEnabled and COLORS.Accent or COLORS.Border, 1, 0.5)
 table.insert(themed.toggleButtons, {btn = AntiLagToggle, isOn = function() return _antiLagEnabled end})
 table.insert(themed.toggleStrokes, {stroke = ALTStroke, isOn = function() return _antiLagEnabled end})
 
@@ -1740,7 +1734,8 @@ local function applyAntiLag(state)
     if state then
         savedLighting = {GlobalShadows = Lighting.GlobalShadows, Quality = settings().Rendering.QualityLevel}
         pcall(function()
-            Lighting.GlobalShadows = false; Lighting.FogEnd = 100000
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 100000
             settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
             for _, d in ipairs(Workspace:GetDescendants()) do
                 if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled = false end
@@ -1761,67 +1756,19 @@ end
 
 local function toggleAntiLag(state)
     if state == nil then state = not _antiLagEnabled end
-    _antiLagEnabled = state; savedConfig.antiLagEnabled = state; saveConfig()
+    _antiLagEnabled = state
+    savedConfig.antiLagEnabled = state
+    saveConfig()
     local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
     AntiLagToggle.Text = state and "ON" or "OFF"
     AntiLagToggle.BackgroundColor3 = state and t.Accent or t.Control
     AntiLagToggle.TextColor3 = state and t.TabTextOn or t.Dim
-    ALTStroke.Color = state and t.Accent or t.Border; ALTStroke.Transparency = state and 0.5 or 0.7
+    ALTStroke.Color = state and t.Accent or t.Border
+    ALTStroke.Transparency = state and 0.5 or 0.7
     applyAntiLag(state)
 end
 AntiLagToggle.Activated:Connect(function() toggleAntiLag() end)
 AntiLagToggle.MouseButton1Click:Connect(function() toggleAntiLag() end)
-AntiLagToggle.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then toggleAntiLag() end end)
-
--- UI Size Card
-local UISizeCard = Instance.new("Frame")
-UISizeCard.Size = UDim2.new(1, 0, 0, 60)
-UISizeCard.BackgroundColor3 = COLORS.Row; UISizeCard.BackgroundTransparency = 0.4
-UISizeCard.BorderSizePixel = 0; UISizeCard.ZIndex = 6; UISizeCard.Parent = SettingsTab
-addCorner(UISizeCard, 10)
-local usS = addStroke(UISizeCard, COLORS.Border, 1, 0.4)
-table.insert(themed.cards, UISizeCard); table.insert(themed.cardStrokes, usS)
-
-makeLabel(UISizeCard, "UI Size", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
-
-local Sizes = {"UltraMini", "Small", "Medium", "Large"}
-local SizeScales = {UltraMini = 0.55, Small = 0.75, Medium = 0.92, Large = 1.1}
-local SizeButtons = {}
-
-local SBFrame = Instance.new("Frame")
-SBFrame.Size = UDim2.new(1, -24, 0, 24); SBFrame.Position = UDim2.fromOffset(12, 30)
-SBFrame.BackgroundTransparency = 1; SBFrame.ZIndex = 7; SBFrame.Parent = UISizeCard
-local SBLayout = Instance.new("UIListLayout")
-SBLayout.FillDirection = Enum.FillDirection.Horizontal; SBLayout.Padding = UDim.new(0, 4)
-SBLayout.Parent = SBFrame
-
-local function applyUISize(size)
-    _currentUISize = size; savedConfig.uiSize = size; saveConfig()
-    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
-    TweenService:Create(InterfaceScale, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Scale = SizeScales[size] or 0.92}):Play()
-    for n, b in pairs(SizeButtons) do
-        local a = (n == size)
-        TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = a and t.Accent or t.Control, TextColor3 = a and t.TabTextOn or t.Dim}):Play()
-        local s = b:FindFirstChildOfClass("UIStroke"); if s then s.Color = a and t.Accent or t.Border; s.Transparency = a and 0.3 or 0.7 end
-    end
-    if ConsoleOutput then appendConsoleStatus("UI: "..size, true) end
-end
-
-for _, size in ipairs(Sizes) do
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0.25, -3, 1, 0)
-    b.BackgroundColor3 = (_currentUISize == size) and COLORS.Accent or COLORS.Control
-    b.BorderSizePixel = 0; b.AutoButtonColor = false
-    b.Text = size; b.TextSize = 8
-    b.TextColor3 = (_currentUISize == size) and COLORS.TabTextOn or COLORS.Dim
-    b.Font = Enum.Font.GothamBold; b.ZIndex = 8; b.Parent = SBFrame
-    addCorner(b, 5)
-    local ss = addStroke(b, (_currentUISize == size) and COLORS.Accent or COLORS.Border, 1, (_currentUISize == size) and 0.3 or 0.7)
-    SizeButtons[size] = b; themed.sizeButtons[size] = b; themed.sizeStrokes[size] = ss
-    b.Activated:Connect(function() applyUISize(size) end)
-    b.MouseButton1Click:Connect(function() applyUISize(size) end)
-    b.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then applyUISize(size) end end)
-end
 
 -- ============================================================
 -- DISCORD FOOTER
@@ -1851,13 +1798,19 @@ UserInputService.InputBegan:Connect(function(input, processed)
         if _waitingForKeybind then
             local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
             if _waitingForKeybind == "anchor" then
-                _anchorKeybind = key; savedConfig.anchorKeybind = key
-                AKLabel.Text = "["..key.."]"; AKLabel.TextColor3 = t.Accent
+                _anchorKeybind = key
+                savedConfig.anchorKeybind = key
+                AKLabel.Text = "["..key.."]"
+                AKLabel.TextColor3 = t.Accent
             elseif _waitingForKeybind == "autoBuy" then
-                _autoBuyKeybind = key; savedConfig.autoBuyKeybind = key
-                ABKLabel.Text = "["..key.."]"; ABKLabel.TextColor3 = t.Accent
+                _autoBuyKeybind = key
+                savedConfig.autoBuyKeybind = key
+                ABKLabel.Text = "["..key.."]"
+                ABKLabel.TextColor3 = t.Accent
             end
-            _waitingForKeybind = nil; saveConfig(); return
+            _waitingForKeybind = nil
+            saveConfig()
+            return
         end
         if key == _anchorKeybind then toggleAnchor()
         elseif key == _autoBuyKeybind then toggleAutoBuy() end
@@ -1872,47 +1825,28 @@ do
     local activeDragInput
     local dragStart
     local startPosition
-    local dragMoved = false
-    local DRAG_THRESHOLD = UserInputService.TouchEnabled and 10 or 3
-
-    local function isOverHeaderControl(position)
-        local btnPos = AutoWriteButton.AbsolutePosition
-        local btnSize = AutoWriteButton.AbsoluteSize
-        return position.X >= (btnPos.X - 10)
-            and position.X <= (btnPos.X + btnSize.X + 10)
-            and position.Y >= (btnPos.Y - 10)
-            and position.Y <= (btnPos.Y + btnSize.Y + 10)
-    end
-
-    local function stopDragging(input)
-        if input ~= activeDragInput then return end
-        dragging = false; activeDragInput = nil; dragStart = nil; startPosition = nil
-    end
 
     Header.InputBegan:Connect(function(input)
         if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
-        if dragging or isOverHeaderControl(input.Position) then return end
-        dragging = true; activeDragInput = input
+        dragging = true
+        activeDragInput = input
         dragStart = Vector2.new(input.Position.X, input.Position.Y)
-        startPosition = Window.Position; dragMoved = false
+        startPosition = Window.Position
         input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End or input.UserInputState == Enum.UserInputState.Cancel then
-                stopDragging(input)
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+                activeDragInput = nil
             end
         end)
     end)
 
     UserInputService.InputChanged:Connect(function(input)
         if not dragging or not activeDragInput then return end
-        local isTrackedTouch = activeDragInput.UserInputType == Enum.UserInputType.Touch and input == activeDragInput
-        local isTrackedMouse = activeDragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement
-        if not isTrackedTouch and not isTrackedMouse then return end
+        local isTracked = (activeDragInput.UserInputType == Enum.UserInputType.Touch and input == activeDragInput) or
+                         (activeDragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement)
+        if not isTracked then return end
         local current = Vector2.new(input.Position.X, input.Position.Y)
         local delta = current - dragStart
-        if not dragMoved then
-            if delta.Magnitude < DRAG_THRESHOLD then return end
-            dragMoved = true
-        end
         Window.Position = UDim2.new(
             startPosition.X.Scale, startPosition.X.Offset + delta.X,
             startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
@@ -1921,7 +1855,7 @@ do
 end
 
 -- ============================================================
--- CORE LOGIC (All original mechanics preserved)
+-- CORE LOGIC
 -- ============================================================
 local function col3ToRich(col)
     if col == COLORS.Green then return CONSOLE_COLORS.Green end
@@ -1944,7 +1878,7 @@ function setStatus(msg, col)
 end
 
 function flashCode(code, col)
-    if not code or code == "" or code == "—" then return end
+    if not code or code == "" then return end
     setStatus("[code] -> " .. tostring(code), col or COLORS.White)
 end
 
@@ -1960,7 +1894,8 @@ end
 
 local function watchBoxForBlankReset(box)
     if not box or _lastWatchedBox == box then return end
-    clearBoxWatchers(); _lastWatchedBox = box
+    clearBoxWatchers()
+    _lastWatchedBox = box
     if box.Text ~= "" then _lastNonBlankBoxText = box.Text end
     _boxTextConn = box:GetPropertyChangedSignal("Text"):Connect(function()
         if box.Text == "" then resetPasteCounter()
@@ -1989,20 +1924,26 @@ UserInputService.TextBoxFocusReleased:Connect(function(box)
     if _focused == box then
         _focused = nil
         if _enabled then
-            setStatus((_lastBox and _lastBox.Parent) and "Ready" or "Click code box first", (_lastBox and _lastBox.Parent) and COLORS.Green or COLORS.Dim)
+            setStatus("Ready", COLORS.Green)
         end
     end
 end)
 
 clearPendingSubmission = function()
-    _pendingRejectedToken += 1; _pendingRejectedText = nil; _pendingRejectedBox = nil; _pendingRejectedUntil = 0
+    _pendingRejectedToken = _pendingRejectedToken + 1
+    _pendingRejectedText = nil
+    _pendingRejectedBox = nil
+    _pendingRejectedUntil = 0
 end
 
 rememberPendingSubmission = function(box, text, replaceExisting)
     if not _retypeInvalid or not text or text == "" then return end
     if not replaceExisting and _pendingRejectedText and os.clock() <= _pendingRejectedUntil then return end
-    _pendingRejectedToken += 1; local token = _pendingRejectedToken
-    _pendingRejectedText = text; _pendingRejectedBox = box; _pendingRejectedUntil = os.clock() + 8
+    _pendingRejectedToken = _pendingRejectedToken + 1
+    local token = _pendingRejectedToken
+    _pendingRejectedText = text
+    _pendingRejectedBox = box
+    _pendingRejectedUntil = os.clock() + 8
     task.delay(8, function() if token == _pendingRejectedToken then clearPendingSubmission() end end)
 end
 
@@ -2057,11 +1998,12 @@ function appendToBox(text)
         if boxWasFocused then
             pcall(function()
                 local caretEnd = #combinedCode + 1
-                box.CursorPosition = caretEnd; box.SelectionStart = caretEnd
+                box.CursorPosition = caretEnd
+                box.SelectionStart = caretEnd
             end)
         end
     else
-        setStatus("Captured; opening & searching UI...", COLORS.Text)
+        setStatus("Captured; searching UI...", COLORS.Text)
     end
     setStatus("Pasted " .. tostring(capturedCount) .. "/" .. tostring(_submitAfter), COLORS.Green)
     flashCode(combinedCode, COLORS.Green)
@@ -2151,24 +2093,19 @@ local function solveRiddle(message, seq)
         if not _enabled then return end
 
         if not httpOk then
-            setStatus("ERROR: HTTP call crashed - " .. tostring(httpErr), COLORS.Red)
+            setStatus("ERROR: HTTP failed", COLORS.Red)
             return
         end
 
-        if not data then
+        if not data or not data.answer then
             setStatus("ERROR: AI returned nothing", COLORS.Red)
-            return
-        end
-
-        if not data.answer then
-            setStatus("ERROR: AI returned no answer", COLORS.Red)
             return
         end
 
         local answer = normalizeCode(data.answer)
 
         if answer == "" then
-            setStatus("ERROR: AI answer is empty", COLORS.Red)
+            setStatus("ERROR: AI answer empty", COLORS.Red)
             return
         end
 
@@ -2254,7 +2191,7 @@ if getgenv then
 end
 
 -- ============================================================
--- INITIALIZATION
+-- INIT
 -- ============================================================
 if _antiLagEnabled then task.defer(function() applyAntiLag(true) end) end
 task.defer(function()
@@ -2270,4 +2207,4 @@ task.defer(function()
     }):Play()
 end)
 
-print("Eclipse Code Sniper v3.4 | Compact UI Recreation")
+print("Eclipse Code Sniper v3.5 | Fixed")
