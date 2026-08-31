@@ -1,0 +1,1204 @@
+--[[
+    ECLIPSE CODE SNIPER - EXACT UI RECREATION
+    ==========================================
+    Layout: Based on 3 reference screenshots (654x1076, 772x574, 427x549)
+    Colors: Extracted from original script BG_THEMES Amber theme
+    
+    Author: Eclipse Code Sniper Recreator
+    Version: 1.0
+]]
+
+-- Services
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- ============================================================
+-- COLOR SYSTEM (From Original Script - BG_THEMES Amber)
+-- ============================================================
+local COLORS = {
+    -- Primary backgrounds
+    Window = Color3.fromRGB(12, 10, 7),      -- Main window background
+    Row = Color3.fromRGB(22, 18, 12),         -- Panel/card backgrounds
+    Control = Color3.fromRGB(40, 30, 18),     -- Button/control backgrounds
+    ControlHover = Color3.fromRGB(58, 44, 26), -- Hover state
+    Log = Color3.fromRGB(14, 11, 8),          -- Console/log background
+    
+    -- Borders and accents
+    Border = Color3.fromRGB(95, 60, 22),      -- Border color
+    Accent = Color3.fromRGB(220, 140, 40),    -- Primary accent (amber/gold)
+    
+    -- Tab colors
+    TabActive = Color3.fromRGB(255, 160, 50),   -- Selected tab
+    TabInactive = Color3.fromRGB(50, 38, 22),   -- Unselected tab
+    TabTextOn = Color3.fromRGB(255, 255, 255),  -- Text on active tab
+    
+    -- Text colors
+    Dim = Color3.fromRGB(190, 180, 165),      -- Secondary/dim text
+    Text = Color3.fromRGB(235, 230, 220),     -- Primary text
+    White = Color3.fromRGB(255, 255, 255),    -- Bright white
+    
+    -- Status colors
+    Green = Color3.fromRGB(110, 225, 130),    -- Success/ON state
+    Red = Color3.fromRGB(240, 95, 95),        -- Error/OFF state
+}
+
+-- ============================================================
+-- TRANSPARENCY VALUES (From Original Script)
+-- ============================================================
+local TRANSPARENCY = {
+    Window = 0,           -- Window is opaque
+    Row = 0.4,            -- Cards/panels semi-transparent
+    Control = 0,          -- Controls opaque
+    Border = 0.55,        -- Border semi-transparent
+    AccentStroke = 0.85,  -- Accent stroke very transparent
+    TabStrokeActive = 0.3,
+    TabStrokeInactive = 0.6,
+    ToggleStrokeOn = 0.5,
+    ToggleStrokeOff = 0.7,
+}
+
+-- ============================================================
+-- DIMENSIONS (From Images - Pixel Perfect)
+-- ============================================================
+local DIMENSIONS = {
+    -- Main container (Image 1: 654x1076)
+    MainContainer = {
+        Width = 646,
+        Height = 1064,
+        CornerRadius = 25,
+    },
+    
+    -- Header
+    Header = {
+        Height = 115,
+        LogoDiameter = 62,
+        LogoPosition = {X = 73, Y = 69},
+        TitlePosition = {X = 122, Y = 58},
+        TitleSize = 25,
+    },
+    
+    -- Toggle (main on/off)
+    MainToggle = {
+        Width = 102,
+        Height = 53,
+        Position = {X = 512, Y = 42},
+        CornerRadius = 26, -- Half of height for pill shape
+    },
+    
+    -- Minus button
+    MinusButton = {
+        Width = 54,
+        Height = 54,
+        Position = {X = 451, Y = 41},
+        CornerRadius = 15,
+    },
+    
+    -- Separator
+    Separator = {
+        Position = {X = 43, Y = 118},
+        Width = 570,
+        Height = 2,
+    },
+    
+    -- Navigation tabs
+    Navigation = {
+        Position = {X = 41, Y = 137},
+        Width = 574,
+        Height = 48,
+        TabCornerRadius = 16,
+    },
+    
+    -- Panels
+    Panel = {
+        CornerRadius = 21,
+        StrokeThickness = 1,
+    },
+    
+    -- Sniper Feed panel (MAIN tab)
+    SniperFeed = {
+        Position = {X = 41, Y = 251},
+        Width = 574,
+        Height = 123,
+    },
+    
+    -- Settings panel (MAIN tab)
+    SettingsPanel = {
+        Position = {X = 41, Y = 389},
+        Width = 574,
+        Height = 608,
+    },
+    
+    -- Toggle (settings)
+    SettingsToggle = {
+        Width = 75,
+        Height = 42,
+        CornerRadius = 21,
+    },
+    
+    -- Submit After selector
+    SubmitAfter = {
+        Position = {X = 369, Y = 721},
+        Width = 220,
+        Height = 53,
+    },
+    
+    -- Farm panels (Image 2: 772x574)
+    FarmPanel = {
+        Width = 676,
+        Height = 104,
+        CornerRadius = 20,
+        NoneButtonWidth = 174,
+        NoneButtonHeight = 64,
+    },
+    
+    -- Settings appearance cards (Image 3: 427x549)
+    AppearanceCard = {
+        Width = 80,
+        Height = 95,
+        CornerRadius = 12,
+    },
+    
+    -- GUI Scale control
+    GUIScale = {
+        Width = 378,
+        Height = 64,
+    },
+}
+
+-- ============================================================
+-- HELPER FUNCTIONS
+-- ============================================================
+local function createCorner(parent, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius)
+    corner.Parent = parent
+    return corner
+end
+
+local function createStroke(parent, color, thickness, transparency)
+    local stroke = Instance.new("UIStroke")
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Color = color
+    stroke.Thickness = thickness or 1
+    stroke.Transparency = transparency or 0
+    stroke.Parent = parent
+    return stroke
+end
+
+local function createLabel(parent, text, position, size, textSize, color, font, alignment)
+    local label = Instance.new("TextLabel")
+    label.Size = size or UDim2.fromOffset(100, 20)
+    label.Position = position or UDim2.fromOffset(0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextSize = textSize or 14
+    label.TextColor3 = color or COLORS.Text
+    label.Font = font or Enum.Font.GothamMedium
+    label.TextXAlignment = alignment or Enum.TextXAlignment.Left
+    label.TextYAlignment = Enum.TextYAlignment.Center
+    label.Parent = parent
+    return label
+end
+
+local function createToggleButton(parent, position, size, isOn, onToggle)
+    -- Toggle background (pill shape)
+    local toggleBg = Instance.new("TextButton")
+    toggleBg.Size = size or UDim2.fromOffset(75, 42)
+    toggleBg.Position = position or UDim2.fromOffset(0, 0)
+    toggleBg.BackgroundColor3 = isOn and COLORS.Accent or COLORS.Control
+    toggleBg.BorderSizePixel = 0
+    toggleBg.AutoButtonColor = false
+    toggleBg.Text = ""
+    toggleBg.Parent = parent
+    createCorner(toggleBg, DIMENSIONS.SettingsToggle.CornerRadius)
+    createStroke(toggleBg, isOn and COLORS.Accent or COLORS.Border, 1, 
+                 isOn and TRANSPARENCY.ToggleStrokeOn or TRANSPARENCY.ToggleStrokeOff)
+    
+    -- Toggle knob (circle)
+    local knobSize = 34
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(knobSize, knobSize)
+    knob.Position = isOn and UDim2.new(1, -(knobSize + 4), 0.5, -(knobSize/2)) 
+                             or UDim2.fromOffset(4, 0)
+    knob.AnchorPoint = isOn and Vector2.new(0, 0) or Vector2.new(0, 0.5)
+    knob.Position = isOn and UDim2.new(1, -(knobSize + 4), 0.5, -(knobSize/2))
+                          or UDim2.new(0, 4, 0.5, -(knobSize/2))
+    knob.BackgroundColor3 = COLORS.Window
+    knob.Parent = toggleBg
+    createCorner(knob, knobSize/2)
+    
+    -- State tracking
+    local currentState = isOn
+    
+    -- Toggle function
+    local function toggle()
+        currentState = not currentState
+        
+        local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+        
+        -- Animate background
+        TweenService:Create(toggleBg, tweenInfo, {
+            BackgroundColor3 = currentState and COLORS.Accent or COLORS.Control
+        }):Play()
+        
+        -- Animate knob position
+        TweenService:Create(knob, tweenInfo, {
+            Position = currentState and UDim2.new(1, -(knobSize + 4), 0.5, -(knobSize/2))
+                                     or UDim2.new(0, 4, 0.5, -(knobSize/2))
+        }):Play()
+        
+        -- Update stroke
+        local stroke = toggleBg:FindFirstChildOfClass("UIStroke")
+        if stroke then
+            stroke.Color = currentState and COLORS.Accent or COLORS.Border
+            stroke.Transparency = currentState and TRANSPARENCY.ToggleStrokeOn or TRANSPARENCY.ToggleStrokeOff
+        end
+        
+        if onToggle then
+            onToggle(currentState)
+        end
+    end
+    
+    toggleBg.MouseButton1Click:Connect(toggle)
+    
+    return toggleBg, function() return currentState end
+end
+
+-- ============================================================
+-- MAIN GUI CONTAINER
+-- ============================================================
+-- Clean up previous instances
+pcall(function()
+    for _, name in ipairs({"EclipseCodeSniperUI"}) do
+        local previous = game.CoreGui:FindFirstChild(name)
+        if previous then previous:Destroy() end
+        previous = playerGui:FindFirstChild(name)
+        if previous then previous:Destroy() end
+    end
+end)
+
+-- Create ScreenGui
+local GUI = Instance.new("ScreenGui")
+GUI.Name = "EclipseCodeSniperUI"
+GUI.ResetOnSpawn = false
+GUI.IgnoreGuiInset = true
+GUI.DisplayOrder = 999
+GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Try CoreGui first, fallback to PlayerGui
+if not pcall(function() GUI.Parent = game.CoreGui end) then
+    GUI.Parent = playerGui
+end
+
+-- Main Window (based on Image 1: 654x1076)
+local Window = Instance.new("Frame")
+Window.Name = "Window"
+Window.Size = UDim2.fromOffset(DIMENSIONS.MainContainer.Width, DIMENSIONS.MainContainer.Height)
+Window.Position = UDim2.new(0.5, -(DIMENSIONS.MainContainer.Width/2), 0.5, -(DIMENSIONS.MainContainer.Height/2))
+Window.BackgroundColor3 = COLORS.Window
+Window.BackgroundTransparency = TRANSPARENCY.Window
+Window.BorderSizePixel = 0
+Window.ClipsDescendants = true
+Window.Parent = GUI
+createCorner(Window, DIMENSIONS.MainContainer.CornerRadius)
+createStroke(Window, COLORS.Accent, 2, TRANSPARENCY.AccentStroke)
+
+-- Background Image (texture from original)
+local BackgroundImage = Instance.new("ImageLabel")
+BackgroundImage.Name = "Background"
+BackgroundImage.Size = UDim2.fromScale(1, 1)
+BackgroundImage.BackgroundTransparency = 1
+BackgroundImage.Image = "rbxassetid://112002576136361" -- Original background
+BackgroundImage.ImageTransparency = 0.3
+BackgroundImage.ScaleType = Enum.ScaleType.Crop
+BackgroundImage.ZIndex = 1
+BackgroundImage.Parent = Window
+createCorner(BackgroundImage, DIMENSIONS.MainContainer.CornerRadius)
+
+-- Background Overlay (darken background)
+local BackgroundOverlay = Instance.new("Frame")
+BackgroundOverlay.Name = "Overlay"
+BackgroundOverlay.Size = UDim2.fromScale(1, 1)
+BackgroundOverlay.BackgroundColor3 = COLORS.Window
+BackgroundOverlay.BackgroundTransparency = 0.15
+BackgroundOverlay.BorderSizePixel = 0
+BackgroundOverlay.ZIndex = 2
+BackgroundOverlay.Parent = Window
+createCorner(BackgroundOverlay, DIMENSIONS.MainContainer.CornerRadius)
+
+-- ============================================================
+-- HEADER SECTION
+-- ============================================================
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, DIMENSIONS.Header.Height)
+Header.Position = UDim2.fromOffset(0, 0)
+Header.BackgroundTransparency = 1
+Header.ZIndex = 10
+Header.Parent = Window
+
+-- Logo (Circle with spade symbol)
+local LogoContainer = Instance.new("Frame")
+LogoContainer.Name = "Logo"
+LogoContainer.Size = UDim2.fromOffset(DIMENSIONS.Header.LogoDiameter, DIMENSIONS.Header.LogoDiameter)
+LogoContainer.Position = UDim2.fromOffset(
+    DIMENSIONS.Header.LogoPosition.X - (DIMENSIONS.Header.LogoDiameter/2),
+    DIMENSIONS.Header.LogoPosition.Y - (DIMENSIONS.Header.LogoDiameter/2)
+)
+LogoContainer.BackgroundColor3 = COLORS.Control
+LogoContainer.ZIndex = 11
+LogoContainer.Parent = Header
+createCorner(LogoContainer, DIMENSIONS.Header.LogoDiameter/2)
+createStroke(LogoContainer, COLORS.Accent, 2, 0.3)
+
+-- Logo Image (spade symbol)
+local LogoImage = Instance.new("ImageLabel")
+LogoImage.Name = "LogoImage"
+LogoImage.Size = UDim2.fromOffset(38, 42)
+LogoImage.Position = UDim2.new(0.5, -19, 0.5, -21)
+LogoImage.BackgroundTransparency = 1
+LogoImage.Image = "rbxassetid://104937666038724" -- Original logo
+LogoImage.ImageColor3 = COLORS.Accent
+LogoImage.ZIndex = 12
+LogoImage.Parent = LogoContainer
+
+-- Title
+local Title = createLabel(Header, "ECLIPSE  CODE SNIPER", 
+    UDim2.fromOffset(DIMENSIONS.Header.TitlePosition.X, DIMENSIONS.Header.TitlePosition.Y - 12),
+    UDim2.fromOffset(300, 30),
+    DIMENSIONS.Header.TitleSize,
+    COLORS.White,
+    Enum.Font.GothamBold,
+    Enum.TextXAlignment.Left
+)
+Title.ZIndex = 11
+
+-- Minus Button
+local MinusButton = Instance.new("TextButton")
+MinusButton.Name = "Minus"
+MinusButton.Size = UDim2.fromOffset(DIMENSIONS.MinusButton.Width, DIMENSIONS.MinusButton.Height)
+MinusButton.Position = UDim2.fromOffset(DIMENSIONS.MinusButton.Position.X, DIMENSIONS.MinusButton.Position.Y)
+MinusButton.BackgroundColor3 = COLORS.Control
+MinusButton.BorderSizePixel = 0
+MinusButton.AutoButtonColor = false
+MinusButton.Text = "—"
+MinusButton.TextSize = 24
+MinusButton.TextColor3 = COLORS.Dim
+MinusButton.Font = Enum.Font.GothamBold
+MinusButton.ZIndex = 11
+MinusButton.Parent = Header
+createCorner(MinusButton, DIMENSIONS.MinusButton.CornerRadius)
+createStroke(MinusButton, COLORS.Border, 1, TRANSPARENCY.Border)
+
+-- Main Toggle (ON/OFF)
+local MainToggleBg = Instance.new("TextButton")
+MainToggleBg.Name = "MainToggle"
+MainToggleBg.Size = UDim2.fromOffset(DIMENSIONS.MainToggle.Width, DIMENSIONS.MainToggle.Height)
+MainToggleBg.Position = UDim2.fromOffset(DIMENSIONS.MainToggle.Position.X, DIMENSIONS.MainToggle.Position.Y)
+MainToggleBg.BackgroundColor3 = COLORS.Accent -- Default ON
+MainToggleBg.BorderSizePixel = 0
+MainToggleBg.AutoButtonColor = false
+MainToggleBg.Text = ""
+MainToggleBg.ZIndex = 11
+MainToggleBg.Parent = Header
+createCorner(MainToggleBg, DIMENSIONS.MainToggle.CornerRadius)
+createStroke(MainToggleBg, COLORS.Accent, 1, TRANSPARENCY.ToggleStrokeOn)
+
+-- Main Toggle Knob
+local MainKnobSize = 44
+local MainKnob = Instance.new("Frame")
+MainKnob.Name = "Knob"
+MainKnob.Size = UDim2.fromOffset(MainKnobSize, MainKnobSize)
+MainKnob.Position = UDim2.new(1, -(MainKnobSize + 5), 0.5, -(MainKnobSize/2))
+MainKnob.BackgroundColor3 = COLORS.Window
+MainKnob.ZIndex = 12
+MainKnob.Parent = MainToggleBg
+createCorner(MainKnob, MainKnobSize/2)
+
+-- Main toggle state
+local mainToggleOn = true
+local function toggleMainSwitch()
+    mainToggleOn = not mainToggleOn
+    local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    
+    TweenService:Create(MainToggleBg, tweenInfo, {
+        BackgroundColor3 = mainToggleOn and COLORS.Accent or COLORS.Control
+    }):Play()
+    
+    TweenService:Create(MainKnob, tweenInfo, {
+        Position = mainToggleOn and UDim2.new(1, -(MainKnobSize + 5), 0.5, -(MainKnobSize/2))
+                                  or UDim2.new(0, 5, 0.5, -(MainKnobSize/2))
+    }):Play()
+    
+    local stroke = MainToggleBg:FindFirstChildOfClass("UIStroke")
+    if stroke then
+        stroke.Color = mainToggleOn and COLORS.Accent or COLORS.Border
+        stroke.Transparency = mainToggleOn and TRANSPARENCY.ToggleStrokeOn or TRANSPARENCY.ToggleStrokeOff
+    end
+end
+
+MainToggleBg.MouseButton1Click:Connect(toggleMainSwitch)
+
+-- Header Separator
+local HeaderSeparator = Instance.new("Frame")
+HeaderSeparator.Name = "Separator"
+HeaderSeparator.Size = UDim2.fromOffset(DIMENSIONS.Separator.Width, DIMENSIONS.Separator.Height)
+HeaderSeparator.Position = UDim2.fromOffset(DIMENSIONS.Separator.Position.X, DIMENSIONS.Separator.Position.Y)
+HeaderSeparator.BackgroundColor3 = COLORS.Accent
+HeaderSeparator.BackgroundTransparency = 0.5
+HeaderSeparator.BorderSizePixel = 0
+HeaderSeparator.ZIndex = 10
+HeaderSeparator.Parent = Header
+
+-- ============================================================
+-- NAVIGATION TABS
+-- ============================================================
+local Navigation = Instance.new("Frame")
+Navigation.Name = "Navigation"
+Navigation.Size = UDim2.fromOffset(DIMENSIONS.Navigation.Width, DIMENSIONS.Navigation.Height)
+Navigation.Position = UDim2.fromOffset(DIMENSIONS.Navigation.Position.X, DIMENSIONS.Navigation.Position.Y)
+Navigation.BackgroundTransparency = 1
+Navigation.ZIndex = 10
+Navigation.Parent = Window
+
+-- Tab buttons
+local tabs = {"MAIN", "FARM", "SETTINGS"}
+local tabButtons = {}
+local currentTab = "MAIN"
+local tabWidth = DIMENSIONS.Navigation.Width / 3
+
+for i, tabName in ipairs(tabs) do
+    local tabBtn = Instance.new("TextButton")
+    tabBtn.Name = tabName
+    tabBtn.Size = UDim2.fromOffset(tabWidth - 4, DIMENSIONS.Navigation.Height - 4)
+    tabBtn.Position = UDim2.fromOffset((i-1) * tabWidth + 2, 2)
+    tabBtn.BackgroundColor3 = (tabName == currentTab) and COLORS.TabActive or COLORS.TabInactive
+    tabBtn.BorderSizePixel = 0
+    tabBtn.AutoButtonColor = false
+    tabBtn.Text = tabName
+    tabBtn.TextSize = 14
+    tabBtn.TextColor3 = (tabName == currentTab) and COLORS.TabTextOn or COLORS.Dim
+    tabBtn.Font = Enum.Font.GothamBold
+    tabBtn.ZIndex = 11
+    tabBtn.Parent = Navigation
+    createCorner(tabBtn, DIMENSIONS.Navigation.TabCornerRadius)
+    createStroke(tabBtn, (tabName == currentTab) and COLORS.TabActive or COLORS.Border, 
+                 1, (tabName == currentTab) and TRANSPARENCY.TabStrokeActive or TRANSPARENCY.TabStrokeInactive)
+    
+    tabButtons[tabName] = tabBtn
+end
+
+-- ============================================================
+-- CONTENT PANELS
+-- ============================================================
+local ContentContainer = Instance.new("Frame")
+ContentContainer.Name = "Content"
+ContentContainer.Size = UDim2.new(1, 0, 1, -(DIMENSIONS.Header.Height + DIMENSIONS.Navigation.Height + 20))
+ContentContainer.Position = UDim2.fromOffset(0, DIMENSIONS.Header.Height + DIMENSIONS.Navigation.Height + 10)
+ContentContainer.BackgroundTransparency = 1
+ContentContainer.ZIndex = 5
+ContentContainer.Parent = Window
+
+-- MAIN Panel
+local MainPanel = Instance.new("ScrollingFrame")
+MainPanel.Name = "MainPanel"
+MainPanel.Size = UDim2.fromScale(1, 1)
+MainPanel.BackgroundTransparency = 1
+MainPanel.BorderSizePixel = 0
+MainPanel.ScrollBarThickness = 4
+MainPanel.ScrollBarImageColor3 = COLORS.Dim
+MainPanel.CanvasSize = UDim2.new(0, 0, 0, 1100)
+MainPanel.ZIndex = 5
+MainPanel.Parent = ContentContainer
+
+local MainPanelPadding = Instance.new("UIPadding")
+MainPanelPadding.PaddingLeft = UDim.new(0, 41)
+MainPanelPadding.PaddingRight = UDim.new(0, 39)
+MainPanelPadding.PaddingTop = UDim.new(0, 10)
+MainPanelPadding.Parent = MainPanel
+
+local MainPanelLayout = Instance.new("UIListLayout")
+MainPanelLayout.Padding = UDim.new(0, 15)
+MainPanelLayout.Parent = MainPanel
+
+-- Ready Status
+local ReadyFrame = Instance.new("Frame")
+ReadyFrame.Name = "ReadyStatus"
+ReadyFrame.Size = UDim2.new(1, 0, 0, 30)
+ReadyFrame.BackgroundTransparency = 1
+ReadyFrame.ZIndex = 10
+ReadyFrame.Parent = MainPanel
+
+local ReadyDot = Instance.new("Frame")
+ReadyDot.Size = UDim2.fromOffset(14, 14)
+ReadyDot.Position = UDim2.fromOffset(0, 8)
+ReadyDot.BackgroundColor3 = COLORS.Green
+ReadyDot.ZIndex = 11
+ReadyDot.Parent = ReadyFrame
+createCorner(ReadyDot, 7)
+
+local ReadyText = createLabel(ReadyFrame, "READY", UDim2.fromOffset(22, 0), UDim2.fromOffset(100, 30), 17, COLORS.Text, Enum.Font.GothamBold)
+ReadyText.ZIndex = 10
+
+-- Sniper Feed Panel
+local SniperFeedPanel = Instance.new("Frame")
+SniperFeedPanel.Name = "SniperFeed"
+SniperFeedPanel.Size = UDim2.new(1, 0, 0, DIMENSIONS.SniperFeed.Height)
+SniperFeedPanel.BackgroundColor3 = COLORS.Row
+SniperFeedPanel.BackgroundTransparency = TRANSPARENCY.Row
+SniperFeedPanel.BorderSizePixel = 0
+SniperFeedPanel.ZIndex = 6
+SniperFeedPanel.Parent = MainPanel
+createCorner(SniperFeedPanel, DIMENSIONS.Panel.CornerRadius)
+createStroke(SniperFeedPanel, COLORS.Border, DIMENSIONS.Panel.StrokeThickness, TRANSPARENCY.Border)
+
+-- Sniper Feed Header
+local SniperFeedHeader = Instance.new("Frame")
+SniperFeedHeader.Size = UDim2.new(1, 0, 0, 35)
+SniperFeedHeader.BackgroundTransparency = 1
+SniperFeedHeader.ZIndex = 7
+SniperFeedHeader.Parent = SniperFeedPanel
+
+local SniperFeedTitle = createLabel(SniperFeedHeader, "SNIPER FEED", UDim2.fromOffset(31, 0), UDim2.fromOffset(200, 35), 17, COLORS.White, Enum.Font.GothamBold)
+SniperFeedTitle.ZIndex = 7
+
+local SniperFeedArrow = createLabel(SniperFeedHeader, "▼", UDim2.new(1, -40, 0, 0), UDim2.fromOffset(30, 35), 14, COLORS.Dim, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+SniperFeedArrow.ZIndex = 7
+
+-- Sniper Feed Content
+local SniperFeedContent = createLabel(SniperFeedPanel, "nothing yet...", UDim2.fromOffset(31, 45), UDim2.new(1, -62, 0, 60), 18, COLORS.Dim, Enum.Font.Code)
+SniperFeedContent.ZIndex = 7
+
+-- Settings Panel (in MAIN tab)
+local SettingsPanel = Instance.new("Frame")
+SettingsPanel.Name = "SettingsPanel"
+SettingsPanel.Size = UDim2.new(1, 0, 0, DIMENSIONS.SettingsPanel.Height)
+SettingsPanel.BackgroundColor3 = COLORS.Row
+SettingsPanel.BackgroundTransparency = TRANSPARENCY.Row
+SettingsPanel.BorderSizePixel = 0
+SettingsPanel.ZIndex = 6
+SettingsPanel.Parent = MainPanel
+createCorner(SettingsPanel, DIMENSIONS.Panel.CornerRadius)
+createStroke(SettingsPanel, COLORS.Border, DIMENSIONS.Panel.StrokeThickness, TRANSPARENCY.Border)
+
+-- Settings Header
+local SettingsHeader = Instance.new("Frame")
+SettingsHeader.Size = UDim2.new(1, 0, 0, 40)
+SettingsHeader.BackgroundTransparency = 1
+SettingsHeader.ZIndex = 7
+SettingsHeader.Parent = SettingsPanel
+
+local SettingsTitle = createLabel(SettingsHeader, "SETTINGS", UDim2.fromOffset(31, 0), UDim2.fromOffset(200, 40), 17, COLORS.White, Enum.Font.GothamBold)
+SettingsTitle.ZIndex = 7
+
+local SettingsArrow = createLabel(SettingsHeader, "▼", UDim2.new(1, -40, 0, 0), UDim2.fromOffset(30, 40), 14, COLORS.Dim, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+SettingsArrow.ZIndex = 7
+
+-- CODES Section
+local CodesSection = Instance.new("Frame")
+CodesSection.Name = "CodesSection"
+CodesSection.Size = UDim2.new(1, 0, 0, 350)
+CodesSection.BackgroundTransparency = 1
+CodesSection.ZIndex = 7
+CodesSection.Parent = SettingsPanel
+
+local CodesSectionPadding = Instance.new("UIPadding")
+CodesSectionPadding.PaddingLeft = UDim.new(0, 31)
+CodesSectionPadding.PaddingRight = UDim.new(0, 31)
+CodesSectionPadding.PaddingTop = UDim.new(0, 50)
+CodesSectionPadding.Parent = CodesSection
+
+local CodesSectionLayout = Instance.new("UIListLayout")
+CodesSectionLayout.Padding = UDim.new(0, 15)
+CodesSectionLayout.Parent = CodesSection
+
+-- CODES separator
+local CodesSeparator = Instance.new("Frame")
+CodesSeparator.Name = "CodesSeparator"
+CodesSeparator.Size = UDim2.new(1, 0, 0, 20)
+CodesSeparator.BackgroundTransparency = 1
+CodesSeparator.ZIndex = 7
+CodesSeparator.Parent = CodesSection
+
+local CodesLineLeft = Instance.new("Frame")
+CodesLineLeft.Size = UDim2.new(0.5, -40, 0, 1)
+CodesLineLeft.Position = UDim2.fromOffset(0, 10)
+CodesLineLeft.BackgroundColor3 = COLORS.Border
+CodesLineLeft.BackgroundTransparency = 0.5
+CodesLineLeft.BorderSizePixel = 0
+CodesLineLeft.ZIndex = 7
+CodesLineLeft.Parent = CodesSeparator
+
+local CodesLabel = createLabel(CodesSeparator, "CODES", UDim2.new(0.5, -25, 0, 0), UDim2.fromOffset(50, 20), 14, COLORS.Dim, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+CodesLabel.ZIndex = 7
+
+local CodesLineRight = Instance.new("Frame")
+CodesLineRight.Size = UDim2.new(0.5, -40, 0, 1)
+CodesLineRight.Position = UDim2.new(0.5, 25, 0, 10)
+CodesLineRight.BackgroundColor3 = COLORS.Border
+CodesLineRight.BackgroundTransparency = 0.5
+CodesLineRight.BorderSizePixel = 0
+CodesLineRight.ZIndex = 7
+CodesLineRight.Parent = CodesSeparator
+
+-- Settings items
+local settingsItems = {
+    {name = "AUTO CODE/RIDDLE LISTEN", state = false},
+    {name = "RETYPE INVALID", state = true},
+    {name = "AUTO COPY CODE", state = true},
+    {name = "AUTO SUBMIT", state = true},
+}
+
+for _, item in ipairs(settingsItems) do
+    local itemFrame = Instance.new("Frame")
+    itemFrame.Name = item.name
+    itemFrame.Size = UDim2.new(1, 0, 0, 50)
+    itemFrame.BackgroundTransparency = 1
+    itemFrame.ZIndex = 7
+    itemFrame.Parent = CodesSection
+    
+    local itemLabel = createLabel(itemFrame, item.name, UDim2.fromOffset(0, 0), UDim2.new(1, -90, 1, 0), 13, COLORS.Text, Enum.Font.GothamMedium)
+    itemLabel.ZIndex = 7
+    
+    createToggleButton(itemFrame, UDim2.new(1, -80, 0.5, -21), UDim2.fromOffset(75, 42), item.state, function(newState)
+        print(item.name .. ": " .. tostring(newState))
+    end)
+end
+
+-- Submit After section
+local SubmitAfterFrame = Instance.new("Frame")
+SubmitAfterFrame.Name = "SubmitAfter"
+SubmitAfterFrame.Size = UDim2.new(1, 0, 0, 60)
+SubmitAfterFrame.BackgroundTransparency = 1
+SubmitAfterFrame.ZIndex = 7
+SubmitAfterFrame.Parent = CodesSection
+
+local SubmitAfterLabel = createLabel(SubmitAfterFrame, "SUBMIT AFTER", UDim2.fromOffset(0, 0), UDim2.new(1, -230, 1, 0), 13, COLORS.Text, Enum.Font.GothamMedium)
+SubmitAfterLabel.ZIndex = 7
+
+-- Submit After selector
+local SubmitAfterSelector = Instance.new("Frame")
+SubmitAfterSelector.Name = "Selector"
+SubmitAfterSelector.Size = UDim2.fromOffset(220, 53)
+SubmitAfterSelector.Position = UDim2.new(1, -220, 0, 0)
+SubmitAfterSelector.BackgroundColor3 = COLORS.Control
+SubmitAfterSelector.ZIndex = 8
+SubmitAfterSelector.Parent = SubmitAfterFrame
+createCorner(SubmitAfterSelector, 10)
+createStroke(SubmitAfterSelector, COLORS.Border, 1, TRANSPARENCY.Border)
+
+local submitValues = {1, 2, 3, 4}
+local selectedSubmit = 3
+local submitButtons = {}
+
+for i, val in ipairs(submitValues) do
+    local valBtn = Instance.new("TextButton")
+    valBtn.Name = tostring(val)
+    valBtn.Size = UDim2.new(0.25, -2, 1, -6)
+    valBtn.Position = UDim2.fromOffset((i-1) * 55 + 3, 3)
+    valBtn.BackgroundColor3 = (val == selectedSubmit) and COLORS.Accent or COLORS.Control
+    valBtn.BorderSizePixel = 0
+    valBtn.AutoButtonColor = false
+    valBtn.Text = tostring(val)
+    valBtn.TextSize = 16
+    valBtn.TextColor3 = (val == selectedSubmit) and COLORS.TabTextOn or COLORS.Dim
+    valBtn.Font = Enum.Font.GothamBold
+    valBtn.ZIndex = 9
+    valBtn.Parent = SubmitAfterSelector
+    createCorner(valBtn, 8)
+    
+    submitButtons[val] = valBtn
+    
+    valBtn.MouseButton1Click:Connect(function()
+        selectedSubmit = val
+        for v, btn in pairs(submitButtons) do
+            btn.BackgroundColor3 = (v == selectedSubmit) and COLORS.Accent or COLORS.Control
+            btn.TextColor3 = (v == selectedSubmit) and COLORS.TabTextOn or COLORS.Dim
+        end
+    end)
+end
+
+-- RIDDLES Section
+local RiddlesSection = Instance.new("Frame")
+RiddlesSection.Name = "RiddlesSection"
+RiddlesSection.Size = UDim2.new(1, 0, 0, 200)
+RiddlesSection.BackgroundTransparency = 1
+RiddlesSection.ZIndex = 7
+RiddlesSection.Parent = SettingsPanel
+
+local RiddlesPadding = Instance.new("UIPadding")
+RiddlesPadding.PaddingLeft = UDim.new(0, 31)
+RiddlesPadding.PaddingRight = UDim.new(0, 31)
+RiddlesPadding.PaddingTop = UDim.new(0, 420)
+RiddlesPadding.Parent = RiddlesSection
+
+local RiddlesLayout = Instance.new("UIListLayout")
+RiddlesLayout.Padding = UDim.new(0, 15)
+RiddlesLayout.Parent = RiddlesSection
+
+-- RIDDLES separator
+local RiddlesSeparator = Instance.new("Frame")
+RiddlesSeparator.Name = "RiddlesSeparator"
+RiddlesSeparator.Size = UDim2.new(1, 0, 0, 20)
+RiddlesSeparator.BackgroundTransparency = 1
+RiddlesSeparator.ZIndex = 7
+RiddlesSeparator.Parent = RiddlesSection
+
+local RiddlesLineLeft = Instance.new("Frame")
+RiddlesLineLeft.Size = UDim2.new(0.5, -45, 0, 1)
+RiddlesLineLeft.Position = UDim2.fromOffset(0, 10)
+RiddlesLineLeft.BackgroundColor3 = COLORS.Border
+RiddlesLineLeft.BackgroundTransparency = 0.5
+RiddlesLineLeft.BorderSizePixel = 0
+RiddlesLineLeft.ZIndex = 7
+RiddlesLineLeft.Parent = RiddlesSeparator
+
+local RiddlesLabel = createLabel(RiddlesSeparator, "RIDDLES", UDim2.new(0.5, -30, 0, 0), UDim2.fromOffset(60, 20), 14, COLORS.Dim, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+RiddlesLabel.ZIndex = 7
+
+local RiddlesLineRight = Instance.new("Frame")
+RiddlesLineRight.Size = UDim2.new(0.5, -45, 0, 1)
+RiddlesLineRight.Position = UDim2.new(0.5, 30, 0, 10)
+RiddlesLineRight.BackgroundColor3 = COLORS.Border
+RiddlesLineRight.BackgroundTransparency = 0.5
+RiddlesLineRight.BorderSizePixel = 0
+RiddlesLineRight.ZIndex = 7
+RiddlesLineRight.Parent = RiddlesSeparator
+
+-- Riddles items
+local riddleItems = {
+    {name = "AI RIDDLES", state = false},
+    {name = "AI RIDDLES AUTO SUBMIT", state = true},
+    {name = "BACKUP RIDDLE ANSWER", state = false},
+}
+
+for _, item in ipairs(riddleItems) do
+    local itemFrame = Instance.new("Frame")
+    itemFrame.Name = item.name
+    itemFrame.Size = UDim2.new(1, 0, 0, 50)
+    itemFrame.BackgroundTransparency = 1
+    itemFrame.ZIndex = 7
+    itemFrame.Parent = RiddlesSection
+    
+    local itemLabel = createLabel(itemFrame, item.name, UDim2.fromOffset(0, 0), UDim2.new(1, -90, 1, 0), 13, COLORS.Text, Enum.Font.GothamMedium)
+    itemLabel.ZIndex = 7
+    
+    createToggleButton(itemFrame, UDim2.new(1, -80, 0.5, -21), UDim2.fromOffset(75, 42), item.state, function(newState)
+        print(item.name .. ": " .. tostring(newState))
+    end)
+end
+
+-- Footer
+local Footer = createLabel(Window, "discord.gg/aceduels", UDim2.new(0.5, -100, 1, -30), UDim2.fromOffset(200, 20), 17, COLORS.Accent, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+Footer.ZIndex = 10
+
+-- ============================================================
+-- FARM PANEL
+-- ============================================================
+local FarmPanel = Instance.new("ScrollingFrame")
+FarmPanel.Name = "FarmPanel"
+FarmPanel.Size = UDim2.fromScale(1, 1)
+FarmPanel.BackgroundTransparency = 1
+FarmPanel.BorderSizePixel = 0
+FarmPanel.ScrollBarThickness = 4
+FarmPanel.ScrollBarImageColor3 = COLORS.Dim
+FarmPanel.CanvasSize = UDim2.new(0, 0, 0, 600)
+FarmPanel.Visible = false
+FarmPanel.ZIndex = 5
+FarmPanel.Parent = ContentContainer
+
+local FarmPanelPadding = Instance.new("UIPadding")
+FarmPanelPadding.PaddingLeft = UDim.new(0, 52)
+FarmPanelPadding.PaddingRight = UDim.new(0, 44)
+FarmPanelPadding.PaddingTop = UDim.new(0, 20)
+FarmPanelPadding.Parent = FarmPanel
+
+local FarmPanelLayout = Instance.new("UIListLayout")
+FarmPanelLayout.Padding = UDim.new(0, 20)
+FarmPanelLayout.Parent = FarmPanel
+
+-- Farm Title
+local FarmTitle = createLabel(FarmPanel, "FARM", UDim2.fromOffset(0, 0), UDim2.fromOffset(200, 30), 23, COLORS.Accent, Enum.Font.GothamBold)
+FarmTitle.ZIndex = 10
+
+-- Anchor Panel
+local AnchorPanel = Instance.new("Frame")
+AnchorPanel.Name = "AnchorPanel"
+AnchorPanel.Size = UDim2.new(1, 0, 0, DIMENSIONS.FarmPanel.Height)
+AnchorPanel.BackgroundColor3 = COLORS.Row
+AnchorPanel.BackgroundTransparency = TRANSPARENCY.Row
+AnchorPanel.BorderSizePixel = 0
+AnchorPanel.ZIndex = 6
+AnchorPanel.Parent = FarmPanel
+createCorner(AnchorPanel, DIMENSIONS.FarmPanel.CornerRadius)
+createStroke(AnchorPanel, COLORS.Border, 1, TRANSPARENCY.Border)
+
+-- None Button (Anchor)
+local AnchorNoneBtn = Instance.new("TextButton")
+AnchorNoneBtn.Name = "NoneBtn"
+AnchorNoneBtn.Size = UDim2.fromOffset(DIMENSIONS.FarmPanel.NoneButtonWidth, DIMENSIONS.FarmPanel.NoneButtonHeight)
+AnchorNoneBtn.Position = UDim2.fromOffset(22, 20)
+AnchorNoneBtn.BackgroundColor3 = COLORS.Control
+AnchorNoneBtn.BorderSizePixel = 0
+AnchorNoneBtn.AutoButtonColor = false
+AnchorNoneBtn.Text = "NONE"
+AnchorNoneBtn.TextSize = 16
+AnchorNoneBtn.TextColor3 = COLORS.Dim
+AnchorNoneBtn.Font = Enum.Font.GothamBold
+AnchorNoneBtn.ZIndex = 7
+AnchorNoneBtn.Parent = AnchorPanel
+createCorner(AnchorNoneBtn, 12)
+createStroke(AnchorNoneBtn, COLORS.Border, 1, TRANSPARENCY.Border)
+
+-- Anchor Label
+local AnchorLabel = createLabel(AnchorPanel, "Anchor", UDim2.fromOffset(217, 0), UDim2.fromOffset(200, DIMENSIONS.FarmPanel.Height), 22, COLORS.Text, Enum.Font.GothamMedium)
+AnchorLabel.ZIndex = 7
+
+-- Anchor Toggle
+createToggleButton(AnchorPanel, UDim2.new(1, -130, 0.5, -33), UDim2.fromOffset(119, 67), false, function(state)
+    print("Anchor: " .. tostring(state))
+end)
+
+-- Auto Buy Panel
+local AutoBuyPanel = Instance.new("Frame")
+AutoBuyPanel.Name = "AutoBuyPanel"
+AutoBuyPanel.Size = UDim2.new(1, 0, 0, DIMENSIONS.FarmPanel.Height)
+AutoBuyPanel.BackgroundColor3 = COLORS.Row
+AutoBuyPanel.BackgroundTransparency = TRANSPARENCY.Row
+AutoBuyPanel.BorderSizePixel = 0
+AutoBuyPanel.ZIndex = 6
+AutoBuyPanel.Parent = FarmPanel
+createCorner(AutoBuyPanel, DIMENSIONS.FarmPanel.CornerRadius)
+createStroke(AutoBuyPanel, COLORS.Border, 1, TRANSPARENCY.Border)
+
+-- None Button (Auto Buy)
+local AutoBuyNoneBtn = Instance.new("TextButton")
+AutoBuyNoneBtn.Name = "NoneBtn"
+AutoBuyNoneBtn.Size = UDim2.fromOffset(DIMENSIONS.FarmPanel.NoneButtonWidth, DIMENSIONS.FarmPanel.NoneButtonHeight)
+AutoBuyNoneBtn.Position = UDim2.fromOffset(22, 20)
+AutoBuyNoneBtn.BackgroundColor3 = COLORS.Control
+AutoBuyNoneBtn.BorderSizePixel = 0
+AutoBuyNoneBtn.AutoButtonColor = false
+AutoBuyNoneBtn.Text = "NONE"
+AutoBuyNoneBtn.TextSize = 16
+AutoBuyNoneBtn.TextColor3 = COLORS.Dim
+AutoBuyNoneBtn.Font = Enum.Font.GothamBold
+AutoBuyNoneBtn.ZIndex = 7
+AutoBuyNoneBtn.Parent = AutoBuyPanel
+createCorner(AutoBuyNoneBtn, 12)
+createStroke(AutoBuyNoneBtn, COLORS.Border, 1, TRANSPARENCY.Border)
+
+-- Auto Buy Label
+local AutoBuyLabel = createLabel(AutoBuyPanel, "Auto buy", UDim2.fromOffset(217, 0), UDim2.fromOffset(200, DIMENSIONS.FarmPanel.Height), 22, COLORS.Text, Enum.Font.GothamMedium)
+AutoBuyLabel.ZIndex = 7
+
+-- Auto Buy Toggle
+createToggleButton(AutoBuyPanel, UDim2.new(1, -130, 0.5, -33), UDim2.fromOffset(119, 67), false, function(state)
+    print("Auto Buy: " .. tostring(state))
+end)
+
+-- ============================================================
+-- SETTINGS PANEL (Separate tab)
+-- ============================================================
+local SettingsPanelTab = Instance.new("ScrollingFrame")
+SettingsPanelTab.Name = "SettingsPanelTab"
+SettingsPanelTab.Size = UDim2.fromScale(1, 1)
+SettingsPanelTab.BackgroundTransparency = 1
+SettingsPanelTab.BorderSizePixel = 0
+SettingsPanelTab.ScrollBarThickness = 4
+SettingsPanelTab.ScrollBarImageColor3 = COLORS.Dim
+SettingsPanelTab.CanvasSize = UDim2.new(0, 0, 0, 600)
+SettingsPanelTab.Visible = false
+SettingsPanelTab.ZIndex = 5
+SettingsPanelTab.Parent = ContentContainer
+
+local SettingsTabPadding = Instance.new("UIPadding")
+SettingsTabPadding.PaddingLeft = UDim.new(0, 27)
+SettingsTabPadding.PaddingRight = UDim.new(0, 22)
+SettingsTabPadding.PaddingTop = UDim.new(0, 15)
+SettingsTabPadding.Parent = SettingsPanelTab
+
+local SettingsTabLayout = Instance.new("UIListLayout")
+SettingsTabLayout.Padding = UDim.new(0, 15)
+SettingsTabLayout.Parent = SettingsPanelTab
+
+-- APPEARANCE Section
+local AppearanceTitle = Instance.new("Frame")
+AppearanceTitle.Name = "AppearanceTitle"
+AppearanceTitle.Size = UDim2.new(1, 0, 0, 25)
+AppearanceTitle.BackgroundTransparency = 1
+AppearanceTitle.ZIndex = 10
+AppearanceTitle.Parent = SettingsPanelTab
+
+local AppLineLeft = Instance.new("Frame")
+AppLineLeft.Size = UDim2.new(0.5, -60, 0, 1)
+AppLineLeft.Position = UDim2.fromOffset(0, 12)
+AppLineLeft.BackgroundColor3 = COLORS.Border
+AppLineLeft.BackgroundTransparency = 0.5
+AppLineLeft.BorderSizePixel = 0
+AppLineLeft.ZIndex = 10
+AppLineLeft.Parent = AppearanceTitle
+
+local AppLabel = createLabel(AppearanceTitle, "APPEARANCE", UDim2.new(0.5, -45, 0, 0), UDim2.fromOffset(90, 25), 13, COLORS.Dim, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+AppLabel.ZIndex = 10
+
+local AppLineRight = Instance.new("Frame")
+AppLineRight.Size = UDim2.new(0.5, -60, 0, 1)
+AppLineRight.Position = UDim2.new(0.5, 45, 0, 12)
+AppLineRight.BackgroundColor3 = COLORS.Border
+AppLineRight.BackgroundTransparency = 0.5
+AppLineRight.BorderSizePixel = 0
+AppLineRight.ZIndex = 10
+AppLineRight.Parent = AppearanceTitle
+
+-- Background Cards
+local BGCardContainer = Instance.new("Frame")
+BGCardContainer.Name = "BGCardContainer"
+BGCardContainer.Size = UDim2.new(1, 0, 0, 115)
+BGCardContainer.BackgroundTransparency = 1
+BGCardContainer.ZIndex = 6
+BGCardContainer.Parent = SettingsPanelTab
+
+local BGCardLayout = Instance.new("UIListLayout")
+BGCardLayout.FillDirection = Enum.FillDirection.Horizontal
+BGCardLayout.Padding = UDim.new(0, 10)
+BGCardLayout.Parent = BGCardContainer
+
+local bgOptions = {
+    {name = "NO BG", subtext = "NONE", selected = false},
+    {name = "1", subtext = "", selected = true},
+    {name = "2", subtext = "", selected = false},
+    {name = "3", subtext = "", selected = false},
+}
+
+for i, bg in ipairs(bgOptions) do
+    local card = Instance.new("TextButton")
+    card.Name = "BG" .. i
+    card.Size = UDim2.fromOffset(DIMENSIONS.AppearanceCard.Width, DIMENSIONS.AppearanceCard.Height)
+    card.BackgroundColor3 = bg.selected and COLORS.Accent or COLORS.Control
+    card.BorderSizePixel = 0
+    card.AutoButtonColor = false
+    card.Text = ""
+    card.ZIndex = 7
+    card.Parent = BGCardContainer
+    createCorner(card, DIMENSIONS.AppearanceCard.CornerRadius)
+    createStroke(card, bg.selected and COLORS.Accent or COLORS.Border, 1.5, bg.selected and 0.2 or 0.7)
+    
+    -- Card number/name
+    local cardLabel = createLabel(card, bg.name, UDim2.new(0.5, -15, 0.5, -15), UDim2.fromOffset(30, 30), 18, bg.selected and COLORS.Window or COLORS.Dim, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+    cardLabel.ZIndex = 8
+    
+    if bg.subtext ~= "" then
+        local subLabel = createLabel(card, bg.subtext, UDim2.new(0.5, -20, 1, -20), UDim2.fromOffset(40, 15), 9, COLORS.Dim, Enum.Font.GothamMedium, Enum.TextXAlignment.Center)
+        subLabel.ZIndex = 8
+    end
+end
+
+-- GUI Scale Section
+local GUIScaleFrame = Instance.new("Frame")
+GUIScaleFrame.Name = "GUIScale"
+GUIScaleFrame.Size = UDim2.new(1, 0, 0, DIMENSIONS.GUIScale.Height)
+GUIScaleFrame.BackgroundColor3 = COLORS.Row
+GUIScaleFrame.BackgroundTransparency = TRANSPARENCY.Row
+GUIScaleFrame.BorderSizePixel = 0
+GUIScaleFrame.ZIndex = 6
+GUIScaleFrame.Parent = SettingsPanelTab
+createCorner(GUIScaleFrame, 12)
+createStroke(GUIScaleFrame, COLORS.Border, 1, TRANSPARENCY.Border)
+
+local GUIScaleLabel = createLabel(GUIScaleFrame, "GUI Scale", UDim2.fromOffset(20, 0), UDim2.fromOffset(150, DIMENSIONS.GUIScale.Height), 14, COLORS.Text, Enum.Font.GothamMedium)
+GUIScaleLabel.ZIndex = 7
+
+-- Scale controls
+local ScaleControlFrame = Instance.new("Frame")
+ScaleControlFrame.Size = UDim2.fromOffset(150, 40)
+ScaleControlFrame.Position = UDim2.new(1, -170, 0.5, -20)
+ScaleControlFrame.BackgroundColor3 = COLORS.Control
+ScaleControlFrame.ZIndex = 7
+ScaleControlFrame.Parent = GUIScaleFrame
+createCorner(ScaleControlFrame, 8)
+createStroke(ScaleControlFrame, COLORS.Border, 1, TRANSPARENCY.Border)
+
+local ScaleMinus = Instance.new("TextButton")
+ScaleMinus.Size = UDim2.fromOffset(35, 34)
+ScaleMinus.Position = UDim2.fromOffset(3, 3)
+ScaleMinus.BackgroundColor3 = COLORS.Control
+ScaleMinus.BorderSizePixel = 0
+ScaleMinus.Text = "-"
+ScaleMinus.TextSize = 18
+ScaleMinus.TextColor3 = COLORS.Dim
+ScaleMinus.Font = Enum.Font.GothamBold
+ScaleMinus.ZIndex = 8
+ScaleMinus.Parent = ScaleControlFrame
+createCorner(ScaleMinus, 6)
+
+local ScaleValue = createLabel(ScaleControlFrame, "1.30", UDim2.fromOffset(40, 0), UDim2.fromOffset(70, 40), 16, COLORS.Accent, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+ScaleValue.ZIndex = 8
+
+local ScalePlus = Instance.new("TextButton")
+ScalePlus.Size = UDim2.fromOffset(35, 34)
+ScalePlus.Position = UDim2.fromOffset(112, 3)
+ScalePlus.BackgroundColor3 = COLORS.Control
+ScalePlus.BorderSizePixel = 0
+ScalePlus.Text = "+"
+ScalePlus.TextSize = 18
+ScalePlus.TextColor3 = COLORS.Dim
+ScalePlus.Font = Enum.Font.GothamBold
+ScalePlus.ZIndex = 8
+ScalePlus.Parent = ScaleControlFrame
+createCorner(ScalePlus, 6)
+
+-- OPTIMIZATION Section
+local OptimizationTitle = Instance.new("Frame")
+OptimizationTitle.Name = "OptimizationTitle"
+OptimizationTitle.Size = UDim2.new(1, 0, 0, 25)
+OptimizationTitle.BackgroundTransparency = 1
+OptimizationTitle.ZIndex = 10
+OptimizationTitle.Parent = SettingsPanelTab
+
+local OptLineLeft = Instance.new("Frame")
+OptLineLeft.Size = UDim2.new(0.5, -60, 0, 1)
+OptLineLeft.Position = UDim2.fromOffset(0, 12)
+OptLineLeft.BackgroundColor3 = COLORS.Border
+OptLineLeft.BackgroundTransparency = 0.5
+OptLineLeft.BorderSizePixel = 0
+OptLineLeft.ZIndex = 10
+OptLineLeft.Parent = OptimizationTitle
+
+local OptLabel = createLabel(OptimizationTitle, "OPTIMIZATION", UDim2.new(0.5, -55, 0, 0), UDim2.fromOffset(110, 25), 13, COLORS.Dim, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+OptLabel.ZIndex = 10
+
+local OptLineRight = Instance.new("Frame")
+OptLineRight.Size = UDim2.new(0.5, -60, 0, 1)
+OptLineRight.Position = UDim2.new(0.5, 55, 0, 12)
+OptLineRight.BackgroundColor3 = COLORS.Border
+OptLineRight.BackgroundTransparency = 0.5
+OptLineRight.BorderSizePixel = 0
+OptLineRight.ZIndex = 10
+OptLineRight.Parent = OptimizationTitle
+
+-- Falling Snow
+local FallingSnowFrame = Instance.new("Frame")
+FallingSnowFrame.Name = "FallingSnow"
+FallingSnowFrame.Size = UDim2.new(1, 10, 0, 42)
+FallingSnowFrame.BackgroundColor3 = COLORS.Row
+FallingSnowFrame.BackgroundTransparency = TRANSPARENCY.Row
+FallingSnowFrame.BorderSizePixel = 0
+FallingSnowFrame.ZIndex = 6
+FallingSnowFrame.Parent = SettingsPanelTab
+createCorner(FallingSnowFrame, 10)
+createStroke(FallingSnowFrame, COLORS.Border, 1, TRANSPARENCY.Border)
+
+local FallingSnowLabel = createLabel(FallingSnowFrame, "Falling snow", UDim2.fromOffset(20, 0), UDim2.new(1, -100, 1, 0), 13, COLORS.Text, Enum.Font.GothamMedium)
+FallingSnowLabel.ZIndex = 7
+
+createToggleButton(FallingSnowFrame, UDim2.new(1, -85, 0.5, -21), UDim2.fromOffset(75, 42), true, function(state)
+    print("Falling Snow: " .. tostring(state))
+end)
+
+-- Optimization
+local OptimizationFrame = Instance.new("Frame")
+OptimizationFrame.Name = "Optimization"
+OptimizationFrame.Size = UDim2.new(1, 10, 0, 42)
+OptimizationFrame.BackgroundColor3 = COLORS.Row
+OptimizationFrame.BackgroundTransparency = TRANSPARENCY.Row
+OptimizationFrame.BorderSizePixel = 0
+OptimizationFrame.ZIndex = 6
+OptimizationFrame.Parent = SettingsPanelTab
+createCorner(OptimizationFrame, 10)
+createStroke(OptimizationFrame, COLORS.Border, 1, TRANSPARENCY.Border)
+
+local OptimizationLabel = createLabel(OptimizationFrame, "Optimization", UDim2.fromOffset(20, 0), UDim2.new(1, -100, 1, 0), 13, COLORS.Text, Enum.Font.GothamMedium)
+OptimizationLabel.ZIndex = 7
+
+createToggleButton(OptimizationFrame, UDim2.new(1, -85, 0.5, -21), UDim2.fromOffset(75, 42), false, function(state)
+    print("Optimization: " .. tostring(state))
+end)
+
+-- ============================================================
+-- TAB SWITCHING LOGIC
+-- ============================================================
+local function switchTab(tabName)
+    currentTab = tabName
+    
+    -- Update tab button appearances
+    for name, btn in pairs(tabButtons) do
+        local isActive = (name == currentTab)
+        local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+        
+        TweenService:Create(btn, tweenInfo, {
+            BackgroundColor3 = isActive and COLORS.TabActive or COLORS.TabInactive,
+            TextColor3 = isActive and COLORS.TabTextOn or COLORS.Dim
+        }):Play()
+        
+        local stroke = btn:FindFirstChildOfClass("UIStroke")
+        if stroke then
+            stroke.Color = isActive and COLORS.TabActive or COLORS.Border
+            stroke.Transparency = isActive and TRANSPARENCY.TabStrokeActive or TRANSPARENCY.TabStrokeInactive
+        end
+    end
+    
+    -- Show/hide panels
+    MainPanel.Visible = (currentTab == "MAIN")
+    FarmPanel.Visible = (currentTab == "FARM")
+    SettingsPanelTab.Visible = (currentTab == "SETTINGS")
+end
+
+-- Connect tab buttons
+for tabName, btn in pairs(tabButtons) do
+    btn.MouseButton1Click:Connect(function()
+        switchTab(tabName)
+    end)
+end
+
+-- ============================================================
+-- DRAGGING FUNCTIONALITY
+-- ============================================================
+local dragging = false
+local dragStart = nil
+local startPos = nil
+
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = Window.Position
+    end
+end)
+
+Header.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        Window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- ============================================================
+-- ENTRANCE ANIMATION
+-- ============================================================
+Window.Position = UDim2.new(0.5, -(DIMENSIONS.MainContainer.Width/2), 0.5, -(DIMENSIONS.MainContainer.Height/2) + 50)
+Window.BackgroundTransparency = 1
+
+local entranceTween = TweenService:Create(Window, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+    Position = UDim2.new(0.5, -(DIMENSIONS.MainContainer.Width/2), 0.5, -(DIMENSIONS.MainContainer.Height/2)),
+    BackgroundTransparency = 0
+})
+entranceTween:Play()
+
+-- ============================================================
+-- INITIALIZATION COMPLETE
+-- ============================================================
+print("Eclipse Code Sniper UI - Exact Recreation Loaded")
+print("Colors: Original BG_THEMES Amber")
+print("Layout: Based on 3 reference images")
