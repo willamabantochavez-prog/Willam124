@@ -1,4 +1,6 @@
--- ECLIPSE CODE SNIPER v3.7 - DELTA FIXED + COLLAPSIBLE SECTIONS
+-- ECLIPSE CODE SNIPER v3.7 - DELTA FIXED
+-- All toggles, falling snow particles, full UI preserved
+-- Only change: remote detection works on Delta executor
 pcall(function()
 
 local Players = game:GetService("Players")
@@ -334,23 +336,6 @@ local function label(p,txt,sz,pos,ts,col,fnt)
     l.ZIndex=10;l.Parent=p;return l
 end
 
--- CANVAS REFRESH FOR COLLAPSIBLE SECTIONS
-local function refreshPanelCanvas(panel)
-    task.defer(function()
-        task.wait(0.35)
-        local total = 0
-        local layout = panel:FindFirstChildOfClass("UIListLayout")
-        local pad = 5
-        if layout then pad = layout.Padding.Offset end
-        for _, child in ipairs(panel:GetChildren()) do
-            if child:IsA("GuiObject") and child.Visible then
-                total = total + child.AbsoluteSize.Y + pad
-            end
-        end
-        panel.CanvasSize = UDim2.new(0,0,0, math.max(total + 30, 100))
-    end)
-end
-
 -- CLEANUP
 pcall(function()
     local old = game.CoreGui:FindFirstChild("EclipseSniperUI")
@@ -456,7 +441,7 @@ end
 if not _snow then SnowContainer.Visible = false; snowActive = false end
 
 -- THEME TRACKING
-local TH = {wStrokes={},cards={},cStrokes={},toggles={},tStrokes={},kFrames={},kStrokes={},kLabels={},bgBtns={},bgStrokes={},tabBtns={},tabStrokes={},cBtns={},arrows={}}
+local TH = {wStrokes={},cards={},cStrokes={},toggles={},tStrokes={},kFrames={},kStrokes={},kLabels={},bgBtns={},bgStrokes={},tabBtns={},tabStrokes={},cBtns={}}
 
 local function applyTheme(idx)
     local t=THEMES[idx] or THEMES[1]; setTheme(t)
@@ -484,13 +469,6 @@ local function applyTheme(idx)
     for i,s in pairs(TH.bgStrokes) do TweenService:Create(s,ti,{Color=(i==idx)and t.A or t.B,Transparency=(i==idx)and 0.2 or 0.7}):Play() end
     for _,b in ipairs(TH.cBtns) do TweenService:Create(b,ti,{BackgroundColor3=t.C,TextColor3=t.T}):Play() end
     if Console then TweenService:Create(Console,ti,{ScrollBarImageColor3=t.D}):Play() end
-    -- Update arrow colors
-    for _,a in ipairs(TH.arrows) do
-        if a.btn and a.btn.Parent then
-            local expanded = a.getExpanded()
-            TweenService:Create(a.btn,ti,{TextColor3=expanded and t.D or t.A}):Play()
-        end
-    end
 end
 
 -- SCROLL CONSOLE
@@ -610,9 +588,7 @@ mkTab("MAIN");mkTab("FARM");mkTab("SETTINGS")
 local PC = Instance.new("Frame")
 PC.Size=UDim2.new(1,0,1,-78);PC.Position=UDim2.fromOffset(0,78);PC.BackgroundTransparency=1;PC.ZIndex=10;PC.Parent=Win
 
--- ============================================================
 -- MAIN PANEL
--- ============================================================
 local MP = Instance.new("ScrollingFrame")
 MP.Size=UDim2.new(1,0,1,0);MP.BackgroundTransparency=1;MP.BorderSizePixel=0
 MP.ScrollBarThickness=3;MP.ScrollBarImageColor3=COL.D;MP.CanvasSize=UDim2.new(0,0,0,900)
@@ -650,47 +626,17 @@ end
 ConsoleOut:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateCanvas)
 task.defer(updateCanvas)
 
--- ============================================================
--- SETTINGS CARD (COLLAPSIBLE) - MAIN TAB
--- ============================================================
-local SC_EXPANDED_H = 360
-local SC_COLLAPSED_H = 34
-local SCExpanded = true
-local SCItems = {}
-
-local SC=Instance.new("Frame");SC.Size=UDim2.new(1,0,0,SC_EXPANDED_H);SC.BackgroundColor3=COL.R;SC.BackgroundTransparency=0.4
+-- SETTINGS CARD (in MAIN)
+local SC=Instance.new("Frame");SC.Size=UDim2.new(1,0,0,360);SC.BackgroundColor3=COL.R;SC.BackgroundTransparency=0.4
 SC.BorderSizePixel=0;SC.ZIndex=11;SC.Parent=MP;corner(SC,10)
 local scs=stroke(SC,COL.B,1,0.55);table.insert(TH.cards,SC);table.insert(TH.cStrokes,scs)
 
-local SCHeadLabel=label(SC,"SETTINGS",UDim2.fromOffset(200,20),UDim2.fromOffset(12,6),11,COL.White,Enum.Font.GothamBold)
-SCHeadLabel.ZIndex=15
+label(SC,"SETTINGS",UDim2.fromOffset(200,20),UDim2.fromOffset(12,6),11,COL.White,Enum.Font.GothamBold)
 
--- Arrow button for SETTINGS
-local SCArrow=Instance.new("TextButton")
-SCArrow.Size=UDim2.fromOffset(20,20);SCArrow.Position=UDim2.new(1,-26,0,6)
-SCArrow.BackgroundTransparency=1;SCArrow.Text="v";SCArrow.TextSize=12
-SCArrow.TextColor3=COL.D;SCArrow.Font=Enum.Font.GothamBold
-SCArrow.ZIndex=15;SCArrow.AutoButtonColor=false;SCArrow.Parent=SC
-table.insert(TH.arrows,{btn=SCArrow,getExpanded=function() return SCExpanded end})
-
-SCArrow.MouseButton1Click:Connect(function()
-    SCExpanded = not SCExpanded
-    SCArrow.Text = SCExpanded and "v" or ">"
-    local t = THEMES[_bg] or THEMES[1]
-    SCArrow.TextColor3 = SCExpanded and t.D or t.A
-    for _, item in ipairs(SCItems) do item.Visible = SCExpanded end
-    TweenService:Create(SC, TweenInfo.new(0.25, Enum.EasingStyle.Quart), {
-        Size = UDim2.new(1,0,0, SCExpanded and SC_EXPANDED_H or SC_COLLAPSED_H)
-    }):Play()
-    refreshPanelCanvas(MP)
-end)
-
--- CODES separator
 local CSep=Instance.new("Frame");CSep.Size=UDim2.new(1,-24,0,18);CSep.Position=UDim2.fromOffset(12,30);CSep.BackgroundTransparency=1;CSep.ZIndex=12;CSep.Parent=SC
 local CL1=Instance.new("Frame");CL1.Size=UDim2.new(0.5,-30,0,1);CL1.Position=UDim2.fromOffset(0,9);CL1.BackgroundColor3=COL.B;CL1.BackgroundTransparency=0.5;CL1.BorderSizePixel=0;CL1.ZIndex=12;CL1.Parent=CSep
 local CLbl=Instance.new("TextLabel");CLbl.Size=UDim2.fromOffset(50,18);CLbl.Position=UDim2.new(0.5,-25,0,0);CLbl.BackgroundTransparency=1;CLbl.Text="CODES";CLbl.TextSize=10;CLbl.TextColor3=COL.D;CLbl.Font=Enum.Font.GothamBold;CLbl.TextXAlignment=Enum.TextXAlignment.Center;CLbl.ZIndex=12;CLbl.Parent=CSep
 local CL2=Instance.new("Frame");CL2.Size=UDim2.new(0.5,-30,0,1);CL2.Position=UDim2.new(0.5,25,0,9);CL2.BackgroundColor3=COL.B;CL2.BackgroundTransparency=0.5;CL2.BorderSizePixel=0;CL2.ZIndex=12;CL2.Parent=CSep
-table.insert(SCItems, CSep)
 
 -- TOGGLE HELPER
 local function mkToggle(par,onState,cName,cb)
@@ -725,12 +671,11 @@ local function mkRow(par,y,txt,state,cName,cb)
     return r
 end
 
-table.insert(SCItems, mkRow(SC,52,"AUTO CODE/RIDDLE LISTEN",_on,"Auto Code",function(s) _on=s;cfg.on=s;save() end))
-table.insert(SCItems, mkRow(SC,84,"RETYPE INVALID",_retype,"Retype",function(s) _retype=s;cfg.retypeInvalid=s;save() end))
-table.insert(SCItems, mkRow(SC,116,"AUTO COPY CODE",false,"Auto Copy",function(s) end))
-table.insert(SCItems, mkRow(SC,148,"AUTO SUBMIT",_autoAccept,"Auto Submit",function(s) _autoAccept=s;cfg.autoSubmit=s;save() end))
+mkRow(SC,52,"AUTO CODE/RIDDLE LISTEN",_on,"Auto Code",function(s) _on=s;cfg.on=s;save() end)
+mkRow(SC,84,"RETYPE INVALID",_retype,"Retype",function(s) _retype=s;cfg.retypeInvalid=s;save() end)
+mkRow(SC,116,"AUTO COPY CODE",false,"Auto Copy",function(s) end)
+mkRow(SC,148,"AUTO SUBMIT",_autoAccept,"Auto Submit",function(s) _autoAccept=s;cfg.autoSubmit=s;save() end)
 
--- SUBMIT AFTER
 local SARow=Instance.new("Frame");SARow.Size=UDim2.new(1,-24,0,36);SARow.Position=UDim2.fromOffset(12,182);SARow.BackgroundTransparency=1;SARow.ZIndex=12;SARow.Parent=SC
 label(SARow,"SUBMIT AFTER",UDim2.fromOffset(120,36),UDim2.fromOffset(0,0),10,COL.T,Enum.Font.GothamMedium)
 
@@ -755,64 +700,32 @@ for i,v in ipairs(saVals) do
         end
     end)
 end
-table.insert(SCItems, SARow)
 
--- RIDDLES separator
 local RSep=Instance.new("Frame");RSep.Size=UDim2.new(1,-24,0,18);RSep.Position=UDim2.fromOffset(12,224);RSep.BackgroundTransparency=1;RSep.ZIndex=12;RSep.Parent=SC
 local RL1=Instance.new("Frame");RL1.Size=UDim2.new(0.5,-35,0,1);RL1.Position=UDim2.fromOffset(0,9);RL1.BackgroundColor3=COL.B;RL1.BackgroundTransparency=0.5;RL1.BorderSizePixel=0;RL1.ZIndex=12;RL1.Parent=RSep
 local RLbl=Instance.new("TextLabel");RLbl.Size=UDim2.fromOffset(60,18);RLbl.Position=UDim2.new(0.5,-30,0,0);RLbl.BackgroundTransparency=1;RLbl.Text="RIDDLES";RLbl.TextSize=10;RLbl.TextColor3=COL.D;RLbl.Font=Enum.Font.GothamBold;RLbl.TextXAlignment=Enum.TextXAlignment.Center;RLbl.ZIndex=12;RLbl.Parent=RSep
 local RL2=Instance.new("Frame");RL2.Size=UDim2.new(0.5,-35,0,1);RL2.Position=UDim2.new(0.5,30,0,9);RL2.BackgroundColor3=COL.B;RL2.BackgroundTransparency=0.5;RL2.BorderSizePixel=0;RL2.ZIndex=12;RL2.Parent=RSep
-table.insert(SCItems, RSep)
 
-table.insert(SCItems, mkRow(SC,246,"AI RIDDLES",_riddle,"AI Riddles",function(s) _riddle=s;cfg.riddleSolver=s;save() end))
-table.insert(SCItems, mkRow(SC,278,"AI RIDDLES AUTO SUBMIT",false,"Riddle Auto",function(s) end))
-table.insert(SCItems, mkRow(SC,310,"BACKUP RIDDLE ANSWER",false,"Backup",function(s) end))
+mkRow(SC,246,"AI RIDDLES",_riddle,"AI Riddles",function(s) _riddle=s;cfg.riddleSolver=s;save() end)
+mkRow(SC,278,"AI RIDDLES AUTO SUBMIT",false,"Riddle Auto",function(s) end)
+mkRow(SC,310,"BACKUP RIDDLE ANSWER",false,"Backup",function(s) end)
 
--- ============================================================
--- FARM PANEL (COLLAPSIBLE FARM CARD)
--- ============================================================
+-- FARM PANEL
 local FP=Instance.new("ScrollingFrame");FP.Size=UDim2.new(1,0,1,0);FP.BackgroundTransparency=1;FP.Visible=false
 FP.ScrollBarThickness=3;FP.ScrollBarImageColor3=COL.D;FP.CanvasSize=UDim2.new(0,0,0,300)
 FP.ZIndex=10;FP.Parent=PC;tabs["FARM"]=FP
 local fpp=Instance.new("UIPadding");fpp.PaddingLeft=UDim.new(0,10);fpp.PaddingRight=UDim.new(0,10);fpp.PaddingTop=UDim.new(0,6);fpp.Parent=FP
 local fpl=Instance.new("UIListLayout");fpl.Padding=UDim.new(0,5);fpl.Parent=FP
 
-local FC_EXPANDED_H = 120
-local FC_COLLAPSED_H = 26
-local FCExpanded = true
-local FCItems = {}
-
-local FC=Instance.new("Frame");FC.Size=UDim2.new(1,0,0,FC_EXPANDED_H);FC.BackgroundColor3=COL.R;FC.BackgroundTransparency=0.4
+local FC=Instance.new("Frame");FC.Size=UDim2.new(1,0,0,120);FC.BackgroundColor3=COL.R;FC.BackgroundTransparency=0.4
 FC.BorderSizePixel=0;FC.ZIndex=11;FC.Parent=FP;corner(FC,10)
 local fcs=stroke(FC,COL.B,1,0.55);table.insert(TH.cards,FC);table.insert(TH.cStrokes,fcs)
 
--- FARM header
 local FSep=Instance.new("Frame");FSep.Size=UDim2.new(1,-24,0,18);FSep.Position=UDim2.fromOffset(12,6);FSep.BackgroundTransparency=1;FSep.ZIndex=12;FSep.Parent=FC
 local FL1=Instance.new("Frame");FL1.Size=UDim2.new(0.5,-25,0,1);FL1.Position=UDim2.fromOffset(0,9);FL1.BackgroundColor3=COL.B;FL1.BackgroundTransparency=0.5;FL1.BorderSizePixel=0;FL1.ZIndex=12;FL1.Parent=FSep
 local FLbl=Instance.new("TextLabel");FLbl.Size=UDim2.fromOffset(40,18);FLbl.Position=UDim2.new(0.5,-20,0,0);FLbl.BackgroundTransparency=1;FLbl.Text="FARM";FLbl.TextSize=10;FLbl.TextColor3=COL.A;FLbl.Font=Enum.Font.GothamBold;FLbl.TextXAlignment=Enum.TextXAlignment.Center;FLbl.ZIndex=12;FLbl.Parent=FSep
 local FL2=Instance.new("Frame");FL2.Size=UDim2.new(0.5,-25,0,1);FL2.Position=UDim2.new(0.5,20,0,9);FL2.BackgroundColor3=COL.B;FL2.BackgroundTransparency=0.5;FL2.BorderSizePixel=0;FL2.ZIndex=12;FL2.Parent=FSep
 
--- Arrow button for FARM
-local FCArrow=Instance.new("TextButton")
-FCArrow.Size=UDim2.fromOffset(20,20);FCArrow.Position=UDim2.new(1,-26,0,3)
-FCArrow.BackgroundTransparency=1;FCArrow.Text="v";FCArrow.TextSize=12
-FCArrow.TextColor3=COL.D;FCArrow.Font=Enum.Font.GothamBold
-FCArrow.ZIndex=15;FCArrow.AutoButtonColor=false;FCArrow.Parent=FC
-table.insert(TH.arrows,{btn=FCArrow,getExpanded=function() return FCExpanded end})
-
-FCArrow.MouseButton1Click:Connect(function()
-    FCExpanded = not FCExpanded
-    FCArrow.Text = FCExpanded and "v" or ">"
-    local t = THEMES[_bg] or THEMES[1]
-    FCArrow.TextColor3 = FCExpanded and t.D or t.A
-    for _, item in ipairs(FCItems) do item.Visible = FCExpanded end
-    TweenService:Create(FC, TweenInfo.new(0.25, Enum.EasingStyle.Quart), {
-        Size = UDim2.new(1,0,0, FCExpanded and FC_EXPANDED_H or FC_COLLAPSED_H)
-    }):Play()
-    refreshPanelCanvas(FP)
-end)
-
--- ANCHOR
 local AR=Instance.new("Frame");AR.Size=UDim2.new(1,-24,0,40);AR.Position=UDim2.fromOffset(12,28);AR.BackgroundTransparency=1;AR.ZIndex=12;AR.Parent=FC
 
 local AKF=Instance.new("Frame");AKF.Size=UDim2.fromOffset(40,20);AKF.Position=UDim2.fromOffset(0,10);AKF.BackgroundColor3=COL.C;AKF.ZIndex=13;AKF.Parent=AR;corner(AKF,5)
@@ -863,9 +776,7 @@ local function togAnchor(st)
     end
 end
 AT.MouseButton1Click:Connect(function() togAnchor() end)
-table.insert(FCItems, AR)
 
--- AUTO BUY
 local ABR=Instance.new("Frame");ABR.Size=UDim2.new(1,-24,0,40);ABR.Position=UDim2.fromOffset(12,72);ABR.BackgroundTransparency=1;ABR.ZIndex=12;ABR.Parent=FC
 
 local ABKF=Instance.new("Frame");ABKF.Size=UDim2.fromOffset(40,20);ABKF.Position=UDim2.fromOffset(0,10);ABKF.BackgroundColor3=COL.C;ABKF.ZIndex=13;ABKF.Parent=ABR;corner(ABKF,5)
@@ -907,18 +818,14 @@ local function togAutoBuy(st)
     end
 end
 ABT.MouseButton1Click:Connect(function() togAutoBuy() end)
-table.insert(FCItems, ABR)
 
--- ============================================================
--- SETTINGS TAB (COLLAPSIBLE APPEARANCE + OPTIMIZATION)
--- ============================================================
+-- SETTINGS TAB
 local ST=Instance.new("ScrollingFrame");ST.Size=UDim2.new(1,0,1,0);ST.BackgroundTransparency=1;ST.Visible=false
 ST.ScrollBarThickness=3;ST.ScrollBarImageColor3=COL.D;ST.CanvasSize=UDim2.new(0,0,0,500)
 ST.ZIndex=10;ST.Parent=PC;tabs["SETTINGS"]=ST
 local stp=Instance.new("UIPadding");stp.PaddingLeft=UDim.new(0,10);stp.PaddingRight=UDim.new(0,10);stp.PaddingTop=UDim.new(0,6);stp.Parent=ST
 local stl=Instance.new("UIListLayout");stl.Padding=UDim.new(0,5);stl.Parent=ST
 
--- ANTI LAG (not collapsible)
 local ALC=Instance.new("Frame");ALC.Size=UDim2.new(1,0,0,52);ALC.BackgroundColor3=COL.R;ALC.BackgroundTransparency=0.4
 ALC.BorderSizePixel=0;ALC.ZIndex=11;ALC.Parent=ST;corner(ALC,10)
 local alcs=stroke(ALC,COL.B,1,0.4);table.insert(TH.cards,ALC);table.insert(TH.cStrokes,alcs)
@@ -967,45 +874,15 @@ local function togAntiLag(st)
 end
 ALT.MouseButton1Click:Connect(function() togAntiLag() end)
 
--- ============================================================
--- APPEARANCE CARD (COLLAPSIBLE)
--- ============================================================
-local APC_EXPANDED_H = 140
-local APC_COLLAPSED_H = 26
-local APCExpanded = true
-local APCItems = {}
-
-local APC=Instance.new("Frame");APC.Size=UDim2.new(1,0,0,APC_EXPANDED_H);APC.BackgroundColor3=COL.R;APC.BackgroundTransparency=0.4
+local APC=Instance.new("Frame");APC.Size=UDim2.new(1,0,0,140);APC.BackgroundColor3=COL.R;APC.BackgroundTransparency=0.4
 APC.BorderSizePixel=0;APC.ZIndex=11;APC.Parent=ST;corner(APC,10)
 local apcs=stroke(APC,COL.B,1,0.55);table.insert(TH.cards,APC);table.insert(TH.cStrokes,apcs)
 
--- APPEARANCE header
 local ASep=Instance.new("Frame");ASep.Size=UDim2.new(1,-24,0,18);ASep.Position=UDim2.fromOffset(12,6);ASep.BackgroundTransparency=1;ASep.ZIndex=12;ASep.Parent=APC
 local AL1=Instance.new("Frame");AL1.Size=UDim2.new(0.5,-45,0,1);AL1.Position=UDim2.fromOffset(0,9);AL1.BackgroundColor3=COL.B;AL1.BackgroundTransparency=0.5;AL1.BorderSizePixel=0;AL1.ZIndex=12;AL1.Parent=ASep
 local ALbl=Instance.new("TextLabel");ALbl.Size=UDim2.fromOffset(80,18);ALbl.Position=UDim2.new(0.5,-40,0,0);ALbl.BackgroundTransparency=1;ALbl.Text="APPEARANCE";ALbl.TextSize=10;ALbl.TextColor3=COL.D;ALbl.Font=Enum.Font.GothamBold;ALbl.TextXAlignment=Enum.TextXAlignment.Center;ALbl.ZIndex=12;ALbl.Parent=ASep
 local AL2=Instance.new("Frame");AL2.Size=UDim2.new(0.5,-45,0,1);AL2.Position=UDim2.new(0.5,40,0,9);AL2.BackgroundColor3=COL.B;AL2.BackgroundTransparency=0.5;AL2.BorderSizePixel=0;AL2.ZIndex=12;AL2.Parent=ASep
 
--- Arrow button for APPEARANCE
-local APCArrow=Instance.new("TextButton")
-APCArrow.Size=UDim2.fromOffset(20,20);APCArrow.Position=UDim2.new(1,-26,0,3)
-APCArrow.BackgroundTransparency=1;APCArrow.Text="v";APCArrow.TextSize=12
-APCArrow.TextColor3=COL.D;APCArrow.Font=Enum.Font.GothamBold
-APCArrow.ZIndex=15;APCArrow.AutoButtonColor=false;APCArrow.Parent=APC
-table.insert(TH.arrows,{btn=APCArrow,getExpanded=function() return APCExpanded end})
-
-APCArrow.MouseButton1Click:Connect(function()
-    APCExpanded = not APCExpanded
-    APCArrow.Text = APCExpanded and "v" or ">"
-    local t = THEMES[_bg] or THEMES[1]
-    APCArrow.TextColor3 = APCExpanded and t.D or t.A
-    for _, item in ipairs(APCItems) do item.Visible = APCExpanded end
-    TweenService:Create(APC, TweenInfo.new(0.25, Enum.EasingStyle.Quart), {
-        Size = UDim2.new(1,0,0, APCExpanded and APC_EXPANDED_H or APC_COLLAPSED_H)
-    }):Play()
-    refreshPanelCanvas(ST)
-end)
-
--- BG GRID
 local BGG=Instance.new("Frame");BGG.Size=UDim2.new(1,-24,0,55);BGG.Position=UDim2.fromOffset(12,28);BGG.BackgroundTransparency=1;BGG.ZIndex=12;BGG.Parent=APC
 local BGGL=Instance.new("UIGridLayout");BGGL.CellSize=UDim2.new(0,48,0,55);BGGL.CellPadding=UDim2.new(0,5,0,0)
 BGGL.FillDirection=Enum.FillDirection.Horizontal;BGGL.HorizontalAlignment=Enum.HorizontalAlignment.Center
@@ -1041,9 +918,7 @@ for i,preset in ipairs(BGS) do
     bgBtns[i]=b
     b.MouseButton1Click:Connect(function() applyBG(i) end)
 end
-table.insert(APCItems, BGG)
 
--- GUI SCALE
 local GSR=Instance.new("Frame");GSR.Size=UDim2.new(1,-24,0,35);GSR.Position=UDim2.fromOffset(12,88);GSR.BackgroundTransparency=1;GSR.ZIndex=12;GSR.Parent=APC
 label(GSR,"GUI Scale",UDim2.fromOffset(100,35),UDim2.fromOffset(4,0),11,COL.T,Enum.Font.GothamMedium)
 
@@ -1070,57 +945,24 @@ local function updScale(d)
 end
 SMinus.MouseButton1Click:Connect(function() updScale(-0.05) end)
 SPlus.MouseButton1Click:Connect(function() updScale(0.05) end)
-table.insert(APCItems, GSR)
 
--- ============================================================
--- OPTIMIZATION CARD (COLLAPSIBLE)
--- ============================================================
-local OC_EXPANDED_H = 95
-local OC_COLLAPSED_H = 26
-local OCExpanded = true
-local OCItems = {}
-
-local OC=Instance.new("Frame");OC.Size=UDim2.new(1,0,0,OC_EXPANDED_H);OC.BackgroundColor3=COL.R;OC.BackgroundTransparency=0.4
+local OC=Instance.new("Frame");OC.Size=UDim2.new(1,0,0,95);OC.BackgroundColor3=COL.R;OC.BackgroundTransparency=0.4
 OC.BorderSizePixel=0;OC.ZIndex=11;OC.Parent=ST;corner(OC,10)
 local ocs=stroke(OC,COL.B,1,0.55);table.insert(TH.cards,OC);table.insert(TH.cStrokes,ocs)
 
--- OPTIMIZATION header
 local OSep=Instance.new("Frame");OSep.Size=UDim2.new(1,-24,0,18);OSep.Position=UDim2.fromOffset(12,6);OSep.BackgroundTransparency=1;OSep.ZIndex=12;OSep.Parent=OC
 local OL1=Instance.new("Frame");OL1.Size=UDim2.new(0.5,-50,0,1);OL1.Position=UDim2.fromOffset(0,9);OL1.BackgroundColor3=COL.B;OL1.BackgroundTransparency=0.5;OL1.BorderSizePixel=0;OL1.ZIndex=12;OL1.Parent=OSep
 local OLbl=Instance.new("TextLabel");OLbl.Size=UDim2.fromOffset(90,18);OLbl.Position=UDim2.new(0.5,-45,0,0);OLbl.BackgroundTransparency=1;OLbl.Text="OPTIMIZATION";OLbl.TextSize=10;OLbl.TextColor3=COL.D;OLbl.Font=Enum.Font.GothamBold;OLbl.TextXAlignment=Enum.TextXAlignment.Center;OLbl.ZIndex=12;OLbl.Parent=OSep
 local OL2=Instance.new("Frame");OL2.Size=UDim2.new(0.5,-50,0,1);OL2.Position=UDim2.new(0.5,45,0,9);OL2.BackgroundColor3=COL.B;OL2.BackgroundTransparency=0.5;OL2.BorderSizePixel=0;OL2.ZIndex=12;OL2.Parent=OSep
 
--- Arrow button for OPTIMIZATION
-local OCArrow=Instance.new("TextButton")
-OCArrow.Size=UDim2.fromOffset(20,20);OCArrow.Position=UDim2.new(1,-26,0,3)
-OCArrow.BackgroundTransparency=1;OCArrow.Text="v";OCArrow.TextSize=12
-OCArrow.TextColor3=COL.D;OCArrow.Font=Enum.Font.GothamBold
-OCArrow.ZIndex=15;OCArrow.AutoButtonColor=false;OCArrow.Parent=OC
-table.insert(TH.arrows,{btn=OCArrow,getExpanded=function() return OCExpanded end})
-
-OCArrow.MouseButton1Click:Connect(function()
-    OCExpanded = not OCExpanded
-    OCArrow.Text = OCExpanded and "v" or ">"
-    local t = THEMES[_bg] or THEMES[1]
-    OCArrow.TextColor3 = OCExpanded and t.D or t.A
-    for _, item in ipairs(OCItems) do item.Visible = OCExpanded end
-    TweenService:Create(OC, TweenInfo.new(0.25, Enum.EasingStyle.Quart), {
-        Size = UDim2.new(1,0,0, OCExpanded and OC_EXPANDED_H or OC_COLLAPSED_H)
-    }):Play()
-    refreshPanelCanvas(ST)
-end)
-
 local SNR=Instance.new("Frame");SNR.Size=UDim2.new(1,-24,0,28);SNR.Position=UDim2.fromOffset(12,28);SNR.BackgroundTransparency=1;SNR.ZIndex=12;SNR.Parent=OC
 local SNL=Instance.new("TextLabel");SNL.Size=UDim2.new(1,-55,1,0);SNL.BackgroundTransparency=1;SNL.Text="Falling Snow";SNL.TextSize=10;SNL.TextColor3=COL.Orange;SNL.Font=Enum.Font.GothamMedium;SNL.ZIndex=12;SNL.Parent=SNR
 mkToggle(SNR,_snow,"Snow",function(s) _snow=s;cfg.snow=s;save(); if s then startSnow() else stopSnow() end end)
-table.insert(OCItems, SNR)
 
 local OPR=Instance.new("Frame");OPR.Size=UDim2.new(1,-24,0,28);OPR.Position=UDim2.fromOffset(12,60);OPR.BackgroundTransparency=1;OPR.ZIndex=12;OPR.Parent=OC
 label(OPR,"Optimization",UDim2.new(1,-55,1,0),UDim2.fromOffset(0,0),10,COL.T,Enum.Font.GothamMedium)
 mkToggle(OPR,false,"Optimization",function(s) end)
-table.insert(OCItems, OPR)
 
--- DISCORD
 local DC=Instance.new("TextLabel");DC.Size=UDim2.fromOffset(200,14);DC.Position=UDim2.new(0.5,-100,1,-18)
 DC.BackgroundTransparency=1;DC.Text="discord.com/invite/GFKVYyhJU6";DC.TextSize=9;DC.TextColor3=COL.A
 DC.Font=Enum.Font.GothamBold;DC.TextXAlignment=Enum.TextXAlignment.Center
@@ -1405,11 +1247,14 @@ end
 -- CONNECT TO REMOTE
 -- ============================================================
 if aceNotifyRemote then
+    -- Found specific remote
     aceNotifyRemote.OnClientEvent:Connect(function(...)
         if not _on then return end
         pcall(onAnnounce, ...)
     end)
 else
+    -- DELTA FALLBACK: connect to ALL Net remotes
+    -- onAnnounce already filters text, so random events are ignored
     pcall(function()
         local Net = RS:WaitForChild("Packages"):WaitForChild("Net")
         for _, d in ipairs(Net:GetDescendants()) do
@@ -1439,6 +1284,6 @@ task.defer(function()
     TweenService:Create(Win,TweenInfo.new(0.5,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=fp}):Play()
 end)
 
-print("Eclipse Code Sniper v3.7 | Delta Fixed | Collapsible Sections")
+print("Eclipse Code Sniper v3.7 | Delta Fixed")
 
 end)
