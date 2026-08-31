@@ -1,274 +1,219 @@
---[[
-    ECLIPSE CODE SNIPER v3.5 - FIXED VERSION
-    ==========================================
-    All compilation errors fixed
-    Variables properly ordered
-]]
+-- ECLIPSE CODE SNIPER v3.6 - DELTA COMPATIBLE
+-- Wrapped in pcall for safety
+pcall(function()
 
-local cloneref = cloneref or function(object) return object end
-local Players           = cloneref(game:GetService("Players"))
-local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
-local RunService        = cloneref(game:GetService("RunService"))
-local TweenService      = cloneref(game:GetService("TweenService"))
-local UserInputService  = cloneref(game:GetService("UserInputService"))
-local HttpService       = cloneref(game:GetService("HttpService"))
-local Lighting          = cloneref(game:GetService("Lighting"))
-local Workspace         = cloneref(game:GetService("Workspace"))
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local HS = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-if getgenv and getgenv().StopAura then pcall(getgenv().StopAura) end
-
--- ============================================================
 -- CONFIG
--- ============================================================
-local CONFIG_FILE = "ace_code_sniper_v3_config.json"
-local savedConfig = {
-    codeSniper = true, autoSubmit = true, submitAfter = 3,
-    retypeInvalid = false, riddleSolver = false,
-    autoCopyCode = false,
-    anchorEnabled = false, anchorKeybind = "Z",
-    autoBuyEnabled = false, autoBuyKeybind = "X",
-    fallingSnow = true, optimization = false,
-    antiLagEnabled = false, selectedBG = 1,
-    guiScale = 1.00,
+local CFG = "eclipse_sniper_cfg.json"
+local cfg = {
+    on=true, autoSubmit=true, submitAfter=3,
+    retypeInvalid=false, riddleSolver=false,
+    anchorOn=false, anchorKey="Z",
+    autoBuyOn=false, autoBuyKey="X",
+    snow=true, antiLag=false, bg=1, scale=1.0
 }
+
 pcall(function()
-    if type(isfile) == "function" and type(readfile) == "function" and isfile(CONFIG_FILE) then
-        local decoded = HttpService:JSONDecode(readfile(CONFIG_FILE))
-        if type(decoded) == "table" then
-            for k, v in pairs(decoded) do
-                if savedConfig[k] ~= nil and type(savedConfig[k]) == type(v) then savedConfig[k] = v end
+    if isfile and isfile(CFG) then
+        local d = HS:JSONDecode(readfile(CFG))
+        if type(d)=="table" then
+            for k,v in pairs(d) do
+                if cfg[k]~=nil and type(cfg[k])==type(v) then cfg[k]=v end
             end
         end
     end
 end)
 
-local function saveConfig()
-    if type(writefile) ~= "function" then return end
-    pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(savedConfig)) end)
+local function save()
+    pcall(function() writefile(CFG, HS:JSONEncode(cfg)) end)
 end
 
--- ============================================================
--- THEME SYSTEM (Define BEFORE any UI creation)
--- ============================================================
-local BG_PRESETS = {
-    {name = "Default", id = "rbxassetid://112002576136361"},
-    {name = "BG 1",    id = "rbxassetid://137990929651104"},
-    {name = "BG 2",    id = "rbxassetid://134141437615263"},
-    {name = "BG 3",    id = "rbxassetid://87198018304955"},
-    {name = "BG 4",    id = "rbxassetid://96622334167969"},
+-- HTTP
+local httpReq = (syn and syn.request) or (http and http.request) or request or http_request
+local RURL = "https://worker-wandering-cloud-e4b3.willamabantochavez.workers.dev"
+local RTOKEN = "x7k9m2p4r6t8v0w1y3z5a8b5c2d9e6f3g0h7"
+
+-- THEMES
+local BGS = {
+    {n="Default",id="rbxassetid://112002576136361"},
+    {n="BG 1",id="rbxassetid://137990929651104"},
+    {n="BG 2",id="rbxassetid://134141437615263"},
+    {n="BG 3",id="rbxassetid://87198018304955"},
+    {n="BG 4",id="rbxassetid://96622334167969"},
 }
 
-local BG_THEMES = {
+local THEMES = {
     {
-        Label = "Amber",
-        Window = Color3.fromRGB(12, 10, 7), Row = Color3.fromRGB(22, 18, 12),
-        Control = Color3.fromRGB(40, 30, 18), ControlHover = Color3.fromRGB(58, 44, 26),
-        Log = Color3.fromRGB(14, 11, 8), Border = Color3.fromRGB(95, 60, 22),
-        Accent = Color3.fromRGB(220, 140, 40), TabActive = Color3.fromRGB(255, 160, 50),
-        TabInactive = Color3.fromRGB(50, 38, 22), TabTextOn = Color3.fromRGB(255, 255, 255),
-        Dim = Color3.fromRGB(190, 180, 165), Text = Color3.fromRGB(235, 230, 220),
-        ConsoleAmber = "rgb(235,190,90)", ConsoleDim = "rgb(160,145,120)",
+        W=Color3.fromRGB(12,10,7),R=Color3.fromRGB(22,18,12),
+        C=Color3.fromRGB(40,30,18),CH=Color3.fromRGB(58,44,26),
+        L=Color3.fromRGB(14,11,8),B=Color3.fromRGB(95,60,22),
+        A=Color3.fromRGB(220,140,40),TA=Color3.fromRGB(255,160,50),
+        TI=Color3.fromRGB(50,38,22),TT=Color3.fromRGB(255,255,255),
+        D=Color3.fromRGB(190,180,165),T=Color3.fromRGB(235,230,220),
+        CA="rgb(235,190,90)",CD="rgb(160,145,120)",
     },
     {
-        Label = "Ocean Blue",
-        Window = Color3.fromRGB(6, 12, 22), Row = Color3.fromRGB(12, 22, 40),
-        Control = Color3.fromRGB(20, 40, 70), ControlHover = Color3.fromRGB(30, 55, 90),
-        Log = Color3.fromRGB(8, 16, 28), Border = Color3.fromRGB(35, 90, 160),
-        Accent = Color3.fromRGB(50, 150, 240), TabActive = Color3.fromRGB(60, 170, 255),
-        TabInactive = Color3.fromRGB(18, 35, 60), TabTextOn = Color3.fromRGB(255, 255, 255),
-        Dim = Color3.fromRGB(140, 170, 210), Text = Color3.fromRGB(200, 225, 255),
-        ConsoleAmber = "rgb(100,190,255)", ConsoleDim = "rgb(100,130,170)",
+        W=Color3.fromRGB(6,12,22),R=Color3.fromRGB(12,22,40),
+        C=Color3.fromRGB(20,40,70),CH=Color3.fromRGB(30,55,90),
+        L=Color3.fromRGB(8,16,28),B=Color3.fromRGB(35,90,160),
+        A=Color3.fromRGB(50,150,240),TA=Color3.fromRGB(60,170,255),
+        TI=Color3.fromRGB(18,35,60),TT=Color3.fromRGB(255,255,255),
+        D=Color3.fromRGB(140,170,210),T=Color3.fromRGB(200,225,255),
+        CA="rgb(100,190,255)",CD="rgb(100,130,170)",
     },
     {
-        Label = "Ultra Violet",
-        Window = Color3.fromRGB(10, 8, 18), Row = Color3.fromRGB(20, 15, 35),
-        Control = Color3.fromRGB(35, 25, 60), ControlHover = Color3.fromRGB(50, 38, 82),
-        Log = Color3.fromRGB(12, 10, 22), Border = Color3.fromRGB(80, 55, 140),
-        Accent = Color3.fromRGB(140, 80, 220), TabActive = Color3.fromRGB(110, 100, 230),
-        TabInactive = Color3.fromRGB(28, 20, 52), TabTextOn = Color3.fromRGB(255, 255, 255),
-        Dim = Color3.fromRGB(165, 150, 200), Text = Color3.fromRGB(220, 210, 255),
-        ConsoleAmber = "rgb(180,150,255)", ConsoleDim = "rgb(130,110,170)",
+        W=Color3.fromRGB(10,8,18),R=Color3.fromRGB(20,15,35),
+        C=Color3.fromRGB(35,25,60),CH=Color3.fromRGB(50,38,82),
+        L=Color3.fromRGB(12,10,22),B=Color3.fromRGB(80,55,140),
+        A=Color3.fromRGB(140,80,220),TA=Color3.fromRGB(110,100,230),
+        TI=Color3.fromRGB(28,20,52),TT=Color3.fromRGB(255,255,255),
+        D=Color3.fromRGB(165,150,200),T=Color3.fromRGB(220,210,255),
+        CA="rgb(180,150,255)",CD="rgb(130,110,170)",
     },
     {
-        Label = "Inferno",
-        Window = Color3.fromRGB(18, 6, 6), Row = Color3.fromRGB(35, 12, 12),
-        Control = Color3.fromRGB(60, 20, 20), ControlHover = Color3.fromRGB(82, 30, 30),
-        Log = Color3.fromRGB(22, 8, 8), Border = Color3.fromRGB(140, 40, 40),
-        Accent = Color3.fromRGB(235, 55, 55), TabActive = Color3.fromRGB(255, 70, 70),
-        TabInactive = Color3.fromRGB(55, 18, 18), TabTextOn = Color3.fromRGB(255, 255, 255),
-        Dim = Color3.fromRGB(200, 140, 140), Text = Color3.fromRGB(255, 210, 210),
-        ConsoleAmber = "rgb(255,140,140)", ConsoleDim = "rgb(170,100,100)",
+        W=Color3.fromRGB(18,6,6),R=Color3.fromRGB(35,12,12),
+        C=Color3.fromRGB(60,20,20),CH=Color3.fromRGB(82,30,30),
+        L=Color3.fromRGB(22,8,8),B=Color3.fromRGB(140,40,40),
+        A=Color3.fromRGB(235,55,55),TA=Color3.fromRGB(255,70,70),
+        TI=Color3.fromRGB(55,18,18),TT=Color3.fromRGB(255,255,255),
+        D=Color3.fromRGB(200,140,140),T=Color3.fromRGB(255,210,210),
+        CA="rgb(255,140,140)",CD="rgb(170,100,100)",
     },
     {
-        Label = "Blood",
-        Window = Color3.fromRGB(14, 4, 4), Row = Color3.fromRGB(25, 8, 8),
-        Control = Color3.fromRGB(45, 14, 14), ControlHover = Color3.fromRGB(62, 22, 22),
-        Log = Color3.fromRGB(16, 5, 5), Border = Color3.fromRGB(100, 25, 25),
-        Accent = Color3.fromRGB(170, 30, 30), TabActive = Color3.fromRGB(190, 40, 40),
-        TabInactive = Color3.fromRGB(40, 12, 12), TabTextOn = Color3.fromRGB(255, 230, 230),
-        Dim = Color3.fromRGB(175, 110, 110), Text = Color3.fromRGB(230, 180, 180),
-        ConsoleAmber = "rgb(200,100,100)", ConsoleDim = "rgb(140,80,80)",
+        W=Color3.fromRGB(14,4,4),R=Color3.fromRGB(25,8,8),
+        C=Color3.fromRGB(45,14,14),CH=Color3.fromRGB(62,22,22),
+        L=Color3.fromRGB(16,5,5),B=Color3.fromRGB(100,25,25),
+        A=Color3.fromRGB(170,30,30),TA=Color3.fromRGB(190,40,40),
+        TI=Color3.fromRGB(40,12,12),TT=Color3.fromRGB(255,230,230),
+        D=Color3.fromRGB(175,110,110),T=Color3.fromRGB(230,180,180),
+        CA="rgb(200,100,100)",CD="rgb(140,80,80)",
     },
 }
 
-local COLORS = {}
-local function copyTheme(t)
-    COLORS.Window = t.Window; COLORS.Row = t.Row; COLORS.Control = t.Control
-    COLORS.ControlHover = t.ControlHover; COLORS.Log = t.Log; COLORS.Border = t.Border
-    COLORS.Accent = t.Accent; COLORS.TabActive = t.TabActive; COLORS.TabInactive = t.TabInactive
-    COLORS.TabTextOn = t.TabTextOn; COLORS.Dim = t.Dim; COLORS.Text = t.Text
-    COLORS.White = Color3.fromRGB(255, 255, 255)
-    COLORS.Green = Color3.fromRGB(110, 225, 130)
-    COLORS.Red = Color3.fromRGB(240, 95, 95)
-    COLORS.Orange = Color3.fromRGB(255, 165, 0)
+local COL = {}
+local CCOL = {Dim="rgb(190,180,165)",Amber="rgb(235,190,90)",Green="rgb(110,225,130)",Red="rgb(240,95,95)",Cyan="rgb(235,230,220)"}
+
+local function setTheme(t)
+    COL.W=t.W;COL.R=t.R;COL.C=t.C;COL.CH=t.CH;COL.L=t.L;COL.B=t.B
+    COL.A=t.A;COL.TA=t.TA;COL.TI=t.TI;COL.TT=t.TT;COL.D=t.D;COL.T=t.T
+    COL.White=Color3.fromRGB(255,255,255)
+    COL.Green=Color3.fromRGB(110,225,130)
+    COL.Red=Color3.fromRGB(240,95,95)
+    COL.Orange=Color3.fromRGB(255,165,0)
+    CCOL.Amber=t.CA;CCOL.Dim=t.CD
 end
-copyTheme(BG_THEMES[1])
+setTheme(THEMES[1])
 
-local CONSOLE_COLORS = {
-    Dim   = "rgb(190,180,165)",
-    Amber = "rgb(235,190,90)",
-    Green = "rgb(110,225,130)",
-    Red   = "rgb(240,95,95)",
-    Cyan  = "rgb(235,230,220)",
-}
-
--- ============================================================
--- STATE VARIABLES (Define BEFORE UI)
--- ============================================================
-local _enabled = savedConfig.codeSniper
-local autoWriteEnabled = _enabled  -- IMPORTANT: Define this early
+-- STATE
+local _on = cfg.on
 local _seen = {}
 local _focused = nil
 local _lastBox = nil
-local _autoAccept = savedConfig.autoSubmit
-local _submitAfter = savedConfig.submitAfter
-local _capturedParts = {}
-local _lastWatchedBox = nil
-local _boxTextConn = nil
-local _boxAncestryConn = nil
-local _boxVisibilityConns = {}
-local _retypeInvalid = savedConfig.retypeInvalid
-local _riddleSolver = savedConfig.riddleSolver
-local _autoCopyCode = savedConfig.autoCopyCode
-local _lastNonBlankBoxText = ""
-local _pendingRejectedText = nil
-local _pendingRejectedBox = nil
-local _pendingRejectedUntil = 0
-local _pendingRejectedToken = 0
-local ACE_CASE_MODE = "EXACT"
-local ACE_WORD_COUNT = 1
-
-local _anchorEnabled = savedConfig.anchorEnabled
-local _anchorKeybind = savedConfig.anchorKeybind
-local _autoBuyEnabled = savedConfig.autoBuyEnabled
-local _autoBuyKeybind = savedConfig.autoBuyKeybind
-local _fallingSnow = savedConfig.fallingSnow
-local _optimization = savedConfig.optimization
-local _antiLagEnabled = savedConfig.antiLagEnabled
-local _selectedBG = savedConfig.selectedBG
-local _guiScale = savedConfig.guiScale
-local _anchorPosition = nil
-local _anchorConnection = nil
-local _anchorRespawnConn = nil
-local _autoBuyConnection = nil
-local _waitingForKeybind = nil
-local currentTab = "MAIN"  -- IMPORTANT: Define before theme application
-
-local getupvalues = (debug and debug.getupvalues) or getupvalues
-local getconns = getconnections or (debug and debug.getconnections)
-local setupv = (debug and debug.setupvalue) or setupvalue
-
-local httpRequest = (syn and syn.request) or (http and http.request) or request or http_request
-local RIDDLE_URL = "https://worker-wandering-cloud-e4b3.willamabantochavez.workers.dev"
-local RIDDLE_TOKEN = "x7k9m2p4r6t8v0w1y3z5a8b5c2d9e6f3g0h7"
+local _autoAccept = cfg.autoSubmit
+local _submitAfter = cfg.submitAfter
+local _parts = {}
+local _lastWatched = nil
+local _boxConn = nil
+local _boxAncConn = nil
+local _retype = cfg.retypeInvalid
+local _riddle = cfg.riddleSolver
+local _lastText = ""
+local _pendText = nil
+local _pendBox = nil
+local _pendUntil = 0
+local _pendToken = 0
+local _anchorOn = cfg.anchorOn
+local _anchorKey = cfg.anchorKey
+local _autoBuyOn = cfg.autoBuyOn
+local _autoBuyKey = cfg.autoBuyKey
+local _snow = cfg.snow
+local _antiLag = cfg.antiLag
+local _bg = cfg.bg
+local _scale = cfg.scale
+local _anchorPos = nil
+local _anchorConn = nil
+local _anchorRespawn = nil
+local _autoBuyConn = nil
+local _waitKey = nil
+local _curTab = "MAIN"
+local _lastMsg = nil
 local _solving = 0
-local _solvedCount = 0
-local _lastTypedSeq = 0
 local _riddleSeq = 0
-local _lastStatusMsg = nil
 
--- Forward declarations
-local setStatus, flashCode, appendToBox
-local rememberPendingSubmission, clearPendingSubmission, handleRedemptionFeedback
-local clearAceCapture
-local Console, ConsoleOutput, updateConsoleCanvas
-local featureStates = {}
-local themed = {}
-local tabPanels = {}
+-- FORWARD DECLARATIONS
+local setStatus, flashCode, appendBox, clearCapture
+local rememberPend, clearPend, handleFeedback
+local Console, ConsoleOut, updateCanvas
 
--- ============================================================
--- UTILITY FUNCTIONS
--- ============================================================
-local function normalizeCode(s)
-    return (tostring(s or "")):match("^%s*(.-)%s*$") or ""
-end
+-- HELPERS
+local function norm(s) return (tostring(s or "")):match("^%s*(.-)%s*$") or "" end
 
 local function aiPost(path, body)
-    if not httpRequest then return nil end
-    local ok, res = pcall(httpRequest, {
-        Url = RIDDLE_URL .. path,
-        Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json",
-            ["Authorization"] = "Bearer " .. RIDDLE_TOKEN,
-        },
-        Body = HttpService:JSONEncode(body),
+    if not httpReq then return nil end
+    local ok, res = pcall(httpReq, {
+        Url = RURL..path, Method = "POST",
+        Headers = {["Content-Type"]="application/json",["Authorization"]="Bearer "..RTOKEN},
+        Body = HS:JSONEncode(body),
     })
-    if not ok then return nil end
-    if type(res) ~= "table" then return nil end
+    if not ok or type(res)~="table" then return nil end
     local raw = res.Body or res.body
-    if type(raw) ~= "string" then return nil end
-    local okd, data = pcall(function() return HttpService:JSONDecode(raw) end)
-    if not okd then return nil end
-    if type(data) == "table" and data.error then return nil end
+    if type(raw)~="string" then return nil end
+    local ok2, data = pcall(function() return HS:JSONDecode(raw) end)
+    if not ok2 or type(data)~="table" then return nil end
+    if data.error then return nil end
     return data
 end
 
-local function isOurGui(instance)
-    local p = instance
-    for _ = 1, 10 do
+local function isOurs(inst)
+    local p = inst
+    for _=1,10 do
         if not p then break end
-        if p.Name == "ACECodeSniperUI" then return true end
+        if p.Name=="EclipseSniperUI" then return true end
         p = p.Parent
     end
     return false
 end
 
-local function isVisibleChain(inst)
-    local current = inst
-    while current do
-        if current:IsA("GuiObject") and not current.Visible then return false end
-        if current:IsA("ScreenGui") then return current.Enabled end
-        current = current.Parent
+local function visChain(inst)
+    local c = inst
+    while c do
+        if c:IsA("GuiObject") and not c.Visible then return false end
+        if c:IsA("ScreenGui") then return c.Enabled end
+        c = c.Parent
     end
     return true
 end
 
-local function findAllTextBoxes(pg)
+local function findBoxes(pg)
     local boxes = {}
-    for _, gui in ipairs(pg:GetChildren()) do
-        if gui:IsA("ScreenGui") and gui.Enabled and not isOurGui(gui) then
-            for _, d in ipairs(gui:GetDescendants()) do
-                if d:IsA("TextBox") and not isOurGui(d) then
-                    boxes[#boxes+1] = d
-                end
+    for _,g in ipairs(pg:GetChildren()) do
+        if g:IsA("ScreenGui") and g.Enabled and not isOurs(g) then
+            for _,d in ipairs(g:GetDescendants()) do
+                if d:IsA("TextBox") and not isOurs(d) then boxes[#boxes+1]=d end
             end
         end
     end
     return boxes
 end
 
-local function findCodeButtons(pg)
+local function findBtns(pg)
     local btns = {}
-    for _, gui in ipairs(pg:GetChildren()) do
-        if gui:IsA("ScreenGui") and gui.Enabled and not isOurGui(gui) then
-            for _, d in ipairs(gui:GetDescendants()) do
-                if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) then
+    for _,g in ipairs(pg:GetChildren()) do
+        if g:IsA("ScreenGui") and g.Enabled and not isOurs(g) then
+            for _,d in ipairs(g:GetDescendants()) do
+                if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurs(d) then
                     local n = d.Name:lower()
                     local pn = (d.Parent and d.Parent.Name or ""):lower()
-                    if (n:find("code") or n:find("redeem") or pn:find("code") or pn:find("redeem")) and isVisibleChain(d) then
+                    if (n:find("code") or n:find("redeem") or pn:find("code") or pn:find("redeem")) and visChain(d) then
                         btns[#btns+1] = d
                     end
                 end
@@ -278,1933 +223,953 @@ local function findCodeButtons(pg)
     return btns
 end
 
-local function clickButton(btn)
+local function clickBtn(btn)
     if not btn then return false end
-    local methods = {
-        function() btn.MouseButton1Click:Fire() end,
-        function() btn.Activated:Fire() end,
-    }
-    if typeof(firesignal) == "function" then
-        methods[#methods+1] = function() firesignal(btn.MouseButton1Click) end
-        methods[#methods+1] = function() firesignal(btn.Activated) end
-    end
-    if typeof(getconns) == "function" then
-        methods[#methods+1] = function()
-            local ok, cs = pcall(getconns, btn.MouseButton1Click)
-            if ok and type(cs) == "table" then
-                for _, c in ipairs(cs) do pcall(function() c:Fire() end) end
-            end
-        end
-    end
-    if typeof(fireclick) == "function" then
-        methods[#methods+1] = function() fireclick(btn) end
-    end
-    local anyOk = false
-    for _, fn in ipairs(methods) do
-        local ok = pcall(fn)
-        anyOk = anyOk or ok
-    end
-    return anyOk
+    local ok = false
+    pcall(function() btn.MouseButton1Click:Fire(); ok=true end)
+    pcall(function() btn.Activated:Fire(); ok=true end)
+    if firesignal then pcall(function() firesignal(btn.MouseButton1Click); ok=true end) end
+    if fireclick then pcall(function() fireclick(btn); ok=true end) end
+    return ok
 end
 
-local function fireBoxFocusLost(box)
+local function fireFocusLost(box)
     if not box then return false end
-    local anyFired = false
-    if typeof(firesignal) == "function" then
-        local ok = pcall(firesignal, box.FocusLost, true)
-        anyFired = anyFired or ok
-    end
-    if typeof(getconns) == "function" then
-        local ok, cs = pcall(getconns, box.FocusLost)
-        if ok and type(cs) == "table" then
-            for _, c in ipairs(cs) do
-                local fOk = pcall(function()
-                    if c.Enabled ~= false then c:Fire(true) end
-                end)
-                anyFired = anyFired or fOk
-            end
-        end
-    end
-    return anyFired
+    local ok = false
+    if firesignal then pcall(function() firesignal(box.FocusLost,true); ok=true end) end
+    return ok
 end
 
-local function typeAndSubmitCode(code)
-    local pg = playerGui or player:FindFirstChild("PlayerGui")
-    if not pg then return false, "no PlayerGui" end
+local function submitCode(code)
+    local pg = playerGui
+    if not pg then return false,"no pg" end
 
-    local codesGui = pg:FindFirstChild("Codes")
-    if codesGui then
-        if codesGui:IsA("ScreenGui") then codesGui.Enabled = true end
-        local codesFrame = codesGui:FindFirstChild("Codes") or codesGui
-        if codesFrame then
-            if codesFrame:IsA("GuiObject") then codesFrame.Visible = true end
-
-            local box = nil
-            for _, d in ipairs(codesFrame:GetDescendants()) do
-                if d:IsA("TextBox") and not isOurGui(d) then
-                    box = d
-                    break
+    local cg = pg:FindFirstChild("Codes")
+    if cg then
+        if cg:IsA("ScreenGui") then cg.Enabled=true end
+        local cf = cg:FindFirstChild("Codes") or cg
+        if cf then
+            if cf:IsA("GuiObject") then cf.Visible=true end
+            local box,sub = nil,nil
+            for _,d in ipairs(cf:GetDescendants()) do
+                if d:IsA("TextBox") and not isOurs(d) then box=d; break end
+            end
+            for _,d in ipairs(cf:GetDescendants()) do
+                if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurs(d) then
+                    local n=d.Name:lower()
+                    if n:find("submit") or n:find("redeem") then sub=d; break end
                 end
             end
-
-            local submitBtn = nil
-            for _, d in ipairs(codesFrame:GetDescendants()) do
-                if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) then
-                    local n = d.Name:lower()
-                    local txt = ""
-                    pcall(function() txt = d.Text:lower() end)
-                    if n:find("submit") or txt:find("submit") or n:find("redeem") or txt:find("redeem") then
-                        submitBtn = d
-                        break
-                    end
-                end
-            end
-
             if box then
-                pcall(function() box.Text = code end)
+                pcall(function() box.Text=code end)
                 task.wait(0.05)
-                if submitBtn then clickButton(submitBtn) end
-                fireBoxFocusLost(box)
-                return true, "submitted"
+                if sub then clickBtn(sub) end
+                fireFocusLost(box)
+                return true,"ok"
             end
         end
     end
 
-    local btns = findCodeButtons(pg)
-    for _, btn in ipairs(btns) do
-        clickButton(btn)
-        task.wait(0.05)
-    end
-
+    local btns = findBtns(pg)
+    for _,b in ipairs(btns) do clickBtn(b); task.wait(0.05) end
     task.wait(0.2)
 
     local box = nil
-    local deadline = tick() + 2
-    while tick() < deadline do
-        local allBoxes = findAllTextBoxes(pg)
-        for _, d in ipairs(allBoxes) do
-            if isVisibleChain(d) then
-                box = d
-                break
-            end
+    local dl = tick()+2
+    while tick()<dl do
+        for _,d in ipairs(findBoxes(pg)) do
+            if visChain(d) then box=d; break end
         end
         if box then break end
         task.wait(0.1)
     end
+    if not box then return false,"no box" end
 
-    if not box then return false, "no codebox visible" end
-
-    pcall(function() box.Text = code end)
+    pcall(function() box.Text=code end)
     task.wait(0.05)
 
-    local redeemBtn = nil
-    local searchNames = {"submit","redeem","claim","confirm","enter","send","apply","ok","use","go","check"}
+    local rBtn = nil
+    local names = {"submit","redeem","claim","confirm","enter","send","apply","ok","use","go","check"}
     local p = box.Parent
-    for _ = 1, 8 do
+    for _=1,8 do
         if not p then break end
-        for _, d in ipairs(p:GetDescendants()) do
-            if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) and d ~= box then
-                local n = d.Name:lower()
-                local txt = ""
-                pcall(function() txt = d.Text:lower() end)
-                for _, sn in ipairs(searchNames) do
-                    if n:find(sn) or txt:find(sn) then
-                        if isVisibleChain(d) then
-                            redeemBtn = d
-                            break
-                        end
-                    end
+        for _,d in ipairs(p:GetDescendants()) do
+            if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurs(d) and d~=box then
+                local n=d.Name:lower()
+                local txt=""
+                pcall(function() txt=d.Text:lower() end)
+                for _,sn in ipairs(names) do
+                    if (n:find(sn) or txt:find(sn)) and visChain(d) then rBtn=d; break end
                 end
-                if redeemBtn then break end
+                if rBtn then break end
             end
         end
-        if redeemBtn then break end
+        if rBtn then break end
         p = p.Parent
     end
 
-    if redeemBtn then clickButton(redeemBtn) end
-    fireBoxFocusLost(box)
-
-    return true, "submitted via dynamic search"
+    if rBtn then clickBtn(rBtn) end
+    fireFocusLost(box)
+    return true,"dynamic"
 end
 
-local function aceCodeBox()
-    local pg = playerGui
-    local allBoxes = findAllTextBoxes(pg)
-    for _, box in ipairs(allBoxes) do
-        if isVisibleChain(box) then return box end
+local function aceBox()
+    for _,b in ipairs(findBoxes(playerGui)) do
+        if visChain(b) then return b end
     end
     return nil
 end
 
--- ============================================================
 -- UI HELPERS
--- ============================================================
-local function addCorner(parent, radius)
-    local value = Instance.new("UICorner")
-    value.CornerRadius = UDim.new(0, radius)
-    value.Parent = parent
-    return value
+local function corner(p,r)
+    local c=Instance.new("UICorner");c.CornerRadius=UDim.new(0,r);c.Parent=p;return c
+end
+local function stroke(p,col,t,tr)
+    local s=Instance.new("UIStroke");s.ApplyStrokeMode=Enum.ApplyStrokeMode.Border
+    s.Color=col;s.Thickness=t or 1;s.Transparency=tr or 0;s.Parent=p;return s
+end
+local function label(p,txt,sz,pos,ts,col,fnt)
+    local l=Instance.new("TextLabel");l.Size=sz;l.Position=pos;l.BackgroundTransparency=1
+    l.Text=txt;l.TextSize=ts;l.TextColor3=col;l.Font=fnt or Enum.Font.GothamMedium
+    l.TextXAlignment=Enum.TextXAlignment.Left;l.TextYAlignment=Enum.TextYAlignment.Center
+    l.ZIndex=10;l.Parent=p;return l
 end
 
-local function addStroke(parent, color, thickness, transparency)
-    local value = Instance.new("UIStroke")
-    value.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    value.Color = color
-    value.Thickness = thickness or 1
-    value.Transparency = transparency or 0
-    value.Parent = parent
-    return value
-end
-
-local function makeLabel(parent, text, size, position, textSize, color, font)
-    local label = Instance.new("TextLabel")
-    label.Size = size
-    label.Position = position
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextSize = textSize
-    label.TextColor3 = color
-    label.Font = font or Enum.Font.GothamMedium
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextYAlignment = Enum.TextYAlignment.Center
-    label.ZIndex = 10
-    label.Parent = parent
-    return label
-end
-
-local function scrollConsoleToBottom()
-    task.defer(function()
-        task.wait()
-        if not Console then return end
-        if updateConsoleCanvas then updateConsoleCanvas() end
-        local bottom = math.max(0, Console.AbsoluteCanvasSize.Y - Console.AbsoluteWindowSize.Y)
-        Console.CanvasPosition = Vector2.new(0, bottom)
-    end)
-end
-
-local function appendConsoleStatus(name, activated)
-    if not ConsoleOutput then return end
-    local state = activated and "ON" or "OFF"
-    local stateColor = activated and CONSOLE_COLORS.Green or CONSOLE_COLORS.Red
-    local line = '<font color="' .. CONSOLE_COLORS.Dim .. '">[setting]</font> '
-        .. '<font color="' .. CONSOLE_COLORS.Amber .. '">' .. name .. "</font> "
-        .. '<font color="' .. CONSOLE_COLORS.Dim .. '">-&gt;</font> '
-        .. '<font color="' .. stateColor .. '">' .. state .. "</font>"
-    if ConsoleOutput.Text == "" then ConsoleOutput.Text = line
-    else ConsoleOutput.Text = ConsoleOutput.Text .. "\n\n" .. line end
-    scrollConsoleToBottom()
-end
-
--- ============================================================
--- CLEANUP PREVIOUS
--- ============================================================
+-- CLEANUP
 pcall(function()
-    for _, name in ipairs({"ACECodeSniperUI"}) do
-        local previous = game.CoreGui:FindFirstChild(name)
-        if previous then previous:Destroy() end
-    end
+    local old = game.CoreGui:FindFirstChild("EclipseSniperUI")
+    if old then old:Destroy() end
 end)
-for _, name in ipairs({"ACECodeSniperUI"}) do
-    local previous = playerGui:FindFirstChild(name)
-    if previous then previous:Destroy() end
-end
+pcall(function()
+    local old = playerGui:FindFirstChild("EclipseSniperUI")
+    if old then old:Destroy() end
+end)
 
--- ============================================================
--- CREATE GUI
--- ============================================================
+-- GUI
 local GUI = Instance.new("ScreenGui")
-GUI.Name = "ACECodeSniperUI"
+GUI.Name = "EclipseSniperUI"
 GUI.ResetOnSpawn = false
 GUI.IgnoreGuiInset = true
 GUI.DisplayOrder = 999
-if not pcall(function() GUI.Parent = game.CoreGui end) then GUI.Parent = playerGui end
+pcall(function() GUI.Parent = game.CoreGui end)
+if not GUI.Parent then GUI.Parent = playerGui end
 
-local Window = Instance.new("Frame")
-Window.Name = "Window"
-Window.Size = UDim2.fromOffset(320, 480)
-Window.AnchorPoint = Vector2.new(1, 0)
-Window.Position = UDim2.new(1, -8, 0, 8)
-Window.BackgroundColor3 = COLORS.Window
-Window.BorderSizePixel = 0
-Window.ClipsDescendants = true
-Window.Parent = GUI
-addCorner(Window, 14)
-addStroke(Window, COLORS.Accent, 4, 0.85)
-addStroke(Window, COLORS.Accent, 1, 0.35)
+local Win = Instance.new("Frame")
+Win.Name="W";Win.Size=UDim2.fromOffset(320,480)
+Win.AnchorPoint=Vector2.new(1,0);Win.Position=UDim2.new(1,-8,0,8)
+Win.BackgroundColor3=COL.W;Win.BorderSizePixel=0;Win.ClipsDescendants=true
+Win.Parent=GUI;corner(Win,14);stroke(Win,COL.A,4,0.85);stroke(Win,COL.A,1,0.35)
 
-local InterfaceScale = Instance.new("UIScale")
-InterfaceScale.Scale = _guiScale
-InterfaceScale.Parent = Window
+local Scale = Instance.new("UIScale");Scale.Scale=_scale;Scale.Parent=Win
 
-local BackgroundImage = Instance.new("ImageLabel")
-BackgroundImage.Name = "ACEBackground"
-BackgroundImage.Size = UDim2.new(1, 0, 1, 0)
-BackgroundImage.BackgroundTransparency = 1
-BackgroundImage.Image = BG_PRESETS[_selectedBG].id
-BackgroundImage.ScaleType = Enum.ScaleType.Crop
-BackgroundImage.ZIndex = 1
-BackgroundImage.Parent = Window
-addCorner(BackgroundImage, 14)
+local BG = Instance.new("ImageLabel")
+BG.Size=UDim2.fromScale(1,1);BG.BackgroundTransparency=1
+BG.Image=BGS[_bg].id;BG.ScaleType=Enum.ScaleType.Crop;BG.ZIndex=1;BG.Parent=Win;corner(BG,14)
 
-local BackgroundOverlay = Instance.new("Frame")
-BackgroundOverlay.Name = "BackgroundOverlay"
-BackgroundOverlay.Size = UDim2.new(1, 0, 1, 0)
-BackgroundOverlay.BackgroundColor3 = Color3.fromRGB(10, 7, 3)
-BackgroundOverlay.BackgroundTransparency = 0.22
-BackgroundOverlay.BorderSizePixel = 0
-BackgroundOverlay.ZIndex = 2
-BackgroundOverlay.Parent = Window
-addCorner(BackgroundOverlay, 14)
+local Overlay = Instance.new("Frame")
+Overlay.Size=UDim2.fromScale(1,1);Overlay.BackgroundColor3=Color3.fromRGB(10,7,3)
+Overlay.BackgroundTransparency=0.22;Overlay.BorderSizePixel=0;Overlay.ZIndex=2;Overlay.Parent=Win;corner(Overlay,14)
 
--- Theme tracking
-themed = {
-    windowFrame = Window, windowStrokes = {}, bgOverlay = BackgroundOverlay,
-    headerAccent = nil, autoWriteBtn = nil, autoWriteStroke = nil,
-    tabButtons = {}, tabStrokes = {}, cards = {}, cardStrokes = {},
-    toggleButtons = {}, toggleStrokes = {},
-    counterShell = nil, counterStroke = nil, counterBtns = {},
-    consoleFrame = nil, consoleStroke = nil,
-    keybindFrames = {}, keybindStrokes = {}, keybindLabels = {},
-    bgButtons = {}, bgStrokes = {},
-    discordLabel = nil, farmTitle = nil, settingsTitle = nil,
-}
+-- THEME TRACKING
+local TH = {wStrokes={},cards={},cStrokes={},toggles={},tStrokes={},kFrames={},kStrokes={},kLabels={},bgBtns={},bgStrokes={},tabBtns={},tabStrokes={},cBtns={}}
 
--- ============================================================
--- THEME APPLICATION
--- ============================================================
-local function applyFullTheme(index)
-    local t = BG_THEMES[index] or BG_THEMES[1]
-    copyTheme(t)
-    local ti = TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-    CONSOLE_COLORS.Amber = t.ConsoleAmber
-    CONSOLE_COLORS.Dim = t.ConsoleDim
-    
-    if themed.windowFrame then TweenService:Create(themed.windowFrame, ti, {BackgroundColor3 = t.Window}):Play() end
-    for _, s in ipairs(themed.windowStrokes) do TweenService:Create(s, ti, {Color = t.Accent}):Play() end
-    if themed.bgOverlay then TweenService:Create(themed.bgOverlay, ti, {BackgroundColor3 = t.Window}):Play() end
-    if themed.headerAccent then TweenService:Create(themed.headerAccent, ti, {BackgroundColor3 = t.Accent}):Play() end
-    
-    for _, c in ipairs(themed.cards) do TweenService:Create(c, ti, {BackgroundColor3 = t.Row}):Play() end
-    for _, s in ipairs(themed.cardStrokes) do TweenService:Create(s, ti, {Color = t.Border}):Play() end
-    
-    for _, data in ipairs(themed.toggleButtons) do
-        if data.btn then
-            local isOn = data.isOn()
-            TweenService:Create(data.btn, ti, {BackgroundColor3 = isOn and t.Accent or t.Control, TextColor3 = isOn and t.TabTextOn or t.Dim}):Play()
-        end
+local function applyTheme(idx)
+    local t=THEMES[idx] or THEMES[1]; setTheme(t)
+    local ti=TweenInfo.new(0.4,Enum.EasingStyle.Quart,Enum.EasingDirection.Out)
+    TweenService:Create(Win,ti,{BackgroundColor3=t.W}):Play()
+    for _,s in ipairs(TH.wStrokes) do TweenService:Create(s,ti,{Color=t.A}):Play() end
+    TweenService:Create(Overlay,ti,{BackgroundColor3=t.W}):Play()
+    for _,c in ipairs(TH.cards) do TweenService:Create(c,ti,{BackgroundColor3=t.R}):Play() end
+    for _,s in ipairs(TH.cStrokes) do TweenService:Create(s,ti,{Color=t.B}):Play() end
+    for _,d in ipairs(TH.toggles) do
+        if d.b then local on=d.on();TweenService:Create(d.b,ti,{BackgroundColor3=on and t.A or t.C,TextColor3=on and t.TT or t.D}):Play() end
     end
-    for _, data in ipairs(themed.toggleStrokes) do
-        if data.stroke then TweenService:Create(data.stroke, ti, {Color = data.isOn() and t.Accent or t.Border}):Play() end
+    for _,d in ipairs(TH.tStrokes) do
+        if d.s then TweenService:Create(d.s,ti,{Color=d.on() and t.A or t.B}):Play() end
     end
-    
-    if themed.consoleFrame then TweenService:Create(themed.consoleFrame, ti, {BackgroundColor3 = t.Log}):Play() end
-    if themed.consoleStroke then TweenService:Create(themed.consoleStroke, ti, {Color = t.Border}):Play() end
-    
-    for _, f in ipairs(themed.keybindFrames) do TweenService:Create(f, ti, {BackgroundColor3 = t.Control}):Play() end
-    for _, s in ipairs(themed.keybindStrokes) do TweenService:Create(s, ti, {Color = t.Accent}):Play() end
-    for _, l in ipairs(themed.keybindLabels) do TweenService:Create(l, ti, {TextColor3 = t.Accent}):Play() end
-    
-    for name, btn in pairs(themed.tabButtons) do
-        local isActive = (name == currentTab)
-        TweenService:Create(btn, ti, {BackgroundColor3 = isActive and t.TabActive or t.TabInactive, TextColor3 = isActive and t.TabTextOn or t.Dim}):Play()
-        local s = themed.tabStrokes[name]
-        if s then TweenService:Create(s, ti, {Color = isActive and t.TabActive or t.Border, Transparency = isActive and 0.3 or 0.6}):Play() end
+    for _,f in ipairs(TH.kFrames) do TweenService:Create(f,ti,{BackgroundColor3=t.C}):Play() end
+    for _,s in ipairs(TH.kStrokes) do TweenService:Create(s,ti,{Color=t.A}):Play() end
+    for _,l in ipairs(TH.kLabels) do TweenService:Create(l,ti,{TextColor3=t.A}):Play() end
+    for n,b in pairs(TH.tabBtns) do
+        local a=(n==_curTab)
+        TweenService:Create(b,ti,{BackgroundColor3=a and t.TA or t.TI,TextColor3=a and t.TT or t.D}):Play()
+        local s=TH.tabStrokes[n];if s then TweenService:Create(s,ti,{Color=a and t.TA or t.B,Transparency=a and 0.3 or 0.6}):Play() end
     end
-    
-    for idx, b in pairs(themed.bgButtons) do TweenService:Create(b, ti, {BackgroundColor3 = (idx == index) and t.Accent or t.Control}):Play() end
-    for idx, s in pairs(themed.bgStrokes) do TweenService:Create(s, ti, {Color = (idx == index) and t.Accent or t.Border, Transparency = (idx == index) and 0.2 or 0.7}):Play() end
-    
-    if themed.discordLabel then TweenService:Create(themed.discordLabel, ti, {TextColor3 = t.Accent}):Play() end
-    if themed.farmTitle then TweenService:Create(themed.farmTitle, ti, {TextColor3 = t.Accent}):Play() end
-    if themed.settingsTitle then TweenService:Create(themed.settingsTitle, ti, {TextColor3 = t.Accent}):Play() end
-    if Console then TweenService:Create(Console, ti, {ScrollBarImageColor3 = t.Dim}):Play() end
+    for i,b in pairs(TH.bgBtns) do TweenService:Create(b,ti,{BackgroundColor3=(i==idx)and t.A or t.C}):Play() end
+    for i,s in pairs(TH.bgStrokes) do TweenService:Create(s,ti,{Color=(i==idx)and t.A or t.B,Transparency=(i==idx)and 0.2 or 0.7}):Play() end
+    for _,b in ipairs(TH.cBtns) do TweenService:Create(b,ti,{BackgroundColor3=t.C,TextColor3=t.T}):Play() end
+    if Console then TweenService:Create(Console,ti,{ScrollBarImageColor3=t.D}):Play() end
 end
 
--- ============================================================
--- HEADER
--- ============================================================
-local Header = Instance.new("Frame")
-Header.Name = "Header"
-Header.Size = UDim2.new(1, 0, 0, 44)
-Header.BackgroundTransparency = 1
-Header.Active = true
-Header.ZIndex = 5
-Header.Parent = Window
-
-local BrandMark = Instance.new("Frame")
-BrandMark.Size = UDim2.fromOffset(26, 26)
-BrandMark.Position = UDim2.fromOffset(10, 9)
-BrandMark.BackgroundTransparency = 1
-BrandMark.ZIndex = 6
-BrandMark.Parent = Window
-addCorner(BrandMark, 13)
-
-local BrandImage = Instance.new("ImageLabel")
-BrandImage.Size = UDim2.fromScale(1, 1)
-BrandImage.BackgroundTransparency = 1
-BrandImage.Image = "rbxassetid://104937666038724"
-BrandImage.ScaleType = Enum.ScaleType.Fit
-BrandImage.ZIndex = 7
-BrandImage.Parent = BrandMark
-addCorner(BrandImage, 13)
-
-makeLabel(Header, "Eclipse Code Sniper", UDim2.fromOffset(180, 20), UDim2.fromOffset(42, 2), 12, COLORS.White, Enum.Font.GothamBold)
-
--- Minus Button
-local MinusButton = Instance.new("TextButton")
-MinusButton.Name = "Minus"
-MinusButton.Size = UDim2.fromOffset(28, 28)
-MinusButton.Position = UDim2.new(1, -110, 0, 8)
-MinusButton.BackgroundColor3 = COLORS.Control
-MinusButton.BorderSizePixel = 0
-MinusButton.AutoButtonColor = false
-MinusButton.Text = "—"
-MinusButton.TextSize = 14
-MinusButton.TextColor3 = COLORS.Dim
-MinusButton.Font = Enum.Font.GothamBold
-MinusButton.ZIndex = 8
-MinusButton.Parent = Header
-addCorner(MinusButton, 8)
-addStroke(MinusButton, COLORS.Border, 1, 0.6)
-
--- Main Toggle
-local AutoWriteButton = Instance.new("TextButton")
-AutoWriteButton.Name = "AutoWrite"
-AutoWriteButton.Size = UDim2.fromOffset(68, 28)
-AutoWriteButton.Position = UDim2.new(1, -76, 0, 8)
-AutoWriteButton.BackgroundColor3 = autoWriteEnabled and COLORS.Accent or COLORS.Control
-AutoWriteButton.BorderSizePixel = 0
-AutoWriteButton.AutoButtonColor = false
-AutoWriteButton.Text = ""
-AutoWriteButton.ZIndex = 8
-AutoWriteButton.Parent = Header
-addCorner(AutoWriteButton, 14)
-themed.autoWriteBtn = AutoWriteButton
-
-local AutoWriteStroke = addStroke(AutoWriteButton, autoWriteEnabled and COLORS.Accent or COLORS.Border, 1, 0.5)
-themed.autoWriteStroke = AutoWriteStroke
-
-local AutoWriteKnob = Instance.new("Frame")
-AutoWriteKnob.Size = UDim2.fromOffset(22, 22)
-AutoWriteKnob.Position = autoWriteEnabled and UDim2.new(1, -25, 0.5, -11) or UDim2.new(0, 3, 0.5, -11)
-AutoWriteKnob.BackgroundColor3 = COLORS.Window
-AutoWriteKnob.ZIndex = 9
-AutoWriteKnob.Parent = AutoWriteButton
-addCorner(AutoWriteKnob, 11)
-
-local lastToggleTime = 0
-local function toggleAutoWrite()
-    if tick() - lastToggleTime < 0.15 then return end
-    lastToggleTime = tick()
-    autoWriteEnabled = not autoWriteEnabled
-    _enabled = autoWriteEnabled
-    if not autoWriteEnabled and clearAceCapture then clearAceCapture() end
-    savedConfig.codeSniper = autoWriteEnabled
-    saveConfig()
-    _lastStatusMsg = nil
-    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
-    AutoWriteButton.BackgroundColor3 = autoWriteEnabled and t.Accent or t.Control
-    AutoWriteStroke.Color = autoWriteEnabled and t.Accent or t.Border
-    AutoWriteStroke.Transparency = autoWriteEnabled and 0.5 or 0.7
-    AutoWriteKnob.BackgroundColor3 = autoWriteEnabled and t.Window or COLORS.White
-    AutoWriteKnob.Position = autoWriteEnabled and UDim2.new(1, -25, 0.5, -11) or UDim2.new(0, 3, 0.5, -11)
-    if ConsoleOutput then
-        if autoWriteEnabled then
-            ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Amber .. '">&gt;</font> <font color="' .. CONSOLE_COLORS.Dim .. '">scanning for codes...</font>'
-        else
-            ConsoleOutput.Text = '<font color="' .. CONSOLE_COLORS.Dim .. '">status:</font> <font color="' .. CONSOLE_COLORS.Red .. '">OFF</font>'
-        end
-        scrollConsoleToBottom()
-    end
-end
-
-AutoWriteButton.Activated:Connect(toggleAutoWrite)
-AutoWriteButton.MouseButton1Click:Connect(toggleAutoWrite)
-
--- Header Accent
-local HeaderAccent = Instance.new("Frame")
-HeaderAccent.Size = UDim2.new(1, -20, 0, 1)
-HeaderAccent.Position = UDim2.fromOffset(10, 40)
-HeaderAccent.BackgroundColor3 = COLORS.Accent
-HeaderAccent.BackgroundTransparency = 0.45
-HeaderAccent.BorderSizePixel = 0
-HeaderAccent.ZIndex = 5
-HeaderAccent.Parent = Header
-themed.headerAccent = HeaderAccent
-
--- ============================================================
--- TAB BAR
--- ============================================================
-local TabBar = Instance.new("Frame")
-TabBar.Size = UDim2.new(1, 0, 0, 28)
-TabBar.Position = UDim2.fromOffset(0, 46)
-TabBar.BackgroundTransparency = 1
-TabBar.ZIndex = 5
-TabBar.Parent = Window
-local TabLayout = Instance.new("UIListLayout")
-TabLayout.FillDirection = Enum.FillDirection.Horizontal
-TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-TabLayout.Padding = UDim.new(0, 3)
-TabLayout.Parent = TabBar
-
-local function createTabButton(name)
-    local btn = Instance.new("TextButton")
-    btn.Name = name
-    btn.Size = UDim2.fromOffset(98, 24)
-    btn.BackgroundColor3 = name == "MAIN" and COLORS.TabActive or COLORS.TabInactive
-    btn.BorderSizePixel = 0
-    btn.AutoButtonColor = false
-    btn.Text = name
-    btn.TextSize = 10
-    btn.TextColor3 = name == "MAIN" and COLORS.TabTextOn or COLORS.Dim
-    btn.Font = Enum.Font.GothamBold
-    btn.ZIndex = 6
-    btn.Parent = TabBar
-    addCorner(btn, 6)
-    local ts = addStroke(btn, name == "MAIN" and COLORS.TabActive or COLORS.Border, 1, name == "MAIN" and 0.3 or 0.6)
-    themed.tabButtons[name] = btn
-    themed.tabStrokes[name] = ts
-    btn.Activated:Connect(function()
-        if currentTab == name then return end
-        local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
-        if themed.tabButtons[currentTab] then
-            TweenService:Create(themed.tabButtons[currentTab], TweenInfo.new(0.2), {BackgroundColor3 = t.TabInactive, TextColor3 = t.Dim}):Play()
-            local s = themed.tabStrokes[currentTab]
-            if s then s.Color = t.Border; s.Transparency = 0.6 end
-        end
-        currentTab = name
-        TweenService:Create(themed.tabButtons[currentTab], TweenInfo.new(0.2), {BackgroundColor3 = t.TabActive, TextColor3 = t.TabTextOn}):Play()
-        local s = themed.tabStrokes[currentTab]
-        if s then s.Color = t.TabActive; s.Transparency = 0.3 end
-        for n, p in pairs(tabPanels) do p.Visible = (n == name) end
+-- SCROLL CONSOLE
+local function scrollBot()
+    task.defer(function()
+        task.wait()
+        if not Console then return end
+        if updateCanvas then updateCanvas() end
+        local b=math.max(0,Console.AbsoluteCanvasSize.Y-Console.AbsoluteWindowSize.Y)
+        Console.CanvasPosition=Vector2.new(0,b)
     end)
 end
-createTabButton("MAIN")
-createTabButton("FARM")
-createTabButton("SETTINGS")
 
--- Panel Container
-local PanelContainer = Instance.new("Frame")
-PanelContainer.Size = UDim2.new(1, 0, 1, -78)
-PanelContainer.Position = UDim2.fromOffset(0, 78)
-PanelContainer.BackgroundTransparency = 1
-PanelContainer.ZIndex = 5
-PanelContainer.Parent = Window
+local function appendStatus(name,on)
+    if not ConsoleOut then return end
+    local st=on and "ON" or "OFF"
+    local sc=on and CCOL.Green or CCOL.Red
+    local line='<font color="'..CCOL.Dim..'">[s]</font> <font color="'..CCOL.Amber..'">'..name..'</font> <font color="'..CCOL.Dim..'">-&gt;</font> <font color="'..sc..'">'..st..'</font>'
+    if ConsoleOut.Text=="" then ConsoleOut.Text=line else ConsoleOut.Text=ConsoleOut.Text.."\n\n"..line end
+    scrollBot()
+end
 
--- ============================================================
+-- HEADER
+local Head = Instance.new("Frame")
+Head.Size=UDim2.new(1,0,0,44);Head.BackgroundTransparency=1;Head.Active=true;Head.ZIndex=5;Head.Parent=Win
+
+local Logo = Instance.new("Frame")
+Logo.Size=UDim2.fromOffset(26,26);Logo.Position=UDim2.fromOffset(10,9)
+Logo.BackgroundTransparency=1;Logo.ZIndex=6;Logo.Parent=Win;corner(Logo,13)
+
+local LogoImg = Instance.new("ImageLabel")
+LogoImg.Size=UDim2.fromScale(1,1);LogoImg.BackgroundTransparency=1
+LogoImg.Image="rbxassetid://104937666038724";LogoImg.ScaleType=Enum.ScaleType.Fit
+LogoImg.ZIndex=7;LogoImg.Parent=Logo;corner(LogoImg,13)
+
+label(Head,"Eclipse Code Sniper",UDim2.fromOffset(180,20),UDim2.fromOffset(42,2),12,COL.White,Enum.Font.GothamBold)
+
+-- MINUS BTN
+local Minus = Instance.new("TextButton")
+Minus.Size=UDim2.fromOffset(28,28);Minus.Position=UDim2.new(1,-110,0,8)
+Minus.BackgroundColor3=COL.C;Minus.BorderSizePixel=0;Minus.AutoButtonColor=false
+Minus.Text="—";Minus.TextSize=14;Minus.TextColor3=COL.D;Minus.Font=Enum.Font.GothamBold
+Minus.ZIndex=8;Minus.Parent=Head;corner(Minus,8);stroke(Minus,COL.B,1,0.6)
+
+-- TOGGLE PILL
+local Toggle = Instance.new("TextButton")
+Toggle.Size=UDim2.fromOffset(68,28);Toggle.Position=UDim2.new(1,-76,0,8)
+Toggle.BackgroundColor3=_on and COL.A or COL.C;Toggle.BorderSizePixel=0;Toggle.AutoButtonColor=false
+Toggle.Text="";Toggle.ZIndex=8;Toggle.Parent=Head;corner(Toggle,14)
+
+local TStroke = stroke(Toggle,_on and COL.A or COL.B,1,0.5)
+
+local Knob = Instance.new("Frame")
+Knob.Size=UDim2.fromOffset(22,22)
+Knob.Position=_on and UDim2.new(1,-25,0.5,-11) or UDim2.new(0,3,0.5,-11)
+Knob.BackgroundColor3=COL.W;Knob.ZIndex=9;Knob.Parent=Toggle;corner(Knob,11)
+
+local function doToggle()
+    _on = not _on
+    if not _on and clearCapture then clearCapture() end
+    cfg.on=_on; save()
+    _lastMsg=nil
+    local t=THEMES[_bg] or THEMES[1]
+    Toggle.BackgroundColor3=_on and t.A or t.C
+    TStroke.Color=_on and t.A or t.B
+    TStroke.Transparency=_on and 0.5 or 0.7
+    Knob.BackgroundColor3=_on and t.W or COL.White
+    Knob.Position=_on and UDim2.new(1,-25,0.5,-11) or UDim2.new(0,3,0.5,-11)
+    if ConsoleOut then
+        if _on then
+            ConsoleOut.Text='<font color="'..CCOL.Amber..'">&gt;</font> <font color="'..CCOL.Dim..'">scanning...</font>'
+        else
+            ConsoleOut.Text='<font color="'..CCOL.Dim..'">status:</font> <font color="'..CCOL.Red..'">OFF</font>'
+        end
+        scrollBot()
+    end
+end
+
+Toggle.MouseButton1Click:Connect(doToggle)
+
+-- HEADER LINE
+local HLine = Instance.new("Frame")
+HLine.Size=UDim2.new(1,-20,0,1);HLine.Position=UDim2.fromOffset(10,40)
+HLine.BackgroundColor3=COL.A;HLine.BackgroundTransparency=0.45;HLine.BorderSizePixel=0;HLine.ZIndex=5;HLine.Parent=Head
+
+-- TABS
+local TabBar = Instance.new("Frame")
+TabBar.Size=UDim2.new(1,0,0,28);TabBar.Position=UDim2.fromOffset(0,46)
+TabBar.BackgroundTransparency=1;TabBar.ZIndex=5;TabBar.Parent=Win
+local TL = Instance.new("UIListLayout")
+TL.FillDirection=Enum.FillDirection.Horizontal;TL.HorizontalAlignment=Enum.HorizontalAlignment.Center
+TL.Padding=UDim.new(0,3);TL.Parent=TabBar
+
+local tabs = {}
+
+local function mkTab(name)
+    local b=Instance.new("TextButton")
+    b.Size=UDim2.fromOffset(98,24)
+    b.BackgroundColor3=name=="MAIN" and COL.TA or COL.TI
+    b.BorderSizePixel=0;b.AutoButtonColor=false;b.Text=name;b.TextSize=10
+    b.TextColor3=name=="MAIN" and COL.TT or COL.D;b.Font=Enum.Font.GothamBold
+    b.ZIndex=6;b.Parent=TabBar;corner(b,6)
+    local s=stroke(b,name=="MAIN" and COL.TA or COL.B,1,name=="MAIN" and 0.3 or 0.6)
+    TH.tabBtns[name]=b;TH.tabStrokes[name]=s
+    b.MouseButton1Click:Connect(function()
+        if _curTab==name then return end
+        local t=THEMES[_bg] or THEMES[1]
+        if TH.tabBtns[_curTab] then
+            TweenService:Create(TH.tabBtns[_curTab],TweenInfo.new(0.2),{BackgroundColor3=t.TI,TextColor3=t.D}):Play()
+            local os=TH.tabStrokes[_curTab];if os then os.Color=t.B;os.Transparency=0.6 end
+        end
+        _curTab=name
+        TweenService:Create(TH.tabBtns[_curTab],TweenInfo.new(0.2),{BackgroundColor3=t.TA,TextColor3=t.TT}):Play()
+        local ns=TH.tabStrokes[_curTab];if ns then ns.Color=t.TA;ns.Transparency=0.3 end
+        for n,p in pairs(tabs) do p.Visible=(n==name) end
+    end)
+end
+mkTab("MAIN");mkTab("FARM");mkTab("SETTINGS")
+
+local PC = Instance.new("Frame")
+PC.Size=UDim2.new(1,0,1,-78);PC.Position=UDim2.fromOffset(0,78);PC.BackgroundTransparency=1;PC.ZIndex=5;PC.Parent=Win
+
 -- MAIN PANEL
--- ============================================================
-local MainPanel = Instance.new("ScrollingFrame")
-MainPanel.Name = "MainPanel"
-MainPanel.Size = UDim2.new(1, 0, 1, 0)
-MainPanel.BackgroundTransparency = 1
-MainPanel.BorderSizePixel = 0
-MainPanel.ScrollBarThickness = 3
-MainPanel.ScrollBarImageColor3 = COLORS.Dim
-MainPanel.CanvasSize = UDim2.new(0, 0, 0, 800)
-MainPanel.ZIndex = 5
-MainPanel.Parent = PanelContainer
-tabPanels["MAIN"] = MainPanel
-local MPPad = Instance.new("UIPadding")
-MPPad.PaddingLeft = UDim.new(0, 10)
-MPPad.PaddingRight = UDim.new(0, 10)
-MPPad.PaddingTop = UDim.new(0, 6)
-MPPad.Parent = MainPanel
-local MPLayout = Instance.new("UIListLayout")
-MPLayout.Padding = UDim.new(0, 5)
-MPLayout.Parent = MainPanel
+local MP = Instance.new("ScrollingFrame")
+MP.Size=UDim2.new(1,0,1,0);MP.BackgroundTransparency=1;MP.BorderSizePixel=0
+MP.ScrollBarThickness=3;MP.ScrollBarImageColor3=COL.D;MP.CanvasSize=UDim2.new(0,0,0,900)
+MP.ZIndex=5;MP.Parent=PC;tabs["MAIN"]=MP
+local mpp=Instance.new("UIPadding");mpp.PaddingLeft=UDim.new(0,10);mpp.PaddingRight=UDim.new(0,10);mpp.PaddingTop=UDim.new(0,6);mpp.Parent=MP
+local mpl=Instance.new("UIListLayout");mpl.Padding=UDim.new(0,5);mpl.Parent=MP
 
--- READY Status
-local ReadyFrame = Instance.new("Frame")
-ReadyFrame.Size = UDim2.new(1, 0, 0, 22)
-ReadyFrame.BackgroundTransparency = 1
-ReadyFrame.ZIndex = 6
-ReadyFrame.Parent = MainPanel
-
-local ReadyDot = Instance.new("Frame")
-ReadyDot.Size = UDim2.fromOffset(10, 10)
-ReadyDot.Position = UDim2.fromOffset(2, 6)
-ReadyDot.BackgroundColor3 = COLORS.Green
-ReadyDot.ZIndex = 7
-ReadyDot.Parent = ReadyFrame
-addCorner(ReadyDot, 5)
-
-makeLabel(ReadyFrame, "READY", UDim2.fromOffset(80, 22), UDim2.fromOffset(16, 0), 12, COLORS.Green, Enum.Font.GothamBold)
+-- READY
+local RF=Instance.new("Frame");RF.Size=UDim2.new(1,0,0,22);RF.BackgroundTransparency=1;RF.ZIndex=6;RF.Parent=MP
+local RD=Instance.new("Frame");RD.Size=UDim2.fromOffset(10,10);RD.Position=UDim2.fromOffset(2,6);RD.BackgroundColor3=COL.Green;RD.ZIndex=7;RD.Parent=RF;corner(RD,5)
+label(RF,"READY",UDim2.fromOffset(80,22),UDim2.fromOffset(16,0),12,COL.Green,Enum.Font.GothamBold)
 
 -- SNIPER FEED
-local SniperFeedPanel = Instance.new("Frame")
-SniperFeedPanel.Name = "SniperFeed"
-SniperFeedPanel.Size = UDim2.new(1, 0, 0, 80)
-SniperFeedPanel.BackgroundColor3 = COLORS.Row
-SniperFeedPanel.BackgroundTransparency = 0.4
-SniperFeedPanel.BorderSizePixel = 0
-SniperFeedPanel.ZIndex = 6
-SniperFeedPanel.Parent = MainPanel
-addCorner(SniperFeedPanel, 10)
-local sfS = addStroke(SniperFeedPanel, COLORS.Border, 1, 0.55)
-table.insert(themed.cards, SniperFeedPanel)
-table.insert(themed.cardStrokes, sfS)
+local SF=Instance.new("Frame");SF.Size=UDim2.new(1,0,0,80);SF.BackgroundColor3=COL.R;SF.BackgroundTransparency=0.4
+SF.BorderSizePixel=0;SF.ZIndex=6;SF.Parent=MP;corner(SF,10)
+local sfs=stroke(SF,COL.B,1,0.55);table.insert(TH.cards,SF);table.insert(TH.cStrokes,sfs)
+label(SF,"SNIPER FEED",UDim2.fromOffset(200,20),UDim2.fromOffset(12,4),11,COL.White,Enum.Font.GothamBold)
 
-makeLabel(SniperFeedPanel, "SNIPER FEED", UDim2.fromOffset(200, 20), UDim2.fromOffset(12, 4), 11, COLORS.White, Enum.Font.GothamBold)
+Console=Instance.new("ScrollingFrame");Console.Size=UDim2.new(1,-24,0,48);Console.Position=UDim2.fromOffset(12,26)
+Console.BackgroundColor3=COL.L;Console.BorderSizePixel=0;Console.ClipsDescendants=true;Console.Active=true
+Console.CanvasSize=UDim2.new(0,0,0,0);Console.ScrollBarThickness=3;Console.ScrollBarImageColor3=COL.D
+Console.ZIndex=7;Console.Parent=SF;corner(Console,6)
 
-Console = Instance.new("ScrollingFrame")
-Console.Name = "Console"
-Console.Size = UDim2.new(1, -24, 0, 48)
-Console.Position = UDim2.fromOffset(12, 26)
-Console.BackgroundColor3 = COLORS.Log
-Console.BorderSizePixel = 0
-Console.ClipsDescendants = true
-Console.Active = true
-Console.ScrollingEnabled = true
-Console.CanvasSize = UDim2.new(0, 0, 0, 0)
-Console.ScrollBarThickness = 3
-Console.ScrollBarImageColor3 = COLORS.Dim
-Console.ZIndex = 7
-Console.Parent = SniperFeedPanel
-addCorner(Console, 6)
-local cs2 = addStroke(Console, COLORS.Border, 1, 0.65)
-themed.consoleFrame = Console
-themed.consoleStroke = cs2
+ConsoleOut=Instance.new("TextLabel");ConsoleOut.Size=UDim2.new(1,-12,0,40);ConsoleOut.AutomaticSize=Enum.AutomaticSize.Y
+ConsoleOut.Position=UDim2.fromOffset(6,4);ConsoleOut.BackgroundTransparency=1;ConsoleOut.RichText=true
+ConsoleOut.Text=_on and '<font color="'..CCOL.Amber..'">&gt;</font> <font color="'..CCOL.Dim..'">scanning...</font>' or '<font color="'..CCOL.Dim..'">OFF</font>'
+ConsoleOut.TextSize=10;ConsoleOut.Font=Enum.Font.Code;ConsoleOut.TextColor3=COL.D
+ConsoleOut.TextXAlignment=Enum.TextXAlignment.Left;ConsoleOut.TextYAlignment=Enum.TextYAlignment.Top
+ConsoleOut.TextWrapped=true;ConsoleOut.ZIndex=8;ConsoleOut.Parent=Console
 
-ConsoleOutput = Instance.new("TextLabel")
-ConsoleOutput.Name = "ConsoleOutput"
-ConsoleOutput.Size = UDim2.new(1, -12, 0, 40)
-ConsoleOutput.AutomaticSize = Enum.AutomaticSize.Y
-ConsoleOutput.Position = UDim2.fromOffset(6, 4)
-ConsoleOutput.BackgroundTransparency = 1
-ConsoleOutput.RichText = true
-ConsoleOutput.Text = autoWriteEnabled and '<font color="' .. CONSOLE_COLORS.Amber .. '">&gt;</font> <font color="' .. CONSOLE_COLORS.Dim .. '">scanning for codes...</font>' or '<font color="' .. CONSOLE_COLORS.Dim .. '">status: OFF</font>'
-ConsoleOutput.TextSize = 10
-ConsoleOutput.Font = Enum.Font.Code
-ConsoleOutput.TextColor3 = COLORS.Dim
-ConsoleOutput.TextXAlignment = Enum.TextXAlignment.Left
-ConsoleOutput.TextYAlignment = Enum.TextYAlignment.Top
-ConsoleOutput.TextWrapped = true
-ConsoleOutput.ZIndex = 8
-ConsoleOutput.Parent = Console
-
-updateConsoleCanvas = function()
-    if not Console or not ConsoleOutput then return end
-    Console.CanvasSize = UDim2.new(0, 0, 0, ConsoleOutput.Position.Y.Offset + ConsoleOutput.AbsoluteSize.Y + 20)
+updateCanvas=function()
+    if not Console or not ConsoleOut then return end
+    Console.CanvasSize=UDim2.new(0,0,0,ConsoleOut.Position.Y.Offset+ConsoleOut.AbsoluteSize.Y+20)
 end
-ConsoleOutput:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateConsoleCanvas)
-task.defer(updateConsoleCanvas)
+ConsoleOut:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateCanvas)
+task.defer(updateCanvas)
 
--- SETTINGS Panel (inside MAIN)
-local SettingsPanel = Instance.new("Frame")
-SettingsPanel.Name = "SettingsPanel"
-SettingsPanel.Size = UDim2.new(1, 0, 0, 350)
-SettingsPanel.BackgroundColor3 = COLORS.Row
-SettingsPanel.BackgroundTransparency = 0.4
-SettingsPanel.BorderSizePixel = 0
-SettingsPanel.ZIndex = 6
-SettingsPanel.Parent = MainPanel
-addCorner(SettingsPanel, 10)
-local spS = addStroke(SettingsPanel, COLORS.Border, 1, 0.55)
-table.insert(themed.cards, SettingsPanel)
-table.insert(themed.cardStrokes, spS)
+-- SETTINGS CARD (in MAIN)
+local SC=Instance.new("Frame");SC.Size=UDim2.new(1,0,0,360);SC.BackgroundColor3=COL.R;SC.BackgroundTransparency=0.4
+SC.BorderSizePixel=0;SC.ZIndex=6;SC.Parent=MP;corner(SC,10)
+local scs=stroke(SC,COL.B,1,0.55);table.insert(TH.cards,SC);table.insert(TH.cStrokes,scs)
 
-makeLabel(SettingsPanel, "SETTINGS", UDim2.fromOffset(200, 20), UDim2.fromOffset(12, 6), 11, COLORS.White, Enum.Font.GothamBold)
+label(SC,"SETTINGS",UDim2.fromOffset(200,20),UDim2.fromOffset(12,6),11,COL.White,Enum.Font.GothamBold)
 
--- CODES Separator
-local CodesSep = Instance.new("Frame")
-CodesSep.Size = UDim2.new(1, -24, 0, 18)
-CodesSep.Position = UDim2.fromOffset(12, 30)
-CodesSep.BackgroundTransparency = 1
-CodesSep.ZIndex = 7
-CodesSep.Parent = SettingsPanel
+-- CODES separator
+local CSep=Instance.new("Frame");CSep.Size=UDim2.new(1,-24,0,18);CSep.Position=UDim2.fromOffset(12,30);CSep.BackgroundTransparency=1;CSep.ZIndex=7;CSep.Parent=SC
+local CL1=Instance.new("Frame");CL1.Size=UDim2.new(0.5,-30,0,1);CL1.Position=UDim2.fromOffset(0,9);CL1.BackgroundColor3=COL.B;CL1.BackgroundTransparency=0.5;CL1.BorderSizePixel=0;CL1.ZIndex=7;CL1.Parent=CSep
+local CLbl=Instance.new("TextLabel");CLbl.Size=UDim2.fromOffset(50,18);CLbl.Position=UDim2.new(0.5,-25,0,0);CLbl.BackgroundTransparency=1;CLbl.Text="CODES";CLbl.TextSize=10;CLbl.TextColor3=COL.D;CLbl.Font=Enum.Font.GothamBold;CLbl.TextXAlignment=Enum.TextXAlignment.Center;CLbl.ZIndex=7;CLbl.Parent=CSep
+local CL2=Instance.new("Frame");CL2.Size=UDim2.new(0.5,-30,0,1);CL2.Position=UDim2.new(0.5,25,0,9);CL2.BackgroundColor3=COL.B;CL2.BackgroundTransparency=0.5;CL2.BorderSizePixel=0;CL2.ZIndex=7;CL2.Parent=CSep
 
-local CodesLineL = Instance.new("Frame")
-CodesLineL.Size = UDim2.new(0.5, -30, 0, 1)
-CodesLineL.Position = UDim2.fromOffset(0, 9)
-CodesLineL.BackgroundColor3 = COLORS.Border
-CodesLineL.BackgroundTransparency = 0.5
-CodesLineL.BorderSizePixel = 0
-CodesLineL.ZIndex = 7
-CodesLineL.Parent = CodesSep
-
-local CodesLabel = Instance.new("TextLabel")
-CodesLabel.Size = UDim2.fromOffset(50, 18)
-CodesLabel.Position = UDim2.new(0.5, -25, 0, 0)
-CodesLabel.BackgroundTransparency = 1
-CodesLabel.Text = "CODES"
-CodesLabel.TextSize = 10
-CodesLabel.TextColor3 = COLORS.Dim
-CodesLabel.Font = Enum.Font.GothamBold
-CodesLabel.TextXAlignment = Enum.TextXAlignment.Center
-CodesLabel.ZIndex = 7
-CodesLabel.Parent = CodesSep
-
-local CodesLineR = Instance.new("Frame")
-CodesLineR.Size = UDim2.new(0.5, -30, 0, 1)
-CodesLineR.Position = UDim2.new(0.5, 25, 0, 9)
-CodesLineR.BackgroundColor3 = COLORS.Border
-CodesLineR.BackgroundTransparency = 0.5
-CodesLineR.BorderSizePixel = 0
-CodesLineR.ZIndex = 7
-CodesLineR.Parent = CodesSep
-
--- Toggle helper
-local function makeToggle(parent, enabled, consoleName, onToggle)
-    parent.Active = true
-    featureStates[consoleName] = enabled
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.fromOffset(42, 20)
-    btn.Position = UDim2.new(1, -50, 0.5, -10)
-    btn.BackgroundColor3 = enabled and COLORS.Accent or COLORS.Control
-    btn.BorderSizePixel = 0
-    btn.AutoButtonColor = false
-    btn.Text = enabled and "ON" or "OFF"
-    btn.TextSize = 8
-    btn.TextColor3 = enabled and COLORS.TabTextOn or COLORS.Dim
-    btn.Font = Enum.Font.GothamBold
-    btn.ZIndex = 8
-    btn.Parent = parent
-    addCorner(btn, 6)
-    local outline = addStroke(btn, enabled and COLORS.Accent or COLORS.Border, 1, enabled and 0.5 or 0.7)
-    local isOnFn = function() return featureStates[consoleName] end
-    table.insert(themed.toggleButtons, {btn = btn, isOn = isOnFn})
-    table.insert(themed.toggleStrokes, {stroke = outline, isOn = isOnFn})
-    local lastT = 0
-    local function toggle()
-        if tick() - lastT < 0.15 then return end
-        lastT = tick()
-        local newState = not featureStates[consoleName]
-        featureStates[consoleName] = newState
-        btn.Text = newState and "ON" or "OFF"
-        local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
-        btn.BackgroundColor3 = newState and t.Accent or t.Control
-        btn.TextColor3 = newState and t.TabTextOn or t.Dim
-        outline.Color = newState and t.Accent or t.Border
-        outline.Transparency = newState and 0.5 or 0.7
-        if autoWriteEnabled then appendConsoleStatus(consoleName, newState) end
-        if onToggle then onToggle(newState) end
+-- TOGGLE HELPER
+local function mkToggle(par,onState,cName,cb)
+    par.Active=true
+    local b=Instance.new("TextButton");b.Size=UDim2.fromOffset(42,20);b.Position=UDim2.new(1,-50,0.5,-10)
+    b.BackgroundColor3=onState and COL.A or COL.C;b.BorderSizePixel=0;b.AutoButtonColor=false
+    b.Text=onState and "ON" or "OFF";b.TextSize=8;b.TextColor3=onState and COL.TT or COL.D
+    b.Font=Enum.Font.GothamBold;b.ZIndex=8;b.Parent=par;corner(b,6)
+    local os=stroke(b,onState and COL.A or COL.B,1,onState and 0.5 or 0.7)
+    local isOn=function() return b.Text=="ON" end
+    table.insert(TH.toggles,{b=b,on=isOn});table.insert(TH.tStrokes,{s=os,on=isOn})
+    local lt=0
+    local function tog()
+        if tick()-lt<0.15 then return end;lt=tick()
+        local ns=b.Text~="ON"
+        b.Text=ns and "ON" or "OFF"
+        local t=THEMES[_bg] or THEMES[1]
+        b.BackgroundColor3=ns and t.A or t.C;b.TextColor3=ns and t.TT or t.D
+        os.Color=ns and t.A or t.B;os.Transparency=ns and 0.5 or 0.7
+        if _on then appendStatus(cName,ns) end
+        if cb then cb(ns) end
     end
-    btn.Activated:Connect(toggle)
-    btn.MouseButton1Click:Connect(toggle)
-    return btn
+    b.MouseButton1Click:Connect(tog)
+    return b
 end
 
--- Setting row helper
-local function makeSettingRow(parent, yPos, label, state, consoleName, onToggle)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -24, 0, 30)
-    row.Position = UDim2.fromOffset(12, yPos)
-    row.BackgroundTransparency = 1
-    row.ZIndex = 7
-    row.Parent = parent
-
-    makeLabel(row, label, UDim2.new(1, -55, 1, 0), UDim2.fromOffset(0, 0), 10, COLORS.Text, Enum.Font.GothamMedium)
-    makeToggle(row, state, consoleName, onToggle)
-    return row
+-- ROW HELPER
+local function mkRow(par,y,txt,state,cName,cb)
+    local r=Instance.new("Frame");r.Size=UDim2.new(1,-24,0,30);r.Position=UDim2.fromOffset(12,y)
+    r.BackgroundTransparency=1;r.ZIndex=7;r.Parent=par
+    label(r,txt,UDim2.new(1,-55,1,0),UDim2.fromOffset(0,0),10,COL.T,Enum.Font.GothamMedium)
+    mkToggle(r,state,cName,cb)
+    return r
 end
 
--- CODES settings
-makeSettingRow(SettingsPanel, 52, "AUTO CODE/RIDDLE LISTEN", _enabled, "Auto Code Listen", function(s) _enabled = s; autoWriteEnabled = s; savedConfig.codeSniper = s; saveConfig() end)
-makeSettingRow(SettingsPanel, 84, "RETYPE INVALID", _retypeInvalid, "Retype Invalid", function(s) _retypeInvalid = s; savedConfig.retypeInvalid = s; saveConfig() end)
-makeSettingRow(SettingsPanel, 116, "AUTO COPY CODE", _autoCopyCode, "Auto Copy Code", function(s) _autoCopyCode = s; savedConfig.autoCopyCode = s; saveConfig() end)
-makeSettingRow(SettingsPanel, 148, "AUTO SUBMIT", _autoAccept, "Auto Submit", function(s) _autoAccept = s; savedConfig.autoSubmit = s; saveConfig() end)
+-- CODES ROWS
+mkRow(SC,52,"AUTO CODE/RIDDLE LISTEN",_on,"Auto Code",function(s) _on=s;cfg.on=s;save() end)
+mkRow(SC,84,"RETYPE INVALID",_retype,"Retype",function(s) _retype=s;cfg.retypeInvalid=s;save() end)
+mkRow(SC,116,"AUTO COPY CODE",false,"Auto Copy",function(s) end)
+mkRow(SC,148,"AUTO SUBMIT",_autoAccept,"Auto Submit",function(s) _autoAccept=s;cfg.autoSubmit=s;save() end)
 
 -- SUBMIT AFTER
-local SubmitAfterRow = Instance.new("Frame")
-SubmitAfterRow.Size = UDim2.new(1, -24, 0, 36)
-SubmitAfterRow.Position = UDim2.fromOffset(12, 182)
-SubmitAfterRow.BackgroundTransparency = 1
-SubmitAfterRow.ZIndex = 7
-SubmitAfterRow.Parent = SettingsPanel
+local SARow=Instance.new("Frame");SARow.Size=UDim2.new(1,-24,0,36);SARow.Position=UDim2.fromOffset(12,182);SARow.BackgroundTransparency=1;SARow.ZIndex=7;SARow.Parent=SC
+label(SARow,"SUBMIT AFTER",UDim2.fromOffset(120,36),UDim2.fromOffset(0,0),10,COL.T,Enum.Font.GothamMedium)
 
-makeLabel(SubmitAfterRow, "SUBMIT AFTER", UDim2.fromOffset(120, 36), UDim2.fromOffset(0, 0), 10, COLORS.Text, Enum.Font.GothamMedium)
+local SAShell=Instance.new("Frame");SAShell.Size=UDim2.fromOffset(120,30);SAShell.Position=UDim2.new(1,-125,0,3)
+SAShell.BackgroundColor3=COL.W;SAShell.BackgroundTransparency=0.05;SAShell.ZIndex=7;SAShell.Parent=SARow;corner(SAShell,6);stroke(SAShell,COL.B,1,0.65)
 
-local SubmitAfterShell = Instance.new("Frame")
-SubmitAfterShell.Size = UDim2.fromOffset(120, 30)
-SubmitAfterShell.Position = UDim2.new(1, -125, 0, 3)
-SubmitAfterShell.BackgroundColor3 = COLORS.Window
-SubmitAfterShell.BackgroundTransparency = 0.05
-SubmitAfterShell.ZIndex = 7
-SubmitAfterShell.Parent = SubmitAfterRow
-addCorner(SubmitAfterShell, 6)
-addStroke(SubmitAfterShell, COLORS.Border, 1, 0.65)
-
-local submitValues = {1, 2, 3, 4}
-local submitButtons = {}
-
-for i, val in ipairs(submitValues) do
-    local valBtn = Instance.new("TextButton")
-    valBtn.Size = UDim2.new(0.25, -2, 1, -4)
-    valBtn.Position = UDim2.fromOffset((i-1) * 30 + 2, 2)
-    valBtn.BackgroundColor3 = (val == _submitAfter) and COLORS.Accent or COLORS.Control
-    valBtn.BorderSizePixel = 0
-    valBtn.AutoButtonColor = false
-    valBtn.Text = tostring(val)
-    valBtn.TextSize = 12
-    valBtn.TextColor3 = (val == _submitAfter) and COLORS.TabTextOn or COLORS.Dim
-    valBtn.Font = Enum.Font.GothamBold
-    valBtn.ZIndex = 8
-    valBtn.Parent = SubmitAfterShell
-    addCorner(valBtn, 4)
-
-    submitButtons[val] = valBtn
-
-    valBtn.MouseButton1Click:Connect(function()
-        _submitAfter = val
-        savedConfig.submitAfter = _submitAfter
-        clearAceCapture()
-        saveConfig()
-        local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
-        for v, btn in pairs(submitButtons) do
-            btn.BackgroundColor3 = (v == _submitAfter) and t.Accent or t.Control
-            btn.TextColor3 = (v == _submitAfter) and t.TabTextOn or t.Dim
+local saVals={1,2,3,4}
+local saBtns={}
+for i,v in ipairs(saVals) do
+    local vb=Instance.new("TextButton");vb.Size=UDim2.new(0.25,-2,1,-4);vb.Position=UDim2.fromOffset((i-1)*30+2,2)
+    vb.BackgroundColor3=(v==_submitAfter)and COL.A or COL.C;vb.BorderSizePixel=0;vb.AutoButtonColor=false
+    vb.Text=tostring(v);vb.TextSize=12;vb.TextColor3=(v==_submitAfter)and COL.TT or COL.D
+    vb.Font=Enum.Font.GothamBold;vb.ZIndex=8;vb.Parent=SAShell;corner(vb,4)
+    table.insert(TH.cBtns,vb)
+    saBtns[v]=vb
+    vb.MouseButton1Click:Connect(function()
+        _submitAfter=v;cfg.submitAfter=v;clearCapture();save()
+        local t=THEMES[_bg] or THEMES[1]
+        for val,b in pairs(saBtns) do
+            b.BackgroundColor3=(val==_submitAfter)and t.A or t.C
+            b.TextColor3=(val==_submitAfter)and t.TT or t.D
         end
     end)
 end
 
--- RIDDLES Separator
-local RiddlesSep = Instance.new("Frame")
-RiddlesSep.Size = UDim2.new(1, -24, 0, 18)
-RiddlesSep.Position = UDim2.fromOffset(12, 224)
-RiddlesSep.BackgroundTransparency = 1
-RiddlesSep.ZIndex = 7
-RiddlesSep.Parent = SettingsPanel
+-- RIDDLES separator
+local RSep=Instance.new("Frame");RSep.Size=UDim2.new(1,-24,0,18);RSep.Position=UDim2.fromOffset(12,224);RSep.BackgroundTransparency=1;RSep.ZIndex=7;RSep.Parent=SC
+local RL1=Instance.new("Frame");RL1.Size=UDim2.new(0.5,-35,0,1);RL1.Position=UDim2.fromOffset(0,9);RL1.BackgroundColor3=COL.B;RL1.BackgroundTransparency=0.5;RL1.BorderSizePixel=0;RL1.ZIndex=7;RL1.Parent=RSep
+local RLbl=Instance.new("TextLabel");RLbl.Size=UDim2.fromOffset(60,18);RLbl.Position=UDim2.new(0.5,-30,0,0);RLbl.BackgroundTransparency=1;RLbl.Text="RIDDLES";RLbl.TextSize=10;RLbl.TextColor3=COL.D;RLbl.Font=Enum.Font.GothamBold;RLbl.TextXAlignment=Enum.TextXAlignment.Center;RLbl.ZIndex=7;RLbl.Parent=RSep
+local RL2=Instance.new("Frame");RL2.Size=UDim2.new(0.5,-35,0,1);RL2.Position=UDim2.new(0.5,30,0,9);RL2.BackgroundColor3=COL.B;RL2.BackgroundTransparency=0.5;RL2.BorderSizePixel=0;RL2.ZIndex=7;RL2.Parent=RSep
 
-local RiddlesLineL = Instance.new("Frame")
-RiddlesLineL.Size = UDim2.new(0.5, -35, 0, 1)
-RiddlesLineL.Position = UDim2.fromOffset(0, 9)
-RiddlesLineL.BackgroundColor3 = COLORS.Border
-RiddlesLineL.BackgroundTransparency = 0.5
-RiddlesLineL.BorderSizePixel = 0
-RiddlesLineL.ZIndex = 7
-RiddlesLineL.Parent = RiddlesSep
+mkRow(SC,246,"AI RIDDLES",_riddle,"AI Riddles",function(s) _riddle=s;cfg.riddleSolver=s;save() end)
+mkRow(SC,278,"AI RIDDLES AUTO SUBMIT",false,"Riddle Auto",function(s) end)
+mkRow(SC,310,"BACKUP RIDDLE ANSWER",false,"Backup",function(s) end)
 
-local RiddlesLabel = Instance.new("TextLabel")
-RiddlesLabel.Size = UDim2.fromOffset(60, 18)
-RiddlesLabel.Position = UDim2.new(0.5, -30, 0, 0)
-RiddlesLabel.BackgroundTransparency = 1
-RiddlesLabel.Text = "RIDDLES"
-RiddlesLabel.TextSize = 10
-RiddlesLabel.TextColor3 = COLORS.Dim
-RiddlesLabel.Font = Enum.Font.GothamBold
-RiddlesLabel.TextXAlignment = Enum.TextXAlignment.Center
-RiddlesLabel.ZIndex = 7
-RiddlesLabel.Parent = RiddlesSep
-
-local RiddlesLineR = Instance.new("Frame")
-RiddlesLineR.Size = UDim2.new(0.5, -35, 0, 1)
-RiddlesLineR.Position = UDim2.new(0.5, 30, 0, 9)
-RiddlesLineR.BackgroundColor3 = COLORS.Border
-RiddlesLineR.BackgroundTransparency = 0.5
-RiddlesLineR.BorderSizePixel = 0
-RiddlesLineR.ZIndex = 7
-RiddlesLineR.Parent = RiddlesSep
-
--- RIDDLES settings
-makeSettingRow(SettingsPanel, 246, "AI RIDDLES", _riddleSolver, "AI Riddles", function(s) _riddleSolver = s; savedConfig.riddleSolver = s; saveConfig() end)
-makeSettingRow(SettingsPanel, 278, "AI RIDDLES AUTO SUBMIT", false, "AI Riddles Auto Submit", function(s) end)
-makeSettingRow(SettingsPanel, 310, "BACKUP RIDDLE ANSWER", false, "Backup Riddle Answer", function(s) end)
-
--- ============================================================
 -- FARM PANEL
--- ============================================================
-local FarmPanel = Instance.new("ScrollingFrame")
-FarmPanel.Name = "FarmPanel"
-FarmPanel.Size = UDim2.new(1, 0, 1, 0)
-FarmPanel.BackgroundTransparency = 1
-FarmPanel.Visible = false
-FarmPanel.ScrollBarThickness = 3
-FarmPanel.ScrollBarImageColor3 = COLORS.Dim
-FarmPanel.CanvasSize = UDim2.new(0, 0, 0, 500)
-FarmPanel.ZIndex = 5
-FarmPanel.Parent = PanelContainer
-tabPanels["FARM"] = FarmPanel
-local FPPad = Instance.new("UIPadding")
-FPPad.PaddingLeft = UDim.new(0, 10)
-FPPad.PaddingRight = UDim.new(0, 10)
-FPPad.PaddingTop = UDim.new(0, 6)
-FPPad.Parent = FarmPanel
-local FPLayout = Instance.new("UIListLayout")
-FPLayout.Padding = UDim.new(0, 5)
-FPLayout.Parent = FarmPanel
+local FP=Instance.new("ScrollingFrame");FP.Size=UDim2.new(1,0,1,0);FP.BackgroundTransparency=1;FP.Visible=false
+FP.ScrollBarThickness=3;FP.ScrollBarImageColor3=COL.D;FP.CanvasSize=UDim2.new(0,0,0,500)
+FP.ZIndex=5;FP.Parent=PC;tabs["FARM"]=FP
+local fpp=Instance.new("UIPadding");fpp.PaddingLeft=UDim.new(0,10);fpp.PaddingRight=UDim.new(0,10);fpp.PaddingTop=UDim.new(0,6);fpp.Parent=FP
+local fpl=Instance.new("UIListLayout");fpl.Padding=UDim.new(0,5);fpl.Parent=FP
 
--- FARM Section
-local FarmSection = Instance.new("Frame")
-FarmSection.Size = UDim2.new(1, 0, 0, 120)
-FarmSection.BackgroundColor3 = COLORS.Row
-FarmSection.BackgroundTransparency = 0.4
-FarmSection.BorderSizePixel = 0
-FarmSection.ZIndex = 6
-FarmSection.Parent = FarmPanel
-addCorner(FarmSection, 10)
-local fsS = addStroke(FarmSection, COLORS.Border, 1, 0.55)
-table.insert(themed.cards, FarmSection)
-table.insert(themed.cardStrokes, fsS)
+-- FARM CARD
+local FC=Instance.new("Frame");FC.Size=UDim2.new(1,0,0,120);FC.BackgroundColor3=COL.R;FC.BackgroundTransparency=0.4
+FC.BorderSizePixel=0;FC.ZIndex=6;FC.Parent=FP;corner(FC,10)
+local fcs=stroke(FC,COL.B,1,0.55);table.insert(TH.cards,FC);table.insert(TH.cStrokes,fcs)
 
--- Farm Header
-local FarmSep = Instance.new("Frame")
-FarmSep.Size = UDim2.new(1, -24, 0, 18)
-FarmSep.Position = UDim2.fromOffset(12, 6)
-FarmSep.BackgroundTransparency = 1
-FarmSep.ZIndex = 7
-FarmSep.Parent = FarmSection
+-- Farm separator
+local FSep=Instance.new("Frame");FSep.Size=UDim2.new(1,-24,0,18);FSep.Position=UDim2.fromOffset(12,6);FSep.BackgroundTransparency=1;FSep.ZIndex=7;FSep.Parent=FC
+local FL1=Instance.new("Frame");FL1.Size=UDim2.new(0.5,-25,0,1);FL1.Position=UDim2.fromOffset(0,9);FL1.BackgroundColor3=COL.B;FL1.BackgroundTransparency=0.5;FL1.BorderSizePixel=0;FL1.ZIndex=7;FL1.Parent=FSep
+local FLbl=Instance.new("TextLabel");FLbl.Size=UDim2.fromOffset(40,18);FLbl.Position=UDim2.new(0.5,-20,0,0);FLbl.BackgroundTransparency=1;FLbl.Text="FARM";FLbl.TextSize=10;FLbl.TextColor3=COL.A;FLbl.Font=Enum.Font.GothamBold;FLbl.TextXAlignment=Enum.TextXAlignment.Center;FLbl.ZIndex=7;FLbl.Parent=FSep
+local FL2=Instance.new("Frame");FL2.Size=UDim2.new(0.5,-25,0,1);FL2.Position=UDim2.new(0.5,20,0,9);FL2.BackgroundColor3=COL.B;FL2.BackgroundTransparency=0.5;FL2.BorderSizePixel=0;FL2.ZIndex=7;FL2.Parent=FSep
 
-local FarmLineL = Instance.new("Frame")
-FarmLineL.Size = UDim2.new(0.5, -25, 0, 1)
-FarmLineL.Position = UDim2.fromOffset(0, 9)
-FarmLineL.BackgroundColor3 = COLORS.Border
-FarmLineL.BackgroundTransparency = 0.5
-FarmLineL.BorderSizePixel = 0
-FarmLineL.ZIndex = 7
-FarmLineL.Parent = FarmSep
+-- ANCHOR ROW
+local AR=Instance.new("Frame");AR.Size=UDim2.new(1,-24,0,40);AR.Position=UDim2.fromOffset(12,28);AR.BackgroundTransparency=1;AR.ZIndex=7;AR.Parent=FC
 
-local FarmLabel = Instance.new("TextLabel")
-FarmLabel.Size = UDim2.fromOffset(40, 18)
-FarmLabel.Position = UDim2.new(0.5, -20, 0, 0)
-FarmLabel.BackgroundTransparency = 1
-FarmLabel.Text = "FARM"
-FarmLabel.TextSize = 10
-FarmLabel.TextColor3 = COLORS.Accent
-FarmLabel.Font = Enum.Font.GothamBold
-FarmLabel.TextXAlignment = Enum.TextXAlignment.Center
-FarmLabel.ZIndex = 7
-FarmLabel.Parent = FarmSep
-themed.farmTitle = FarmLabel
+local AKF=Instance.new("Frame");AKF.Size=UDim2.fromOffset(40,20);AKF.Position=UDim2.fromOffset(0,10);AKF.BackgroundColor3=COL.C;AKF.ZIndex=8;AKF.Parent=AR;corner(AKF,5)
+local AKS=stroke(AKF,COL.A,1,0.6);table.insert(TH.kFrames,AKF);table.insert(TH.kStrokes,AKS)
+local AKL=Instance.new("TextLabel");AKL.Size=UDim2.fromScale(1,1);AKL.BackgroundTransparency=1;AKL.Text="[".._anchorKey.."]";AKL.TextSize=9;AKL.TextColor3=COL.A;AKL.Font=Enum.Font.GothamBold;AKL.ZIndex=9;AKL.Parent=AKF;table.insert(TH.kLabels,AKL)
+local AKB=Instance.new("TextButton");AKB.Size=UDim2.fromScale(1,1);AKB.BackgroundTransparency=1;AKB.Text="";AKB.ZIndex=10;AKB.Parent=AKF
+AKB.MouseButton1Click:Connect(function() _waitKey="anchor";AKL.Text="...";AKL.TextColor3=COL.Red end)
 
-local FarmLineR = Instance.new("Frame")
-FarmLineR.Size = UDim2.new(0.5, -25, 0, 1)
-FarmLineR.Position = UDim2.new(0.5, 20, 0, 9)
-FarmLineR.BackgroundColor3 = COLORS.Border
-FarmLineR.BackgroundTransparency = 0.5
-FarmLineR.BorderSizePixel = 0
-FarmLineR.ZIndex = 7
-FarmLineR.Parent = FarmSep
+label(AR,"Anchor",UDim2.fromOffset(120,40),UDim2.fromOffset(48,0),12,COL.White,Enum.Font.GothamMedium)
 
--- Anchor Row
-local AnchorRow = Instance.new("Frame")
-AnchorRow.Size = UDim2.new(1, -24, 0, 40)
-AnchorRow.Position = UDim2.fromOffset(12, 28)
-AnchorRow.BackgroundTransparency = 1
-AnchorRow.ZIndex = 7
-AnchorRow.Parent = FarmSection
+local AT=Instance.new("TextButton");AT.Size=UDim2.fromOffset(42,20);AT.Position=UDim2.new(1,-48,0.5,-10)
+AT.BackgroundColor3=_anchorOn and COL.A or COL.C;AT.BorderSizePixel=0;AT.AutoButtonColor=false
+AT.Text=_anchorOn and "ON" or "OFF";AT.TextSize=8;AT.TextColor3=_anchorOn and COL.TT or COL.D
+AT.Font=Enum.Font.GothamBold;AT.ZIndex=8;AT.Parent=AR;corner(AT,6)
+local ATS=stroke(AT,_anchorOn and COL.A or COL.B,1,0.5)
+table.insert(TH.toggles,{b=AT,on=function() return AT.Text=="ON" end})
+table.insert(TH.tStrokes,{s=ATS,on=function() return AT.Text=="ON" end})
 
-local AKFrame = Instance.new("Frame")
-AKFrame.Size = UDim2.fromOffset(40, 20)
-AKFrame.Position = UDim2.fromOffset(0, 10)
-AKFrame.BackgroundColor3 = COLORS.Control
-AKFrame.ZIndex = 8
-AKFrame.Parent = AnchorRow
-addCorner(AKFrame, 5)
-local AKStroke = addStroke(AKFrame, COLORS.Accent, 1, 0.6)
-table.insert(themed.keybindFrames, AKFrame)
-table.insert(themed.keybindStrokes, AKStroke)
-
-local AKLabel = Instance.new("TextLabel")
-AKLabel.Size = UDim2.fromScale(1, 1)
-AKLabel.BackgroundTransparency = 1
-AKLabel.Text = "[".._anchorKeybind.."]"
-AKLabel.TextSize = 9
-AKLabel.TextColor3 = COLORS.Accent
-AKLabel.Font = Enum.Font.GothamBold
-AKLabel.ZIndex = 9
-AKLabel.Parent = AKFrame
-table.insert(themed.keybindLabels, AKLabel)
-
-local AKBtn = Instance.new("TextButton")
-AKBtn.Size = UDim2.fromScale(1, 1)
-AKBtn.BackgroundTransparency = 1
-AKBtn.Text = ""
-AKBtn.ZIndex = 10
-AKBtn.Parent = AKFrame
-AKBtn.MouseButton1Click:Connect(function() _waitingForKeybind = "anchor"; AKLabel.Text = "..."; AKLabel.TextColor3 = COLORS.Red end)
-
-makeLabel(AnchorRow, "Anchor", UDim2.fromOffset(120, 40), UDim2.fromOffset(48, 0), 12, COLORS.White, Enum.Font.GothamMedium)
-
-local AnchorToggle = Instance.new("TextButton")
-AnchorToggle.Size = UDim2.fromOffset(42, 20)
-AnchorToggle.Position = UDim2.new(1, -48, 0.5, -10)
-AnchorToggle.BackgroundColor3 = _anchorEnabled and COLORS.Accent or COLORS.Control
-AnchorToggle.BorderSizePixel = 0
-AnchorToggle.AutoButtonColor = false
-AnchorToggle.Text = _anchorEnabled and "ON" or "OFF"
-AnchorToggle.TextSize = 8
-AnchorToggle.TextColor3 = _anchorEnabled and COLORS.TabTextOn or COLORS.Dim
-AnchorToggle.Font = Enum.Font.GothamBold
-AnchorToggle.ZIndex = 8
-AnchorToggle.Parent = AnchorRow
-addCorner(AnchorToggle, 6)
-local ATStroke = addStroke(AnchorToggle, _anchorEnabled and COLORS.Accent or COLORS.Border, 1, 0.5)
-table.insert(themed.toggleButtons, {btn = AnchorToggle, isOn = function() return _anchorEnabled end})
-table.insert(themed.toggleStrokes, {stroke = ATStroke, isOn = function() return _anchorEnabled end})
-
-local function toggleAnchor(state)
-    if state == nil then state = not _anchorEnabled end
-    _anchorEnabled = state
-    savedConfig.anchorEnabled = state
-    saveConfig()
-    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
-    AnchorToggle.Text = state and "ON" or "OFF"
-    AnchorToggle.BackgroundColor3 = state and t.Accent or t.Control
-    AnchorToggle.TextColor3 = state and t.TabTextOn or t.Dim
-    ATStroke.Color = state and t.Accent or t.Border
-    ATStroke.Transparency = state and 0.5 or 0.7
-
-    if _anchorConnection then _anchorConnection:Disconnect(); _anchorConnection = nil end
-    if _anchorRespawnConn then _anchorRespawnConn:Disconnect(); _anchorRespawnConn = nil end
-
-    if state then
-        local char = player.Character
-        if not char then return end
-        local root = char:FindFirstChild("HumanoidRootPart")
-        if not root then return end
-        _anchorPosition = root.CFrame
-        local currentRoot = root
-
-        _anchorConnection = RunService.Heartbeat:Connect(function()
-            if not _anchorEnabled or not _anchorPosition then return end
-            local c = player.Character
-            if not c then return end
-            local r = c:FindFirstChild("HumanoidRootPart")
-            if not r then return end
-            local dist = (r.Position - _anchorPosition.Position).Magnitude
-            if dist > 2 then r.CFrame = _anchorPosition end
-            pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
+local function togAnchor(st)
+    if st==nil then st=AT.Text~="ON" end
+    _anchorOn=st;cfg.anchorOn=st;save()
+    local t=THEMES[_bg] or THEMES[1]
+    AT.Text=st and "ON" or "OFF";AT.BackgroundColor3=st and t.A or t.C;AT.TextColor3=st and t.TT or t.D
+    ATS.Color=st and t.A or t.B;ATS.Transparency=st and 0.5 or 0.7
+    if _anchorConn then _anchorConn:Disconnect();_anchorConn=nil end
+    if _anchorRespawn then _anchorRespawn:Disconnect();_anchorRespawn=nil end
+    if st then
+        local ch=player.Character;if not ch then return end
+        local r=ch:FindFirstChild("HumanoidRootPart");if not r then return end
+        _anchorPos=r.CFrame
+        _anchorConn=RunService.Heartbeat:Connect(function()
+            if not _anchorOn or not _anchorPos then return end
+            local c=player.Character;if not c then return end
+            local hr=c:FindFirstChild("HumanoidRootPart");if not hr then return end
+            if (hr.Position-_anchorPos.Position).Magnitude>2 then hr.CFrame=_anchorPos end
+            pcall(function() hr.AssemblyLinearVelocity=Vector3.zero end)
         end)
-
-        _anchorRespawnConn = player.CharacterAdded:Connect(function(newChar)
-            if not _anchorEnabled or not _anchorPosition then return end
+        _anchorRespawn=player.CharacterAdded:Connect(function(nc)
+            if not _anchorOn or not _anchorPos then return end
             task.wait(1.5)
-            local newRoot = newChar:WaitForChild("HumanoidRootPart", 5)
-            if newRoot then newRoot.CFrame = _anchorPosition; currentRoot = newRoot end
+            local nr=nc:WaitForChild("HumanoidRootPart",5)
+            if nr then nr.CFrame=_anchorPos end
         end)
-        if ConsoleOutput then appendConsoleStatus("Anchor", true) end
+        if ConsoleOut then appendStatus("Anchor",true) end
     else
-        _anchorPosition = nil
-        if ConsoleOutput then appendConsoleStatus("Anchor", false) end
+        _anchorPos=nil
+        if ConsoleOut then appendStatus("Anchor",false) end
     end
 end
-AnchorToggle.Activated:Connect(function() toggleAnchor() end)
-AnchorToggle.MouseButton1Click:Connect(function() toggleAnchor() end)
+AT.MouseButton1Click:Connect(function() togAnchor() end)
 
--- Auto Buy Row
-local AutoBuyRow = Instance.new("Frame")
-AutoBuyRow.Size = UDim2.new(1, -24, 0, 40)
-AutoBuyRow.Position = UDim2.fromOffset(12, 72)
-AutoBuyRow.BackgroundTransparency = 1
-AutoBuyRow.ZIndex = 7
-AutoBuyRow.Parent = FarmSection
+-- AUTO BUY ROW
+local ABR=Instance.new("Frame");ABR.Size=UDim2.new(1,-24,0,40);ABR.Position=UDim2.fromOffset(12,72);ABR.BackgroundTransparency=1;ABR.ZIndex=7;ABR.Parent=FC
 
-local ABKFrame = Instance.new("Frame")
-ABKFrame.Size = UDim2.fromOffset(40, 20)
-ABKFrame.Position = UDim2.fromOffset(0, 10)
-ABKFrame.BackgroundColor3 = COLORS.Control
-ABKFrame.ZIndex = 8
-ABKFrame.Parent = AutoBuyRow
-addCorner(ABKFrame, 5)
-local ABKStroke = addStroke(ABKFrame, COLORS.Accent, 1, 0.6)
-table.insert(themed.keybindFrames, ABKFrame)
-table.insert(themed.keybindStrokes, ABKStroke)
+local ABKF=Instance.new("Frame");ABKF.Size=UDim2.fromOffset(40,20);ABKF.Position=UDim2.fromOffset(0,10);ABKF.BackgroundColor3=COL.C;ABKF.ZIndex=8;ABKF.Parent=ABR;corner(ABKF,5)
+local ABKS=stroke(ABKF,COL.A,1,0.6);table.insert(TH.kFrames,ABKF);table.insert(TH.kStrokes,ABKS)
+local ABKL=Instance.new("TextLabel");ABKL.Size=UDim2.fromScale(1,1);ABKL.BackgroundTransparency=1;ABKL.Text="[".._autoBuyKey.."]";ABKL.TextSize=9;ABKL.TextColor3=COL.A;ABKL.Font=Enum.Font.GothamBold;ABKL.ZIndex=9;ABKL.Parent=ABKF;table.insert(TH.kLabels,ABKL)
+local ABKB=Instance.new("TextButton");ABKB.Size=UDim2.fromScale(1,1);ABKB.BackgroundTransparency=1;ABKB.Text="";ABKB.ZIndex=10;ABKB.Parent=ABKF
+ABKB.MouseButton1Click:Connect(function() _waitKey="autoBuy";ABKL.Text="...";ABKL.TextColor3=COL.Red end)
 
-local ABKLabel = Instance.new("TextLabel")
-ABKLabel.Size = UDim2.fromScale(1, 1)
-ABKLabel.BackgroundTransparency = 1
-ABKLabel.Text = "[".._autoBuyKeybind.."]"
-ABKLabel.TextSize = 9
-ABKLabel.TextColor3 = COLORS.Accent
-ABKLabel.Font = Enum.Font.GothamBold
-ABKLabel.ZIndex = 9
-ABKLabel.Parent = ABKFrame
-table.insert(themed.keybindLabels, ABKLabel)
+label(ABR,"Auto Buy",UDim2.fromOffset(120,40),UDim2.fromOffset(48,0),12,COL.White,Enum.Font.GothamMedium)
 
-local ABKBtn = Instance.new("TextButton")
-ABKBtn.Size = UDim2.fromScale(1, 1)
-ABKBtn.BackgroundTransparency = 1
-ABKBtn.Text = ""
-ABKBtn.ZIndex = 10
-ABKBtn.Parent = ABKFrame
-ABKBtn.MouseButton1Click:Connect(function() _waitingForKeybind = "autoBuy"; ABKLabel.Text = "..."; ABKLabel.TextColor3 = COLORS.Red end)
+local ABT=Instance.new("TextButton");ABT.Size=UDim2.fromOffset(42,20);ABT.Position=UDim2.new(1,-48,0.5,-10)
+ABT.BackgroundColor3=_autoBuyOn and COL.A or COL.C;ABT.BorderSizePixel=0;ABT.AutoButtonColor=false
+ABT.Text=_autoBuyOn and "ON" or "OFF";ABT.TextSize=8;ABT.TextColor3=_autoBuyOn and COL.TT or COL.D
+ABT.Font=Enum.Font.GothamBold;ABT.ZIndex=8;ABT.Parent=ABR;corner(ABT,6)
+local ABTS=stroke(ABT,_autoBuyOn and COL.A or COL.B,1,0.5)
+table.insert(TH.toggles,{b=ABT,on=function() return ABT.Text=="ON" end})
+table.insert(TH.tStrokes,{s=ABTS,on=function() return ABT.Text=="ON" end})
 
-makeLabel(AutoBuyRow, "Auto Buy", UDim2.fromOffset(120, 40), UDim2.fromOffset(48, 0), 12, COLORS.White, Enum.Font.GothamMedium)
-
-local AutoBuyToggle = Instance.new("TextButton")
-AutoBuyToggle.Size = UDim2.fromOffset(42, 20)
-AutoBuyToggle.Position = UDim2.new(1, -48, 0.5, -10)
-AutoBuyToggle.BackgroundColor3 = _autoBuyEnabled and COLORS.Accent or COLORS.Control
-AutoBuyToggle.BorderSizePixel = 0
-AutoBuyToggle.AutoButtonColor = false
-AutoBuyToggle.Text = _autoBuyEnabled and "ON" or "OFF"
-AutoBuyToggle.TextSize = 8
-AutoBuyToggle.TextColor3 = _autoBuyEnabled and COLORS.TabTextOn or COLORS.Dim
-AutoBuyToggle.Font = Enum.Font.GothamBold
-AutoBuyToggle.ZIndex = 8
-AutoBuyToggle.Parent = AutoBuyRow
-addCorner(AutoBuyToggle, 6)
-local ABTStroke = addStroke(AutoBuyToggle, _autoBuyEnabled and COLORS.Accent or COLORS.Border, 1, 0.5)
-table.insert(themed.toggleButtons, {btn = AutoBuyToggle, isOn = function() return _autoBuyEnabled end})
-table.insert(themed.toggleStrokes, {stroke = ABTStroke, isOn = function() return _autoBuyEnabled end})
-
-local function toggleAutoBuy(state)
-    if state == nil then state = not _autoBuyEnabled end
-    _autoBuyEnabled = state
-    savedConfig.autoBuyEnabled = state
-    saveConfig()
-    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
-    AutoBuyToggle.Text = state and "ON" or "OFF"
-    AutoBuyToggle.BackgroundColor3 = state and t.Accent or t.Control
-    AutoBuyToggle.TextColor3 = state and t.TabTextOn or t.Dim
-    ABTStroke.Color = state and t.Accent or t.Border
-    ABTStroke.Transparency = state and 0.5 or 0.7
-
-    if state then
-        if _autoBuyConnection then _autoBuyConnection:Disconnect() end
-        _autoBuyConnection = RunService.Stepped:Connect(function()
-            if not _autoBuyEnabled then return end
-            for _, prompt in pairs(workspace:GetDescendants()) do
-                if prompt:IsA("ProximityPrompt") and prompt.Enabled then
-                    pcall(function()
-                        prompt.HoldDuration = 0
-                        prompt:InputHoldBegin()
-                        prompt:InputHoldEnd()
-                    end)
+local function togAutoBuy(st)
+    if st==nil then st=ABT.Text~="ON" end
+    _autoBuyOn=st;cfg.autoBuyOn=st;save()
+    local t=THEMES[_bg] or THEMES[1]
+    ABT.Text=st and "ON" or "OFF";ABT.BackgroundColor3=st and t.A or t.C;ABT.TextColor3=st and t.TT or t.D
+    ABTS.Color=st and t.A or t.B;ABTS.Transparency=st and 0.5 or 0.7
+    if st then
+        if _autoBuyConn then _autoBuyConn:Disconnect() end
+        _autoBuyConn=RunService.Stepped:Connect(function()
+            if not _autoBuyOn then return end
+            for _,p in pairs(workspace:GetDescendants()) do
+                if p:IsA("ProximityPrompt") and p.Enabled then
+                    pcall(function() p.HoldDuration=0;p:InputHoldBegin();p:InputHoldEnd() end)
                 end
             end
         end)
-        if ConsoleOutput then appendConsoleStatus("Auto Buy", true) end
+        if ConsoleOut then appendStatus("Auto Buy",true) end
     else
-        if _autoBuyConnection then _autoBuyConnection:Disconnect(); _autoBuyConnection = nil end
-        if ConsoleOutput then appendConsoleStatus("Auto Buy", false) end
+        if _autoBuyConn then _autoBuyConn:Disconnect();_autoBuyConn=nil end
+        if ConsoleOut then appendStatus("Auto Buy",false) end
     end
 end
-AutoBuyToggle.Activated:Connect(function() toggleAutoBuy() end)
-AutoBuyToggle.MouseButton1Click:Connect(function() toggleAutoBuy() end)
+ABT.MouseButton1Click:Connect(function() togAutoBuy() end)
 
--- APPEARANCE Section
-local AppearanceSection = Instance.new("Frame")
-AppearanceSection.Size = UDim2.new(1, 0, 0, 140)
-AppearanceSection.BackgroundColor3 = COLORS.Row
-AppearanceSection.BackgroundTransparency = 0.4
-AppearanceSection.BorderSizePixel = 0
-AppearanceSection.ZIndex = 6
-AppearanceSection.Parent = FarmPanel
-addCorner(AppearanceSection, 10)
-local apS = addStroke(AppearanceSection, COLORS.Border, 1, 0.55)
-table.insert(themed.cards, AppearanceSection)
-table.insert(themed.cardStrokes, apS)
+-- APPEARANCE CARD
+local APC=Instance.new("Frame");APC.Size=UDim2.new(1,0,0,140);APC.BackgroundColor3=COL.R;APC.BackgroundTransparency=0.4
+APC.BorderSizePixel=0;APC.ZIndex=6;APC.Parent=FP;corner(APC,10)
+local apcs=stroke(APC,COL.B,1,0.55);table.insert(TH.cards,APC);table.insert(TH.cStrokes,apcs)
 
--- Appearance Header
-local AppSep = Instance.new("Frame")
-AppSep.Size = UDim2.new(1, -24, 0, 18)
-AppSep.Position = UDim2.fromOffset(12, 6)
-AppSep.BackgroundTransparency = 1
-AppSep.ZIndex = 7
-AppSep.Parent = AppearanceSection
+-- App separator
+local ASep=Instance.new("Frame");ASep.Size=UDim2.new(1,-24,0,18);ASep.Position=UDim2.fromOffset(12,6);ASep.BackgroundTransparency=1;ASep.ZIndex=7;ASep.Parent=APC
+local AL1=Instance.new("Frame");AL1.Size=UDim2.new(0.5,-45,0,1);AL1.Position=UDim2.fromOffset(0,9);AL1.BackgroundColor3=COL.B;AL1.BackgroundTransparency=0.5;AL1.BorderSizePixel=0;AL1.ZIndex=7;AL1.Parent=ASep
+local ALbl=Instance.new("TextLabel");ALbl.Size=UDim2.fromOffset(80,18);ALbl.Position=UDim2.new(0.5,-40,0,0);ALbl.BackgroundTransparency=1;ALbl.Text="APPEARANCE";ALbl.TextSize=10;ALbl.TextColor3=COL.D;ALbl.Font=Enum.Font.GothamBold;ALbl.TextXAlignment=Enum.TextXAlignment.Center;ALbl.ZIndex=7;ALbl.Parent=ASep
+local AL2=Instance.new("Frame");AL2.Size=UDim2.new(0.5,-45,0,1);AL2.Position=UDim2.new(0.5,40,0,9);AL2.BackgroundColor3=COL.B;AL2.BackgroundTransparency=0.5;AL2.BorderSizePixel=0;AL2.ZIndex=7;AL2.Parent=ASep
 
-local AppLineL = Instance.new("Frame")
-AppLineL.Size = UDim2.new(0.5, -45, 0, 1)
-AppLineL.Position = UDim2.fromOffset(0, 9)
-AppLineL.BackgroundColor3 = COLORS.Border
-AppLineL.BackgroundTransparency = 0.5
-AppLineL.BorderSizePixel = 0
-AppLineL.ZIndex = 7
-AppLineL.Parent = AppSep
+-- BG GRID
+local BGG=Instance.new("Frame");BGG.Size=UDim2.new(1,-24,0,55);BGG.Position=UDim2.fromOffset(12,28);BGG.BackgroundTransparency=1;BGG.ZIndex=7;BGG.Parent=APC
+local BGGL=Instance.new("UIGridLayout");BGGL.CellSize=UDim2.new(0,48,0,55);BGGL.CellPadding=UDim2.new(0,5,0,0)
+BGGL.FillDirection=Enum.FillDirection.Horizontal;BGGL.HorizontalAlignment=Enum.HorizontalAlignment.Center
+BGGL.SortOrder=Enum.SortOrder.LayoutOrder;BGGL.Parent=BGG
 
-local AppLabel = Instance.new("TextLabel")
-AppLabel.Size = UDim2.fromOffset(80, 18)
-AppLabel.Position = UDim2.new(0.5, -40, 0, 0)
-AppLabel.BackgroundTransparency = 1
-AppLabel.Text = "APPEARANCE"
-AppLabel.TextSize = 10
-AppLabel.TextColor3 = COLORS.Dim
-AppLabel.Font = Enum.Font.GothamBold
-AppLabel.TextXAlignment = Enum.TextXAlignment.Center
-AppLabel.ZIndex = 7
-AppLabel.Parent = AppSep
-
-local AppLineR = Instance.new("Frame")
-AppLineR.Size = UDim2.new(0.5, -45, 0, 1)
-AppLineR.Position = UDim2.new(0.5, 40, 0, 9)
-AppLineR.BackgroundColor3 = COLORS.Border
-AppLineR.BackgroundTransparency = 0.5
-AppLineR.BorderSizePixel = 0
-AppLineR.ZIndex = 7
-AppLineR.Parent = AppSep
-
--- BG Cards
-local BGGrid = Instance.new("Frame")
-BGGrid.Size = UDim2.new(1, -24, 0, 55)
-BGGrid.Position = UDim2.fromOffset(12, 28)
-BGGrid.BackgroundTransparency = 1
-BGGrid.ZIndex = 7
-BGGrid.Parent = AppearanceSection
-local BGGridLayout = Instance.new("UIGridLayout")
-BGGridLayout.CellSize = UDim2.new(0, 48, 0, 55)
-BGGridLayout.CellPadding = UDim2.new(0, 5, 0, 0)
-BGGridLayout.FillDirection = Enum.FillDirection.Horizontal
-BGGridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-BGGridLayout.SortOrder = Enum.SortOrder.LayoutOrder
-BGGridLayout.Parent = BGGrid
-
-local BGButtons = {}
-
-local function applyBG(index)
-    _selectedBG = index
-    savedConfig.selectedBG = index
-    saveConfig()
-    BackgroundImage.Image = BG_PRESETS[index].id
-    applyFullTheme(index)
-    local t = BG_THEMES[index] or BG_THEMES[1]
-    for idx, b in pairs(BGButtons) do
-        local a = (idx == index)
-        TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = a and t.Accent or t.Control}):Play()
-        local s = b:FindFirstChildOfClass("UIStroke")
-        if s then s.Color = a and t.Accent or t.Border; s.Transparency = a and 0.2 or 0.7 end
-        local ch = b:FindFirstChild("Check")
-        if ch then ch.Visible = a end
+local bgBtns={}
+local function applyBG(i)
+    _bg=i;cfg.bg=i;save();BG.Image=BGS[i].id;applyTheme(i)
+    local t=THEMES[i] or THEMES[1]
+    for idx,b in pairs(bgBtns) do
+        local a=(idx==i)
+        TweenService:Create(b,TweenInfo.new(0.2),{BackgroundColor3=a and t.A or t.C}):Play()
+        local s=b:FindFirstChildOfClass("UIStroke");if s then s.Color=a and t.A or t.B;s.Transparency=a and 0.2 or 0.7 end
+        local ch=b:FindFirstChild("Ch");if ch then ch.Visible=a end
     end
-    if ConsoleOutput then appendConsoleStatus("BG: "..BG_PRESETS[index].name, true) end
+    if ConsoleOut then appendStatus("BG: "..BGS[i].n,true) end
 end
 
-for i, preset in ipairs(BG_PRESETS) do
-    local t = BG_THEMES[i] or BG_THEMES[1]
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0, 48, 0, 55)
-    b.BackgroundColor3 = (_selectedBG == i) and t.Accent or COLORS.Control
-    b.BorderSizePixel = 0
-    b.AutoButtonColor = false
-    b.LayoutOrder = i
-    b.ZIndex = 8
-    b.Parent = BGGrid
-    addCorner(b, 6)
-    local bStroke = addStroke(b, (_selectedBG == i) and t.Accent or COLORS.Border, 1.5, (_selectedBG == i) and 0.2 or 0.7)
-    themed.bgButtons[i] = b
-    themed.bgStrokes[i] = bStroke
-
-    local preview = Instance.new("ImageLabel")
-    preview.Size = UDim2.new(1, -4, 1, -16)
-    preview.Position = UDim2.fromOffset(2, 2)
-    preview.BackgroundTransparency = 1
-    preview.Image = preset.id
-    preview.ScaleType = Enum.ScaleType.Crop
-    preview.ZIndex = 9
-    preview.Parent = b
-    addCorner(preview, 4)
-
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(1, 0, 0, 12)
-    nameLabel.Position = UDim2.new(0, 0, 1, -12)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = preset.name
-    nameLabel.TextSize = 7
-    nameLabel.TextColor3 = COLORS.Dim
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.ZIndex = 9
-    nameLabel.Parent = b
-
-    local check = Instance.new("TextLabel")
-    check.Name = "Check"
-    check.Size = UDim2.fromOffset(12, 12)
-    check.Position = UDim2.new(1, -13, 0, 1)
-    check.BackgroundColor3 = COLORS.Green
-    check.Text = "Y"
-    check.TextSize = 7
-    check.TextColor3 = Color3.fromRGB(0, 0, 0)
-    check.Font = Enum.Font.GothamBold
-    check.ZIndex = 10
-    check.Visible = (_selectedBG == i)
-    check.Parent = b
-    addCorner(check, 6)
-
-    BGButtons[i] = b
+for i,preset in ipairs(BGS) do
+    local t=THEMES[i] or THEMES[1]
+    local b=Instance.new("TextButton");b.Size=UDim2.new(0,48,0,55)
+    b.BackgroundColor3=(_bg==i)and t.A or COL.C;b.BorderSizePixel=0;b.AutoButtonColor=false;b.LayoutOrder=i
+    b.ZIndex=8;b.Parent=BGG;corner(b,6)
+    local bs=stroke(b,(_bg==i)and t.A or COL.B,1.5,(_bg==i)and 0.2 or 0.7)
+    TH.bgBtns[i]=b;TH.bgStrokes[i]=bs
+    local pv=Instance.new("ImageLabel");pv.Size=UDim2.new(1,-4,1,-16);pv.Position=UDim2.fromOffset(2,2)
+    pv.BackgroundTransparency=1;pv.Image=preset.id;pv.ScaleType=Enum.ScaleType.Crop;pv.ZIndex=9;pv.Parent=b;corner(pv,4)
+    local nl=Instance.new("TextLabel");nl.Size=UDim2.new(1,0,0,12);nl.Position=UDim2.new(0,0,1,-12)
+    nl.BackgroundTransparency=1;nl.Text=preset.n;nl.TextSize=7;nl.TextColor3=COL.D;nl.Font=Enum.Font.GothamBold;nl.ZIndex=9;nl.Parent=b
+    local ch=Instance.new("TextLabel");ch.Name="Ch";ch.Size=UDim2.fromOffset(12,12);ch.Position=UDim2.new(1,-13,0,1)
+    ch.BackgroundColor3=COL.Green;ch.Text="Y";ch.TextSize=7;ch.TextColor3=Color3.fromRGB(0,0,0);ch.Font=Enum.Font.GothamBold
+    ch.ZIndex=10;ch.Visible=(_bg==i);ch.Parent=b;corner(ch,6)
+    bgBtns[i]=b
     b.MouseButton1Click:Connect(function() applyBG(i) end)
 end
 
--- GUI Scale
-local GUIScaleRow = Instance.new("Frame")
-GUIScaleRow.Size = UDim2.new(1, -24, 0, 35)
-GUIScaleRow.Position = UDim2.fromOffset(12, 88)
-GUIScaleRow.BackgroundTransparency = 1
-GUIScaleRow.ZIndex = 7
-GUIScaleRow.Parent = AppearanceSection
+-- GUI SCALE
+local GSR=Instance.new("Frame");GSR.Size=UDim2.new(1,-24,0,35);GSR.Position=UDim2.fromOffset(12,88);GSR.BackgroundTransparency=1;GSR.ZIndex=7;GSR.Parent=APC
+label(GSR,"GUI Scale",UDim2.fromOffset(100,35),UDim2.fromOffset(4,0),11,COL.T,Enum.Font.GothamMedium)
 
-makeLabel(GUIScaleRow, "GUI Scale", UDim2.fromOffset(100, 35), UDim2.fromOffset(4, 0), 11, COLORS.Text, Enum.Font.GothamMedium)
+local SCtrl=Instance.new("Frame");SCtrl.Size=UDim2.fromOffset(120,28);SCtrl.Position=UDim2.new(1,-125,0,4)
+SCtrl.BackgroundColor3=COL.C;SCtrl.ZIndex=8;SCtrl.Parent=GSR;corner(SCtrl,6);stroke(SCtrl,COL.B,1,0.65)
 
-local ScaleControl = Instance.new("Frame")
-ScaleControl.Size = UDim2.fromOffset(120, 28)
-ScaleControl.Position = UDim2.new(1, -125, 0, 4)
-ScaleControl.BackgroundColor3 = COLORS.Control
-ScaleControl.ZIndex = 8
-ScaleControl.Parent = GUIScaleRow
-addCorner(ScaleControl, 6)
-addStroke(ScaleControl, COLORS.Border, 1, 0.65)
+local SMinus=Instance.new("TextButton");SMinus.Size=UDim2.fromOffset(28,22);SMinus.Position=UDim2.fromOffset(3,3)
+SMinus.BackgroundColor3=COL.C;SMinus.Text="-";SMinus.TextSize=14;SMinus.TextColor3=COL.D;SMinus.Font=Enum.Font.GothamBold
+SMinus.ZIndex=9;SMinus.Parent=SCtrl;corner(SMinus,4)
 
-local ScaleMinus = Instance.new("TextButton")
-ScaleMinus.Size = UDim2.fromOffset(28, 22)
-ScaleMinus.Position = UDim2.fromOffset(3, 3)
-ScaleMinus.BackgroundColor3 = COLORS.Control
-ScaleMinus.Text = "-"
-ScaleMinus.TextSize = 14
-ScaleMinus.TextColor3 = COLORS.Dim
-ScaleMinus.Font = Enum.Font.GothamBold
-ScaleMinus.ZIndex = 9
-ScaleMinus.Parent = ScaleControl
-addCorner(ScaleMinus, 4)
+local SVal=Instance.new("TextLabel");SVal.Size=UDim2.fromOffset(50,28);SVal.Position=UDim2.fromOffset(35,0)
+SVal.BackgroundTransparency=1;SVal.Text=string.format("%.2f",_scale);SVal.TextSize=11;SVal.TextColor3=COL.A
+SVal.Font=Enum.Font.GothamBold;SVal.TextXAlignment=Enum.TextXAlignment.Center;SVal.ZIndex=9;SVal.Parent=SCtrl
 
-local ScaleValue = Instance.new("TextLabel")
-ScaleValue.Size = UDim2.fromOffset(50, 28)
-ScaleValue.Position = UDim2.fromOffset(35, 0)
-ScaleValue.BackgroundTransparency = 1
-ScaleValue.Text = string.format("%.2f", _guiScale)
-ScaleValue.TextSize = 11
-ScaleValue.TextColor3 = COLORS.Accent
-ScaleValue.Font = Enum.Font.GothamBold
-ScaleValue.TextXAlignment = Enum.TextXAlignment.Center
-ScaleValue.ZIndex = 9
-ScaleValue.Parent = ScaleControl
+local SPlus=Instance.new("TextButton");SPlus.Size=UDim2.fromOffset(28,22);SPlus.Position=UDim2.fromOffset(89,3)
+SPlus.BackgroundColor3=COL.C;SPlus.Text="+";SPlus.TextSize=14;SPlus.TextColor3=COL.D;SPlus.Font=Enum.Font.GothamBold
+SPlus.ZIndex=9;SPlus.Parent=SCtrl;corner(SPlus,4)
 
-local ScalePlus = Instance.new("TextButton")
-ScalePlus.Size = UDim2.fromOffset(28, 22)
-ScalePlus.Position = UDim2.fromOffset(89, 3)
-ScalePlus.BackgroundColor3 = COLORS.Control
-ScalePlus.Text = "+"
-ScalePlus.TextSize = 14
-ScalePlus.TextColor3 = COLORS.Dim
-ScalePlus.Font = Enum.Font.GothamBold
-ScalePlus.ZIndex = 9
-ScalePlus.Parent = ScaleControl
-addCorner(ScalePlus, 4)
-
-local function updateScale(delta)
-    _guiScale = math.clamp(_guiScale + delta, 0.5, 1.5)
-    _guiScale = math.floor(_guiScale * 100 + 0.5) / 100
-    savedConfig.guiScale = _guiScale
-    saveConfig()
-    ScaleValue.Text = string.format("%.2f", _guiScale)
-    TweenService:Create(InterfaceScale, TweenInfo.new(0.2), {Scale = _guiScale}):Play()
+local function updScale(d)
+    _scale=math.clamp(_scale+d,0.5,1.5)
+    _scale=math.floor(_scale*100+0.5)/100
+    cfg.scale=_scale;save();SVal.Text=string.format("%.2f",_scale)
+    TweenService:Create(Scale,TweenInfo.new(0.2),{Scale=_scale}):Play()
 end
+SMinus.MouseButton1Click:Connect(function() updScale(-0.05) end)
+SPlus.MouseButton1Click:Connect(function() updScale(0.05) end)
 
-ScaleMinus.MouseButton1Click:Connect(function() updateScale(-0.05) end)
-ScalePlus.MouseButton1Click:Connect(function() updateScale(0.05) end)
+-- OPTIMIZATION CARD
+local OC=Instance.new("Frame");OC.Size=UDim2.new(1,0,0,95);OC.BackgroundColor3=COL.R;OC.BackgroundTransparency=0.4
+OC.BorderSizePixel=0;OC.ZIndex=6;OC.Parent=FP;corner(OC,10)
+local ocs=stroke(OC,COL.B,1,0.55);table.insert(TH.cards,OC);table.insert(TH.cStrokes,ocs)
 
--- OPTIMIZATION Section
-local OptSection = Instance.new("Frame")
-OptSection.Size = UDim2.new(1, 0, 0, 95)
-OptSection.BackgroundColor3 = COLORS.Row
-OptSection.BackgroundTransparency = 0.4
-OptSection.BorderSizePixel = 0
-OptSection.ZIndex = 6
-OptSection.Parent = FarmPanel
-addCorner(OptSection, 10)
-local osS = addStroke(OptSection, COLORS.Border, 1, 0.55)
-table.insert(themed.cards, OptSection)
-table.insert(themed.cardStrokes, osS)
-
--- Optimization Header
-local OptSep = Instance.new("Frame")
-OptSep.Size = UDim2.new(1, -24, 0, 18)
-OptSep.Position = UDim2.fromOffset(12, 6)
-OptSep.BackgroundTransparency = 1
-OptSep.ZIndex = 7
-OptSep.Parent = OptSection
-
-local OptLineL = Instance.new("Frame")
-OptLineL.Size = UDim2.new(0.5, -50, 0, 1)
-OptLineL.Position = UDim2.fromOffset(0, 9)
-OptLineL.BackgroundColor3 = COLORS.Border
-OptLineL.BackgroundTransparency = 0.5
-OptLineL.BorderSizePixel = 0
-OptLineL.ZIndex = 7
-OptLineL.Parent = OptSep
-
-local OptLabel = Instance.new("TextLabel")
-OptLabel.Size = UDim2.fromOffset(90, 18)
-OptLabel.Position = UDim2.new(0.5, -45, 0, 0)
-OptLabel.BackgroundTransparency = 1
-OptLabel.Text = "OPTIMIZATION"
-OptLabel.TextSize = 10
-OptLabel.TextColor3 = COLORS.Dim
-OptLabel.Font = Enum.Font.GothamBold
-OptLabel.TextXAlignment = Enum.TextXAlignment.Center
-OptLabel.ZIndex = 7
-OptLabel.Parent = OptSep
-
-local OptLineR = Instance.new("Frame")
-OptLineR.Size = UDim2.new(0.5, -50, 0, 1)
-OptLineR.Position = UDim2.new(0.5, 45, 0, 9)
-OptLineR.BackgroundColor3 = COLORS.Border
-OptLineR.BackgroundTransparency = 0.5
-OptLineR.BorderSizePixel = 0
-OptLineR.ZIndex = 7
-OptLineR.Parent = OptSep
+-- Opt separator
+local OSep=Instance.new("Frame");OSep.Size=UDim2.new(1,-24,0,18);OSep.Position=UDim2.fromOffset(12,6);OSep.BackgroundTransparency=1;OSep.ZIndex=7;OSep.Parent=OC
+local OL1=Instance.new("Frame");OL1.Size=UDim2.new(0.5,-50,0,1);OL1.Position=UDim2.fromOffset(0,9);OL1.BackgroundColor3=COL.B;OL1.BackgroundTransparency=0.5;OL1.BorderSizePixel=0;OL1.ZIndex=7;OL1.Parent=OSep
+local OLbl=Instance.new("TextLabel");OLbl.Size=UDim2.fromOffset(90,18);OLbl.Position=UDim2.new(0.5,-45,0,0);OLbl.BackgroundTransparency=1;OLbl.Text="OPTIMIZATION";OLbl.TextSize=10;OLbl.TextColor3=COL.D;OLbl.Font=Enum.Font.GothamBold;OLbl.TextXAlignment=Enum.TextXAlignment.Center;OLbl.ZIndex=7;OLbl.Parent=OSep
+local OL2=Instance.new("Frame");OL2.Size=UDim2.new(0.5,-50,0,1);OL2.Position=UDim2.new(0.5,45,0,9);OL2.BackgroundColor3=COL.B;OL2.BackgroundTransparency=0.5;OL2.BorderSizePixel=0;OL2.ZIndex=7;OL2.Parent=OSep
 
 -- Falling Snow
-local SnowRow = Instance.new("Frame")
-SnowRow.Size = UDim2.new(1, -24, 0, 28)
-SnowRow.Position = UDim2.fromOffset(12, 28)
-SnowRow.BackgroundTransparency = 1
-SnowRow.ZIndex = 7
-SnowRow.Parent = OptSection
-
-local SnowLabel = Instance.new("TextLabel")
-SnowLabel.Size = UDim2.new(1, -55, 1, 0)
-SnowLabel.BackgroundTransparency = 1
-SnowLabel.Text = "Falling Snow"
-SnowLabel.TextSize = 10
-SnowLabel.TextColor3 = COLORS.Orange
-SnowLabel.Font = Enum.Font.GothamMedium
-SnowLabel.ZIndex = 7
-SnowLabel.Parent = SnowRow
-
-makeToggle(SnowRow, _fallingSnow, "Falling Snow", function(s)
-    _fallingSnow = s
-    savedConfig.fallingSnow = s
-    saveConfig()
-end)
+local SNR=Instance.new("Frame");SNR.Size=UDim2.new(1,-24,0,28);SNR.Position=UDim2.fromOffset(12,28);SNR.BackgroundTransparency=1;SNR.ZIndex=7;SNR.Parent=OC
+local SNL=Instance.new("TextLabel");SNL.Size=UDim2.new(1,-55,1,0);SNL.BackgroundTransparency=1;SNL.Text="Falling Snow";SNL.TextSize=10;SNL.TextColor3=COL.Orange;SNL.Font=Enum.Font.GothamMedium;SNL.ZIndex=7;SNL.Parent=SNR
+mkToggle(SNR,_snow,"Snow",function(s) _snow=s;cfg.snow=s;save() end)
 
 -- Optimization
-local OptRow = Instance.new("Frame")
-OptRow.Size = UDim2.new(1, -24, 0, 28)
-OptRow.Position = UDim2.fromOffset(12, 60)
-OptRow.BackgroundTransparency = 1
-OptRow.ZIndex = 7
-OptRow.Parent = OptSection
+local OPR=Instance.new("Frame");OPR.Size=UDim2.new(1,-24,0,28);OPR.Position=UDim2.fromOffset(12,60);OPR.BackgroundTransparency=1;OPR.ZIndex=7;OPR.Parent=OC
+label(OPR,"Optimization",UDim2.new(1,-55,1,0),UDim2.fromOffset(0,0),10,COL.T,Enum.Font.GothamMedium)
+mkToggle(OPR,false,"Optimization",function(s) end)
 
-makeLabel(OptRow, "Optimization", UDim2.new(1, -55, 1, 0), UDim2.fromOffset(0, 0), 10, COLORS.Text, Enum.Font.GothamMedium)
-
-makeToggle(OptRow, _optimization, "Optimization", function(s)
-    _optimization = s
-    savedConfig.optimization = s
-    saveConfig()
-end)
-
--- ============================================================
 -- SETTINGS TAB
--- ============================================================
-local SettingsTab = Instance.new("ScrollingFrame")
-SettingsTab.Name = "SettingsTab"
-SettingsTab.Size = UDim2.new(1, 0, 1, 0)
-SettingsTab.BackgroundTransparency = 1
-SettingsTab.Visible = false
-SettingsTab.ScrollBarThickness = 3
-SettingsTab.ScrollBarImageColor3 = COLORS.Dim
-SettingsTab.CanvasSize = UDim2.new(0, 0, 0, 200)
-SettingsTab.ZIndex = 5
-SettingsTab.Parent = PanelContainer
-tabPanels["SETTINGS"] = SettingsTab
-local STPad = Instance.new("UIPadding")
-STPad.PaddingLeft = UDim.new(0, 10)
-STPad.PaddingRight = UDim.new(0, 10)
-STPad.PaddingTop = UDim.new(0, 6)
-STPad.Parent = SettingsTab
-local STLayout = Instance.new("UIListLayout")
-STLayout.Padding = UDim.new(0, 5)
-STLayout.Parent = SettingsTab
+local ST=Instance.new("ScrollingFrame");ST.Size=UDim2.new(1,0,1,0);ST.BackgroundTransparency=1;ST.Visible=false
+ST.ScrollBarThickness=3;ST.ScrollBarImageColor3=COL.D;ST.CanvasSize=UDim2.new(0,0,0,200)
+ST.ZIndex=5;ST.Parent=PC;tabs["SETTINGS"]=ST
+local stp=Instance.new("UIPadding");stp.PaddingLeft=UDim.new(0,10);stp.PaddingRight=UDim.new(0,10);stp.PaddingTop=UDim.new(0,6);stp.Parent=ST
+local stl=Instance.new("UIListLayout");stl.Padding=UDim.new(0,5);stl.Parent=ST
 
--- Anti Lag Card
-local AntiLagCard = Instance.new("Frame")
-AntiLagCard.Size = UDim2.new(1, 0, 0, 52)
-AntiLagCard.BackgroundColor3 = COLORS.Row
-AntiLagCard.BackgroundTransparency = 0.4
-AntiLagCard.BorderSizePixel = 0
-AntiLagCard.ZIndex = 6
-AntiLagCard.Parent = SettingsTab
-addCorner(AntiLagCard, 10)
-local alS = addStroke(AntiLagCard, COLORS.Border, 1, 0.4)
-table.insert(themed.cards, AntiLagCard)
-table.insert(themed.cardStrokes, alS)
+-- Anti Lag
+local ALC=Instance.new("Frame");ALC.Size=UDim2.new(1,0,0,52);ALC.BackgroundColor3=COL.R;ALC.BackgroundTransparency=0.4
+ALC.BorderSizePixel=0;ALC.ZIndex=6;ALC.Parent=ST;corner(ALC,10)
+local alcs=stroke(ALC,COL.B,1,0.4);table.insert(TH.cards,ALC);table.insert(TH.cStrokes,alcs)
+label(ALC,"Anti Lag",UDim2.fromOffset(150,18),UDim2.fromOffset(12,6),12,COL.White,Enum.Font.GothamBold)
+label(ALC,"Reduce graphics for FPS",UDim2.fromOffset(150,14),UDim2.fromOffset(12,26),8,COL.D,Enum.Font.GothamMedium)
 
-makeLabel(AntiLagCard, "Anti Lag", UDim2.fromOffset(150, 18), UDim2.fromOffset(12, 6), 12, COLORS.White, Enum.Font.GothamBold)
-makeLabel(AntiLagCard, "Reduce graphics for FPS", UDim2.fromOffset(150, 14), UDim2.fromOffset(12, 26), 8, COLORS.Dim, Enum.Font.GothamMedium)
+local ALT=Instance.new("TextButton");ALT.Size=UDim2.fromOffset(42,20);ALT.Position=UDim2.new(1,-50,0.5,-10)
+ALT.BackgroundColor3=_antiLag and COL.A or COL.C;ALT.BorderSizePixel=0;ALT.AutoButtonColor=false
+ALT.Text=_antiLag and "ON" or "OFF";ALT.TextSize=8;ALT.TextColor3=_antiLag and COL.TT or COL.D
+ALT.Font=Enum.Font.GothamBold;ALT.ZIndex=8;ALT.Parent=ALC;corner(ALT,6)
+local ALTS=stroke(ALT,_antiLag and COL.A or COL.B,1,0.5)
+table.insert(TH.toggles,{b=ALT,on=function() return ALT.Text=="ON" end})
+table.insert(TH.tStrokes,{s=ALTS,on=function() return ALT.Text=="ON" end})
 
-local AntiLagToggle = Instance.new("TextButton")
-AntiLagToggle.Size = UDim2.fromOffset(42, 20)
-AntiLagToggle.Position = UDim2.new(1, -50, 0.5, -10)
-AntiLagToggle.BackgroundColor3 = _antiLagEnabled and COLORS.Accent or COLORS.Control
-AntiLagToggle.BorderSizePixel = 0
-AntiLagToggle.AutoButtonColor = false
-AntiLagToggle.Text = _antiLagEnabled and "ON" or "OFF"
-AntiLagToggle.TextSize = 8
-AntiLagToggle.TextColor3 = _antiLagEnabled and COLORS.TabTextOn or COLORS.Dim
-AntiLagToggle.Font = Enum.Font.GothamBold
-AntiLagToggle.ZIndex = 8
-AntiLagToggle.Parent = AntiLagCard
-addCorner(AntiLagToggle, 6)
-local ALTStroke = addStroke(AntiLagToggle, _antiLagEnabled and COLORS.Accent or COLORS.Border, 1, 0.5)
-table.insert(themed.toggleButtons, {btn = AntiLagToggle, isOn = function() return _antiLagEnabled end})
-table.insert(themed.toggleStrokes, {stroke = ALTStroke, isOn = function() return _antiLagEnabled end})
-
-local savedLighting = {}
-local function applyAntiLag(state)
-    if state then
-        savedLighting = {GlobalShadows = Lighting.GlobalShadows, Quality = settings().Rendering.QualityLevel}
+local savedL={}
+local function doAntiLag(st)
+    if st then
+        savedL={GS=Lighting.GlobalShadows,Q=settings().Rendering.QualityLevel}
         pcall(function()
-            Lighting.GlobalShadows = false
-            Lighting.FogEnd = 100000
-            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-            for _, d in ipairs(Workspace:GetDescendants()) do
-                if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled = false end
+            Lighting.GlobalShadows=false;Lighting.FogEnd=100000
+            settings().Rendering.QualityLevel=Enum.QualityLevel.Level01
+            for _,d in ipairs(workspace:GetDescendants()) do
+                if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled=false end
             end
         end)
-        if ConsoleOutput then appendConsoleStatus("Anti Lag", true) end
+        if ConsoleOut then appendStatus("Anti Lag",true) end
     else
         pcall(function()
-            if savedLighting.GlobalShadows ~= nil then Lighting.GlobalShadows = savedLighting.GlobalShadows end
-            if savedLighting.Quality then settings().Rendering.QualityLevel = savedLighting.Quality end
-            for _, d in ipairs(Workspace:GetDescendants()) do
-                if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled = true end
+            if savedL.GS~=nil then Lighting.GlobalShadows=savedL.GS end
+            if savedL.Q then settings().Rendering.QualityLevel=savedL.Q end
+            for _,d in ipairs(workspace:GetDescendants()) do
+                if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled=true end
             end
         end)
-        if ConsoleOutput then appendConsoleStatus("Anti Lag", false) end
+        if ConsoleOut then appendStatus("Anti Lag",false) end
     end
 end
 
-local function toggleAntiLag(state)
-    if state == nil then state = not _antiLagEnabled end
-    _antiLagEnabled = state
-    savedConfig.antiLagEnabled = state
-    saveConfig()
-    local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
-    AntiLagToggle.Text = state and "ON" or "OFF"
-    AntiLagToggle.BackgroundColor3 = state and t.Accent or t.Control
-    AntiLagToggle.TextColor3 = state and t.TabTextOn or t.Dim
-    ALTStroke.Color = state and t.Accent or t.Border
-    ALTStroke.Transparency = state and 0.5 or 0.7
-    applyAntiLag(state)
+local function togAntiLag(st)
+    if st==nil then st=ALT.Text~="ON" end
+    _antiLag=st;cfg.antiLag=st;save()
+    local t=THEMES[_bg] or THEMES[1]
+    ALT.Text=st and "ON" or "OFF";ALT.BackgroundColor3=st and t.A or t.C;ALT.TextColor3=st and t.TT or t.D
+    ALTS.Color=st and t.A or t.B;ALTS.Transparency=st and 0.5 or 0.7
+    doAntiLag(st)
 end
-AntiLagToggle.Activated:Connect(function() toggleAntiLag() end)
-AntiLagToggle.MouseButton1Click:Connect(function() toggleAntiLag() end)
+ALT.MouseButton1Click:Connect(function() togAntiLag() end)
 
--- ============================================================
--- DISCORD FOOTER
--- ============================================================
-local DiscordFooter = Instance.new("TextLabel")
-DiscordFooter.Size = UDim2.fromOffset(200, 14)
-DiscordFooter.Position = UDim2.new(0.5, -100, 1, -18)
-DiscordFooter.BackgroundTransparency = 1
-DiscordFooter.Text = "discord.com/invite/GFKVYyhJU6"
-DiscordFooter.TextSize = 9
-DiscordFooter.TextColor3 = COLORS.Accent
-DiscordFooter.Font = Enum.Font.GothamBold
-DiscordFooter.TextXAlignment = Enum.TextXAlignment.Center
-DiscordFooter.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-DiscordFooter.TextStrokeTransparency = 0.15
-DiscordFooter.ZIndex = 10
-DiscordFooter.Parent = Window
-themed.discordLabel = DiscordFooter
+-- DISCORD
+local DC=Instance.new("TextLabel");DC.Size=UDim2.fromOffset(200,14);DC.Position=UDim2.new(0.5,-100,1,-18)
+DC.BackgroundTransparency=1;DC.Text="discord.com/invite/GFKVYyhJU6";DC.TextSize=9;DC.TextColor3=COL.A
+DC.Font=Enum.Font.GothamBold;DC.TextXAlignment=Enum.TextXAlignment.Center
+DC.TextStrokeColor3=Color3.fromRGB(0,0,0);DC.TextStrokeTransparency=0.15;DC.ZIndex=10;DC.Parent=Win
 
--- ============================================================
--- KEYBIND HANDLER
--- ============================================================
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if input.UserInputType == Enum.UserInputType.Keyboard then
-        local key = input.KeyCode.Name
-        if _waitingForKeybind then
-            local t = BG_THEMES[_selectedBG] or BG_THEMES[1]
-            if _waitingForKeybind == "anchor" then
-                _anchorKeybind = key
-                savedConfig.anchorKeybind = key
-                AKLabel.Text = "["..key.."]"
-                AKLabel.TextColor3 = t.Accent
-            elseif _waitingForKeybind == "autoBuy" then
-                _autoBuyKeybind = key
-                savedConfig.autoBuyKeybind = key
-                ABKLabel.Text = "["..key.."]"
-                ABKLabel.TextColor3 = t.Accent
-            end
-            _waitingForKeybind = nil
-            saveConfig()
-            return
+-- KEYBINDS
+UIS.InputBegan:Connect(function(inp,proc)
+    if proc then return end
+    if inp.UserInputType==Enum.UserInputType.Keyboard then
+        local k=inp.KeyCode.Name
+        if _waitKey then
+            local t=THEMES[_bg] or THEMES[1]
+            if _waitKey=="anchor" then _anchorKey=k;cfg.anchorKey=k;AKL.Text="["..k.."]";AKL.TextColor3=t.A
+            elseif _waitKey=="autoBuy" then _autoBuyKey=k;cfg.autoBuyKey=k;ABKL.Text="["..k.."]";ABKL.TextColor3=t.A end
+            _waitKey=nil;save();return
         end
-        if key == _anchorKeybind then toggleAnchor()
-        elseif key == _autoBuyKeybind then toggleAutoBuy() end
+        if k==_anchorKey then togAnchor()
+        elseif k==_autoBuyKey then togAutoBuy() end
     end
 end)
 
--- ============================================================
--- DRAG SYSTEM
--- ============================================================
+-- DRAG
 do
-    local dragging = false
-    local activeDragInput
-    local dragStart
-    local startPosition
-
-    Header.InputBegan:Connect(function(input)
-        if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
-        dragging = true
-        activeDragInput = input
-        dragStart = Vector2.new(input.Position.X, input.Position.Y)
-        startPosition = Window.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-                activeDragInput = nil
-            end
+    local drag=false;local dInput;local dStart;local dPos
+    Head.InputBegan:Connect(function(inp)
+        if inp.UserInputType~=Enum.UserInputType.MouseButton1 and inp.UserInputType~=Enum.UserInputType.Touch then return end
+        drag=true;dInput=inp;dStart=Vector2.new(inp.Position.X,inp.Position.Y);dPos=Win.Position
+        inp.Changed:Connect(function()
+            if inp.UserInputState==Enum.UserInputState.End then drag=false;dInput=nil end
         end)
     end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if not dragging or not activeDragInput then return end
-        local isTracked = (activeDragInput.UserInputType == Enum.UserInputType.Touch and input == activeDragInput) or
-                         (activeDragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement)
-        if not isTracked then return end
-        local current = Vector2.new(input.Position.X, input.Position.Y)
-        local delta = current - dragStart
-        Window.Position = UDim2.new(
-            startPosition.X.Scale, startPosition.X.Offset + delta.X,
-            startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
-        )
+    UIS.InputChanged:Connect(function(inp)
+        if not drag or not dInput then return end
+        local ok=(dInput.UserInputType==Enum.UserInputType.Touch and inp==dInput) or
+                 (dInput.UserInputType==Enum.UserInputType.MouseButton1 and inp.UserInputType==Enum.UserInputType.MouseMovement)
+        if not ok then return end
+        local cur=Vector2.new(inp.Position.X,inp.Position.Y)
+        local delta=cur-dStart
+        Win.Position=UDim2.new(dPos.X.Scale,dPos.X.Offset+delta.X,dPos.Y.Scale,dPos.Y.Offset+delta.Y)
     end)
 end
 
--- ============================================================
 -- CORE LOGIC
--- ============================================================
-local function col3ToRich(col)
-    if col == COLORS.Green then return CONSOLE_COLORS.Green end
-    if col == COLORS.Red then return CONSOLE_COLORS.Red end
-    if col == COLORS.Text then return CONSOLE_COLORS.Amber end
-    if col == COLORS.White then return CONSOLE_COLORS.Cyan end
-    if col == COLORS.Dim then return CONSOLE_COLORS.Dim end
-    return string.format("rgb(%d,%d,%d)", math.floor(col.R * 255 + 0.5), math.floor(col.G * 255 + 0.5), math.floor(col.B * 255 + 0.5))
+local function c3r(c)
+    if c==COL.Green then return CCOL.Green end
+    if c==COL.Red then return CCOL.Red end
+    if c==COL.T then return CCOL.Amber end
+    if c==COL.White then return CCOL.Cyan end
+    if c==COL.D then return CCOL.Dim end
+    return string.format("rgb(%d,%d,%d)",math.floor(c.R*255+0.5),math.floor(c.G*255+0.5),math.floor(c.B*255+0.5))
 end
 
-function setStatus(msg, col)
-    if not ConsoleOutput or not _enabled then return end
-    if msg == _lastStatusMsg then return end
-    _lastStatusMsg = msg
-    col = col or COLORS.Dim
-    local line = '<font color="' .. col3ToRich(col) .. '">' .. tostring(msg) .. "</font>"
-    if ConsoleOutput.Text == "" then ConsoleOutput.Text = line
-    else ConsoleOutput.Text = ConsoleOutput.Text .. "\n\n" .. line end
-    scrollConsoleToBottom()
+function setStatus(msg,col)
+    if not ConsoleOut or not _on then return end
+    if msg==_lastMsg then return end;_lastMsg=msg
+    col=col or COL.D
+    local line='<font color="'..c3r(col)..'">'..tostring(msg)..'</font>'
+    if ConsoleOut.Text=="" then ConsoleOut.Text=line else ConsoleOut.Text=ConsoleOut.Text.."\n\n"..line end
+    scrollBot()
 end
 
-function flashCode(code, col)
-    if not code or code == "" then return end
-    setStatus("[code] -> " .. tostring(code), col or COLORS.White)
+function flashCode(code,col)
+    if not code or code=="" then return end
+    setStatus("[code] -> "..tostring(code),col or COL.White)
 end
 
-local function resetPasteCounter() _capturedParts = {} end
-clearAceCapture = function() _capturedParts = {} end
+local function resetParts() _parts={} end
+clearCapture=function() _parts={} end
 
-local function clearBoxWatchers()
-    if _boxTextConn then pcall(function() _boxTextConn:Disconnect() end) end
-    if _boxAncestryConn then pcall(function() _boxAncestryConn:Disconnect() end) end
-    for _, connection in ipairs(_boxVisibilityConns) do pcall(function() connection:Disconnect() end) end
-    _boxTextConn = nil; _boxAncestryConn = nil; _boxVisibilityConns = {}; _lastWatchedBox = nil
+local function clearWatch()
+    if _boxConn then pcall(function() _boxConn:Disconnect() end) end
+    if _boxAncConn then pcall(function() _boxAncConn:Disconnect() end) end
+    _boxConn=nil;_boxAncConn=nil;_lastWatched=nil
 end
 
-local function watchBoxForBlankReset(box)
-    if not box or _lastWatchedBox == box then return end
-    clearBoxWatchers()
-    _lastWatchedBox = box
-    if box.Text ~= "" then _lastNonBlankBoxText = box.Text end
-    _boxTextConn = box:GetPropertyChangedSignal("Text"):Connect(function()
-        if box.Text == "" then resetPasteCounter()
-        else _lastNonBlankBoxText = box.Text end
+local function watchBox(box)
+    if not box or _lastWatched==box then return end
+    clearWatch();_lastWatched=box
+    if box.Text~="" then _lastText=box.Text end
+    _boxConn=box:GetPropertyChangedSignal("Text"):Connect(function()
+        if box.Text=="" then resetParts() else _lastText=box.Text end
     end)
-    _boxAncestryConn = box.AncestryChanged:Connect(function(_, parent)
-        if not parent then resetPasteCounter(); clearBoxWatchers() end
+    _boxAncConn=box.AncestryChanged:Connect(function(_,p)
+        if not p then resetParts();clearWatch() end
     end)
 end
 
-UserInputService.TextBoxFocused:Connect(function(box)
+UIS.TextBoxFocused:Connect(function(box)
     if box:IsDescendantOf(GUI) then return end
-    if box ~= aceCodeBox() then return end
-    _focused = box; _lastBox = box; watchBoxForBlankReset(box)
-    if _enabled then setStatus("Ready", COLORS.Green) end
+    if box~=aceBox() then return end
+    _focused=box;_lastBox=box;watchBox(box)
+    if _on then setStatus("Ready",COL.Green) end
 end)
 
-UserInputService.TextBoxFocusReleased:Connect(function(box)
+UIS.TextBoxFocusReleased:Connect(function(box)
     if box:IsDescendantOf(GUI) then return end
-    local codeBox = aceCodeBox()
-    if box ~= codeBox and box ~= _lastBox then return end
-    if _retypeInvalid and rememberPendingSubmission and (box == codeBox or box == _lastBox) then
-        local submittedText = box.Text ~= "" and box.Text or _lastNonBlankBoxText
-        rememberPendingSubmission(box, submittedText, false)
+    if _retype and (box==aceBox() or box==_lastBox) then
+        local txt=box.Text~="" and box.Text or _lastText
+        rememberPend(box,txt,false)
     end
-    if _focused == box then
-        _focused = nil
-        if _enabled then
-            setStatus("Ready", COLORS.Green)
-        end
-    end
+    if _focused==box then _focused=nil; if _on then setStatus("Ready",COL.Green) end end
 end)
 
-clearPendingSubmission = function()
-    _pendingRejectedToken = _pendingRejectedToken + 1
-    _pendingRejectedText = nil
-    _pendingRejectedBox = nil
-    _pendingRejectedUntil = 0
+clearPend=function()
+    _pendToken=_pendToken+1;_pendText=nil;_pendBox=nil;_pendUntil=0
 end
 
-rememberPendingSubmission = function(box, text, replaceExisting)
-    if not _retypeInvalid or not text or text == "" then return end
-    if not replaceExisting and _pendingRejectedText and os.clock() <= _pendingRejectedUntil then return end
-    _pendingRejectedToken = _pendingRejectedToken + 1
-    local token = _pendingRejectedToken
-    _pendingRejectedText = text
-    _pendingRejectedBox = box
-    _pendingRejectedUntil = os.clock() + 8
-    task.delay(8, function() if token == _pendingRejectedToken then clearPendingSubmission() end end)
+rememberPend=function(box,text,rep)
+    if not _retype or not text or text=="" then return end
+    if not rep and _pendText and os.clock()<=_pendUntil then return end
+    _pendToken=_pendToken+1;local tk=_pendToken
+    _pendText=text;_pendBox=box;_pendUntil=os.clock()+8
+    task.delay(8,function() if tk==_pendToken then clearPend() end end)
 end
 
-local function restoreRejectedText(box, previousText)
-    if not _retypeInvalid or not previousText or previousText == "" then return false end
+local function restore(box,txt)
+    if not _retype or not txt or txt=="" then return false end
     RunService.Heartbeat:Wait()
-    local repasteBox = aceCodeBox() or box
-    if not repasteBox or not isVisibleChain(repasteBox) then return false end
-    local restored = pcall(function() repasteBox.Text = previousText end)
-    if restored then _lastBox = repasteBox; watchBoxForBlankReset(repasteBox) end
-    return restored
+    local rb=aceBox() or box
+    if not rb or not visChain(rb) then return false end
+    local ok=pcall(function() rb.Text=txt end)
+    if ok then _lastBox=rb;watchBox(rb) end
+    return ok
 end
 
-handleRedemptionFeedback = function(text, feedbackObject)
-    if not _retypeInvalid or not _pendingRejectedText then return end
-    if os.clock() > _pendingRejectedUntil then clearPendingSubmission(); return end
-    if feedbackObject and feedbackObject:IsDescendantOf(GUI) then return end
-    local lower = tostring(text or ""):lower()
-    local rejected = lower:find("invalid code", 1, true)
-        or lower:find("code is invalid", 1, true)
-        or lower:find("expired", 1, true)
-        or lower:find("already redeemed", 1, true)
-        or lower:find("already used", 1, true)
-        or lower:find("doesn't exist", 1, true)
-        or lower:find("does not exist", 1, true)
-        or lower:find("not found", 1, true)
-        or lower:find("rejected", 1, true)
-    if not rejected then return end
-    local previousText = _pendingRejectedText
-    local previousBox = _pendingRejectedBox
-    local restored = restoreRejectedText(previousBox, previousText)
-    clearPendingSubmission()
-    if restored then
-        setStatus("Invalid - repasted: " .. previousText, COLORS.Text)
-        flashCode(previousText, COLORS.Red)
-    end
+handleFeedback=function(text,obj)
+    if not _retype or not _pendText then return end
+    if os.clock()>_pendUntil then clearPend();return end
+    if obj and obj:IsDescendantOf(GUI) then return end
+    local l=tostring(text or ""):lower()
+    local rej=l:find("invalid code",1,true) or l:find("expired",1,true) or l:find("already redeemed",1,true) or l:find("already used",1,true) or l:find("not found",1,true) or l:find("rejected",1,true)
+    if not rej then return end
+    local pt,pb=_pendText,_pendBox
+    local ok=restore(pb,pt);clearPend()
+    if ok then setStatus("Invalid - repasted: "..pt,COL.T);flashCode(pt,COL.Red) end
 end
 
-function appendToBox(text)
-    if not text or text == "" then return end
-    if _lastWatchedBox and not isVisibleChain(_lastWatchedBox) then
-        resetPasteCounter(); clearBoxWatchers()
-    end
-    local box = aceCodeBox()
-    _capturedParts[#_capturedParts + 1] = text
-    local combinedCode = table.concat(_capturedParts)
-    local capturedCount = #_capturedParts
+function appendBox(text)
+    if not text or text=="" then return end
+    if _lastWatched and not visChain(_lastWatched) then resetParts();clearWatch() end
+    local box=aceBox()
+    _parts[#_parts+1]=text
+    local code=table.concat(_parts)
+    local cnt=#_parts
     if box then
-        _lastBox = box; watchBoxForBlankReset(box)
-        local boxWasFocused = UserInputService:GetFocusedTextBox() == box
-        box.Text = combinedCode
-        if boxWasFocused then
-            pcall(function()
-                local caretEnd = #combinedCode + 1
-                box.CursorPosition = caretEnd
-                box.SelectionStart = caretEnd
-            end)
-        end
+        _lastBox=box;watchBox(box)
+        box.Text=code
     else
-        setStatus("Captured; searching UI...", COLORS.Text)
+        setStatus("Captured; searching...",COL.T)
     end
-    setStatus("Pasted " .. tostring(capturedCount) .. "/" .. tostring(_submitAfter), COLORS.Green)
-    flashCode(combinedCode, COLORS.Green)
-    if capturedCount >= _submitAfter then
-        _capturedParts = {}
+    setStatus("Pasted "..cnt.."/".._submitAfter,COL.Green)
+    flashCode(code,COL.Green)
+    if cnt>=_submitAfter then
+        _parts={}
         if _autoAccept then
-            rememberPendingSubmission(box, combinedCode, true)
-            local ok, statusMsg = typeAndSubmitCode(combinedCode)
+            rememberPend(box,code,true)
+            local ok,msg=submitCode(code)
             if ok then
-                setStatus("Redeemed: " .. combinedCode, COLORS.Green)
+                setStatus("Redeemed: "..code,COL.Green)
             else
-                local restored = restoreRejectedText(box, combinedCode)
-                clearPendingSubmission()
-                if restored then
-                    setStatus("Invalid - repasted: " .. combinedCode, COLORS.Text)
-                    flashCode(combinedCode, COLORS.Red)
-                else
-                    setStatus("Failed: " .. tostring(statusMsg), COLORS.Red)
-                end
+                local r=restore(box,code);clearPend()
+                if r then setStatus("Invalid - repasted: "..code,COL.T);flashCode(code,COL.Red)
+                else setStatus("Failed: "..tostring(msg),COL.Red) end
             end
         end
     end
 end
 
-local function watchRedemptionFeedbackObject(obj)
-    if not (obj:IsA("TextLabel") or obj:IsA("TextButton")) then return end
-    handleRedemptionFeedback(obj.Text or "", obj)
-    obj:GetPropertyChangedSignal("Text"):Connect(function()
-        handleRedemptionFeedback(obj.Text or "", obj)
-    end)
+-- WATCH FEEDBACK
+for _,obj in ipairs(playerGui:GetDescendants()) do
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+        handleFeedback(obj.Text or "",obj)
+        obj:GetPropertyChangedSignal("Text"):Connect(function() handleFeedback(obj.Text or "",obj) end)
+    end
 end
-for _, obj in ipairs(playerGui:GetDescendants()) do watchRedemptionFeedbackObject(obj) end
 playerGui.DescendantAdded:Connect(function(obj)
-    task.wait(0.04); watchRedemptionFeedbackObject(obj)
+    task.wait(0.04)
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+        handleFeedback(obj.Text or "",obj)
+        obj:GetPropertyChangedSignal("Text"):Connect(function() handleFeedback(obj.Text or "",obj) end)
+    end
 end)
 
-local function resolveNotifyRemote()
-    if _G.PhiNotifyRemote then return _G.PhiNotifyRemote end
-    local Net = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Net")
-    local getinfo = debug and (debug.getinfo or debug.info)
-    if getgc and getinfo and getconnections then
-        for _, d in ipairs(Net:GetDescendants()) do
-            if d:IsA("RemoteEvent") then
-                local ok, cs = pcall(getconnections, d.OnClientEvent)
-                if ok then
-                    for _, c in ipairs(cs) do
-                        local f, fn = pcall(function() return c.Function end)
-                        if f and type(fn) == "function" then
-                            local i, info = pcall(getinfo, fn)
-                            if i and tostring(info.short_src or info.source or ""):find("NotificationController", 1, true) then
-                                return d
-                            end
-                        end
-                    end
-                end
-            end
+-- NOTIFY REMOTE
+local function getNotifyRemote()
+    local ok,Net=pcall(function() return RS:WaitForChild("Packages"):WaitForChild("Net") end)
+    if not ok or not Net then return nil end
+    for _,d in ipairs(Net:GetDescendants()) do
+        if d:IsA("RemoteEvent") then
+            local n=d.Name:lower()
+            if n:find("notify") or n:find("notification") then return d end
         end
     end
     return nil
 end
 
-local function aceStripRich(text)
-    if type(text) ~= "string" then return tostring(text) end
-    return (text:gsub("<[^>]->", ""))
-end
+local function stripRich(t) return type(t)=="string" and (t:gsub("<[^>]->","")) or tostring(t) end
 
-local function aceTokenize(text)
-    local words = {}
-    for word in text:gmatch("[%w_]+") do
-        words[#words + 1] = word
-    end
-    return words
-end
-
-local function solveRiddle(message, seq)
-    _solving = _solving + 1
-    setStatus("Riddle detected! Asking AI...", COLORS.Text)
-
+local function solveRiddle(msg,seq)
+    _solving=_solving+1
+    setStatus("Riddle detected! Asking AI...",COL.T)
     task.spawn(function()
-        local data = nil
-        local httpOk, httpErr = pcall(function()
-            data = aiPost("/solve", { riddle = message })
-        end)
-
-        _solving = math.max(0, _solving - 1)
-
-        if not _enabled then return end
-
-        if not httpOk then
-            setStatus("ERROR: HTTP failed", COLORS.Red)
-            return
-        end
-
-        if not data or not data.answer then
-            setStatus("ERROR: AI returned nothing", COLORS.Red)
-            return
-        end
-
-        local answer = normalizeCode(data.answer)
-
-        if answer == "" then
-            setStatus("ERROR: AI answer empty", COLORS.Red)
-            return
-        end
-
-        if not _riddleSolver then return end
-
-        _lastTypedSeq = seq
-        _solvedCount = _solvedCount + 1
-
-        setStatus("AI answer: " .. answer, COLORS.Green)
-
-        rememberPendingSubmission(nil, answer, true)
-        local ok, statusMsg = typeAndSubmitCode(answer)
-
-        if ok then
-            setStatus("Riddle redeemed: " .. answer, COLORS.Green)
-        else
-            setStatus("Riddle failed: " .. tostring(statusMsg), COLORS.Red)
-        end
+        local data=nil
+        local ok,err=pcall(function() data=aiPost("/solve",{riddle=msg}) end)
+        _solving=math.max(0,_solving-1)
+        if not _on then return end
+        if not ok or not data or not data.answer then setStatus("ERROR: AI failed",COL.Red);return end
+        local ans=norm(data.answer)
+        if ans=="" then setStatus("ERROR: empty answer",COL.Red);return end
+        if not _riddle then return end
+        setStatus("AI answer: "..ans,COL.Green)
+        rememberPend(nil,ans,true)
+        local sok,smsg=submitCode(ans)
+        if sok then setStatus("Riddle redeemed: "..ans,COL.Green)
+        else setStatus("Riddle failed: "..tostring(smsg),COL.Red) end
     end)
 end
 
-local aceCollectBuffer = {}
-local function onAceAnnouncement(...)
-    local text = aceStripRich(tostring((...) or ""))
-    text = text:match("^%s*(.-)%s*$") or ""
-    if text == "" then return end
-
-    if _riddleSolver and text:find("%s") then
-        _riddleSeq = _riddleSeq + 1
-        solveRiddle(text, _riddleSeq)
-        return
-    end
-
-    if text:find("%s") then return end
-
-    for _, word in ipairs(aceTokenize(text)) do
-        aceCollectBuffer[#aceCollectBuffer + 1] = word
-    end
-
-    local parts = {}
-    for index = 1, math.min(#aceCollectBuffer, ACE_WORD_COUNT) do
-        parts[index] = aceCollectBuffer[index]
-    end
-    if #aceCollectBuffer < ACE_WORD_COUNT then return end
-    aceCollectBuffer = {}
-
-    local captured = table.concat(parts)
-    if captured == "" or _seen[captured] then return end
-    _seen[captured] = true
-    task.delay(1.25, function() _seen[captured] = nil end)
-    appendToBox(captured)
+local collectBuf={}
+local function onAnnounce(...)
+    local txt=stripRich(tostring((...) or ""))
+    txt=txt:match("^%s*(.-)%s*$") or ""
+    if txt=="" then return end
+    if _riddle and txt:find("%s") then _riddleSeq=_riddleSeq+1;solveRiddle(txt,_riddleSeq);return end
+    if txt:find("%s") then return end
+    for w in txt:gmatch("[%w_]+") do collectBuf[#collectBuf+1]=w end
+    if #collectBuf<1 then return end
+    local captured=collectBuf[1];collectBuf={}
+    if captured=="" or _seen[captured] then return end
+    _seen[captured]=true
+    task.delay(1.25,function() _seen[captured]=nil end)
+    appendBox(captured)
 end
 
-local aceNotifyRemote = resolveNotifyRemote()
-local aceListenConnection
-if aceNotifyRemote then
-    if getgenv then
-        local previous = getgenv().ACECodeSniperNotifyConnection
-        if previous then pcall(function() previous:Disconnect() end) end
-    end
-    aceListenConnection = aceNotifyRemote.OnClientEvent:Connect(function(...)
-        if not _enabled then return end
-        pcall(onAceAnnouncement, ...)
+local notifyRemote=getNotifyRemote()
+if notifyRemote then
+    notifyRemote.OnClientEvent:Connect(function(...)
+        if not _on then return end
+        pcall(onAnnounce,...)
     end)
-    if getgenv then getgenv().ACECodeSniperNotifyConnection = aceListenConnection end
 end
 
-if getgenv then
-    getgenv().StopAura = function()
-        if aceListenConnection then
-            pcall(function() aceListenConnection:Disconnect() end)
-            aceListenConnection = nil
-        end
-        if getgenv().ACECodeSniperNotifyConnection then
-            pcall(function() getgenv().ACECodeSniperNotifyConnection:Disconnect() end)
-            getgenv().ACECodeSniperNotifyConnection = nil
-        end
-        if _anchorConnection then _anchorConnection:Disconnect() end
-        if _anchorRespawnConn then _anchorRespawnConn:Disconnect() end
-        if _autoBuyConnection then _autoBuyConnection:Disconnect() end
-        if GUI then GUI:Destroy() end
-    end
-end
-
--- ============================================================
 -- INIT
--- ============================================================
-if _antiLagEnabled then task.defer(function() applyAntiLag(true) end) end
+if _antiLag then task.defer(function() doAntiLag(true) end) end
 task.defer(function()
-    InterfaceScale.Scale = _guiScale
-    applyFullTheme(_selectedBG)
+    Scale.Scale=_scale
+    applyTheme(_bg)
 end)
 task.defer(function()
     task.wait(0.1)
-    local finalPos = Window.Position
-    Window.Position = UDim2.new(finalPos.X.Scale, finalPos.X.Offset, finalPos.Y.Scale, finalPos.Y.Offset + 20)
-    TweenService:Create(Window, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-        Position = finalPos
-    }):Play()
+    local fp=Win.Position
+    Win.Position=UDim2.new(fp.X.Scale,fp.X.Offset,fp.Y.Scale,fp.Y.Offset+20)
+    TweenService:Create(Win,TweenInfo.new(0.5,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=fp}):Play()
 end)
 
-print("Eclipse Code Sniper v3.5 | Fixed")
+print("Eclipse Code Sniper v3.6 | Delta Compatible")
+
+end) -- end pcall
