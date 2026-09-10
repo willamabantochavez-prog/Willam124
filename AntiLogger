@@ -11,10 +11,10 @@ sg.ResetOnSpawn = false
 sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 sg.Parent = player:WaitForChild("PlayerGui")
 
--- Frame principal (centro-abajo)
+-- Frame principal (centro-arriba)
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 280, 0, 60)
-frame.Position = UDim2.new(0.5, -140, 0.85, 0)
+frame.Position = UDim2.new(0.5, -140, 0.08, 0) -- ← CAMBIADO: ahora arriba
 frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 frame.BackgroundTransparency = 0.15
 frame.BorderSizePixel = 0
