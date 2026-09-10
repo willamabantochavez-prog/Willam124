@@ -1,0 +1,154 @@
+-- Script Status UI para Delta Executor
+-- Muestra "Script Working" o "Script Failed" con efectos suaves
+
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+-- Crear ScreenGui
+local player = game:GetService("Players").LocalPlayer
+local sg = Instance.new("ScreenGui")
+sg.Name = "ScriptStatus"
+sg.ResetOnSpawn = false
+sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+sg.Parent = player:WaitForChild("PlayerGui")
+
+-- Frame principal (centro-abajo)
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 280, 0, 60)
+frame.Position = UDim2.new(0.5, -140, 0.85, 0)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+frame.BackgroundTransparency = 0.15
+frame.BorderSizePixel = 0
+frame.Parent = sg
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = frame
+
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 2
+stroke.Parent = frame
+
+-- Icono (punto animado)
+local icon = Instance.new("Frame")
+icon.Size = UDim2.new(0, 10, 0, 10)
+icon.Position = UDim2.new(0, 18, 0.5, -5)
+icon.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+icon.BorderSizePixel = 0
+icon.Parent = frame
+
+local iconCorner = Instance.new("UICorner")
+iconCorner.CornerRadius = UDim.new(1, 0)
+iconCorner.Parent = icon
+
+-- Texto
+local label = Instance.new("TextLabel")
+label.Size = UDim2.new(1, -45, 1, 0)
+label.Position = UDim2.new(0, 38, 0, 0)
+label.BackgroundTransparency = 1
+label.Font = Enum.Font.GothamBold
+label.TextSize = 16
+label.TextColor3 = Color3.fromRGB(255, 255, 255)
+label.TextXAlignment = Enum.TextXAlignment.Left
+label.Parent = frame
+
+-- Subtexto
+local sub = Instance.new("TextLabel")
+sub.Size = UDim2.new(1, -45, 0, 16)
+sub.Position = UDim2.new(0, 38, 0, 34)
+sub.BackgroundTransparency = 1
+sub.Font = Enum.Font.Gotham
+sub.TextSize = 11
+sub.TextColor3 = Color3.fromRGB(160, 160, 170)
+sub.TextXAlignment = Enum.TextXAlignment.Left
+sub.Parent = frame
+
+-- Función para fade suave
+local TweenService = game:GetService("TweenService")
+local fadeIn = TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local fadeOut = TweenInfo.new(0.8, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+
+local function showStatus(success)
+    if success then
+        label.Text = "✓ Script Working"
+        sub.Text = "Ejecutado correctamente"
+        icon.BackgroundColor3 = Color3.fromRGB(0, 230, 100)
+        stroke.Color = Color3.fromRGB(0, 180, 80)
+    else
+        label.Text = "✗ Script Failed"
+        sub.Text = "Contacta soporte"
+        icon.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+        stroke.Color = Color3.fromRGB(200, 40, 40)
+    end
+    
+    -- Fade in
+    frame.BackgroundTransparency = 1
+    label.TextTransparency = 1
+    sub.TextTransparency = 1
+    stroke.Transparency = 1
+    icon.BackgroundTransparency = 1
+    
+    TweenService:Create(frame, fadeIn, {BackgroundTransparency = 0.15}):Play()
+    TweenService:Create(label, fadeIn, {TextTransparency = 0}):Play()
+    TweenService:Create(sub, fadeIn, {TextTransparency = 0}):Play()
+    TweenService:Create(stroke, fadeIn, {Transparency = 0}):Play()
+    TweenService:Create(icon, fadeIn, {BackgroundTransparency = 0}):Play()
+    
+    -- Desvanecer después de 4 segundos
+    task.delay(4, function()
+        local t = TweenService:Create(frame, fadeOut, {BackgroundTransparency = 1})
+        t:Play()
+        TweenService:Create(label, fadeOut, {TextTransparency = 1}):Play()
+        TweenService:Create(sub, fadeOut, {TextTransparency = 1}):Play()
+        TweenService:Create(stroke, fadeOut, {Transparency = 1}):Play()
+        TweenService:Create(icon, fadeOut, {BackgroundTransparency = 1}):Play()
+        t.Completed:Wait()
+        sg:Destroy()
+    end)
+end
+
+-- ===== TU SCRIPT ORIGINAL AQUÍ =====
+local success, err = pcall(function()
+    cloneref = cloneref or function(o) return o end
+    local getupvalues = (debug and debug.getupvalues) or getupvalues
+    local getprotos = (debug and debug.getprotos) or getprotos
+    if not getupvalues then error("No getupvalues") end
+
+    local RS = cloneref(game:GetService("ReplicatedStorage"))
+    local netFolder = RS:WaitForChild("Packages"):WaitForChild("Net")
+    local okMod, ctrl = pcall(require, RS:WaitForChild("Controllers"):WaitForChild("TradeController"))
+    if not okMod or type(ctrl) ~= "table" then error("No TradeController") end
+
+    local remotes, names = {}, {}
+    local seenFn, seenInst = {}, {}
+    local function walk(fn)
+        if type(fn) ~= "function" or seenFn[fn] then return end
+        seenFn[fn] = true
+        local ok, ups = pcall(getupvalues, fn)
+        if ok and ups then
+            for _, v in pairs(ups) do
+                if typeof(v) == "Instance" and v.Parent == netFolder
+                    and (v:IsA("RemoteEvent") or v:IsA("RemoteFunction")) then
+                    if not seenInst[v] then
+                        seenInst[v] = true
+                        remotes[#remotes + 1] = v
+                        names[v.Name] = true
+                    end
+                elseif type(v) == "function" then
+                    walk(v)
+                end
+            end
+        end
+        if getprotos then
+            local ok2, ps = pcall(getprotos, fn)
+            if ok2 and ps then for _, p in ipairs(ps) do walk(p) end end
+        end
+    end
+    for _, fn in pairs(ctrl) do walk(fn) end
+
+    for _, r in ipairs(remotes) do
+        pcall(function() r:Destroy() end)
+    end
+end)
+
+-- Mostrar resultado
+showStatus(success)
