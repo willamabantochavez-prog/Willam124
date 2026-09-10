@@ -1,6 +1,6 @@
 -- =============================================================
--- ROBLOX LUA HUB v7.0 - LOADSTRINGS TOGGLE ON/OFF
--- [LOGO] [OG Sniper] [Eclipse Duels] [FPS:120 Ping:45ms] [Auto Code] [More Opts] [≡]
+-- ROBLOX LUA HUB v7.0 - MOBILE OPTIMIZED + LOGO TOGGLE
+-- [LOGO] [OG Sniper] [Eclipse Duels] [FPS/Ping] [Auto Code] [More Opts] [≡]
 -- =============================================================
 
 local Players = game:GetService("Players")
@@ -14,7 +14,8 @@ local playerGui = player:WaitForChild("PlayerGui")
 -- =============================================================
 -- VARIABLES DE ESTADO
 -- =============================================================
-local menuOpen = true
+local isCollapsed = false
+local COLLAPSED_WIDTH = 48
 local toggleStates = {}
 local activeConnections = {}
 local activeThreads = {}
@@ -122,7 +123,7 @@ local COLORS = {
 }
 
 -- =============================================================
--- MAPA DE FUNCIONES (CORREGIDO)
+-- MAPA DE FUNCIONES
 -- =============================================================
 local functionMap = {
     ["OG Sniper"]    = { start = function() runScript("OG Sniper") end,    stop = function() stopScript("OG Sniper") end },
@@ -132,12 +133,25 @@ local functionMap = {
 }
 
 -- =============================================================
+-- DIMENSIONES MOBILE (ESCALADAS)
+-- =============================================================
+local BAR_WIDTH = 500
+local BAR_HEIGHT = 38
+
+local LOGO_SIZE = 30
+local BTN_W = 80
+local BTN_H = 28
+local INFO_W = 100
+local INFO_H = 28
+local DECO_SIZE = 24
+local SEP_H = 20
+local PAD = 3
+
+-- =============================================================
 -- FUNCIÓN PRINCIPAL: CREAR HUB
 -- =============================================================
 local hubConnections = {}
 local mainFrameRef = nil
-local BAR_WIDTH_REF = 800
-local BAR_HEIGHT_REF = 50
 
 local function createHub()
     for _, conn in ipairs(hubConnections) do
@@ -157,9 +171,6 @@ local function createHub()
     -- =============================================================
     -- FRAME PRINCIPAL
     -- =============================================================
-    local BAR_HEIGHT = BAR_HEIGHT_REF
-    local BAR_WIDTH = BAR_WIDTH_REF
-
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
     mainFrame.Size = UDim2.new(0, BAR_WIDTH, 0, 0)
@@ -174,7 +185,7 @@ local function createHub()
     mainFrameRef = mainFrame
 
     local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 12)
+    mainCorner.CornerRadius = UDim.new(0, 10)
     mainCorner.Parent = mainFrame
 
     local mainGradient = Instance.new("UIGradient")
@@ -188,7 +199,7 @@ local function createHub()
     mainGradient.Parent = mainFrame
 
     -- =============================================================
-    -- CAPA DE ESTRELLAS CAYENDO
+    -- CAPA DE ESTRELLAS CAYENDO (REDUCIDA PARA MOBILE)
     -- =============================================================
     local starsLayer = Instance.new("Frame")
     starsLayer.Name = "StarsLayer"
@@ -205,10 +216,10 @@ local function createHub()
         Color3.fromRGB(200, 180, 255),
     }
 
-    local MAX_STARS = 30
+    local MAX_STARS = 18
     local stars = {}
     local spawnAccum = 0
-    local SPAWN_INTERVAL = 0.07
+    local SPAWN_INTERVAL = 0.1
 
     local function createStar()
         local star = Instance.new("Frame")
@@ -232,12 +243,12 @@ local function createHub()
         sgCorner.CornerRadius = UDim.new(1, 0)
         sgCorner.Parent = starGlow
 
-        local size = math.random(2, 4)
-        local speed = math.random(50, 140)
-        local drift = math.random(-15, 15)
+        local size = math.random(2, 3)
+        local speed = math.random(40, 110)
+        local drift = math.random(-10, 10)
         local startX = math.random(0, BAR_WIDTH)
-        local startY = math.random(-20, 0)
-        local tailLen = math.random(6, 20)
+        local startY = math.random(-15, 0)
+        local tailLen = math.random(5, 14)
         local alpha = math.random(40, 85) / 100
 
         star.Size = UDim2.new(0, size, 0, size)
@@ -297,9 +308,9 @@ local function createHub()
             s.glow.Position = UDim2.new(0, x - s.size, 0, y - s.size)
             s.tail.Position = UDim2.new(0, x, 0, y - s.tailLen)
 
-            local fadeStart = BAR_HEIGHT - 25
+            local fadeStart = BAR_HEIGHT - 20
             if y > fadeStart then
-                local fade = math.clamp((y - fadeStart) / 25, 0, 1)
+                local fade = math.clamp((y - fadeStart) / 20, 0, 1)
                 s.dot.BackgroundTransparency = 1 - s.alpha * (1 - fade)
                 s.glow.BackgroundTransparency = 1 - s.alpha * 0.3 * (1 - fade)
                 s.tail.BackgroundTransparency = 1
@@ -326,7 +337,7 @@ local function createHub()
     -- BORDE ANIMADO NARANJA
     -- =============================================================
     local outerStroke = Instance.new("UIStroke")
-    outerStroke.Thickness = 1.5
+    outerStroke.Thickness = 1.2
     outerStroke.Transparency = 0.1
     outerStroke.Parent = mainFrame
 
@@ -354,7 +365,7 @@ local function createHub()
     end))
 
     local glowStroke = Instance.new("UIStroke")
-    glowStroke.Thickness = 10
+    glowStroke.Thickness = 8
     glowStroke.Transparency = 0.75
     glowStroke.Color = COLORS.Orange
     glowStroke.Parent = mainFrame
@@ -366,8 +377,8 @@ local function createHub()
     glowB:Play()
 
     local shadow = Instance.new("ImageLabel")
-    shadow.Size = UDim2.new(1, 40, 1, 40)
-    shadow.Position = UDim2.new(0, -20, 0, -15)
+    shadow.Size = UDim2.new(1, 30, 1, 30)
+    shadow.Position = UDim2.new(0, -15, 0, -12)
     shadow.BackgroundTransparency = 1
     shadow.Image = "rbxassetid://5554236805"
     shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
@@ -382,14 +393,14 @@ local function createHub()
     -- =============================================================
     local container = Instance.new("Frame")
     container.Name = "Container"
-    container.Size = UDim2.new(1, -14, 1, -10)
-    container.Position = UDim2.new(0, 7, 0, 5)
+    container.Size = UDim2.new(1, -10, 1, -8)
+    container.Position = UDim2.new(0, 5, 0, 4)
     container.BackgroundTransparency = 1
     container.ZIndex = 5
     container.Parent = mainFrame
 
     local hLayout = Instance.new("UIListLayout")
-    hLayout.Padding = UDim.new(0, 5)
+    hLayout.Padding = UDim.new(0, PAD)
     hLayout.FillDirection = Enum.FillDirection.Horizontal
     hLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
     hLayout.VerticalAlignment = Enum.VerticalAlignment.Center
@@ -397,8 +408,8 @@ local function createHub()
     hLayout.Parent = container
 
     local hPad = Instance.new("UIPadding")
-    hPad.PaddingLeft = UDim.new(0, 5)
-    hPad.PaddingRight = UDim.new(0, 5)
+    hPad.PaddingLeft = UDim.new(0, PAD)
+    hPad.PaddingRight = UDim.new(0, PAD)
     hPad.Parent = container
 
     -- =============================================================
@@ -407,7 +418,7 @@ local function createHub()
     local function makeVSep(order)
         local s = Instance.new("Frame")
         s.Name = "Sep"
-        s.Size = UDim2.new(0, 2, 0, 26)
+        s.Size = UDim2.new(0, 2, 0, SEP_H)
         s.BackgroundColor3 = COLORS.Separator
         s.BackgroundTransparency = 0.65
         s.BorderSizePixel = 0
@@ -432,12 +443,12 @@ local function createHub()
     end
 
     -- =============================================================
-    -- 1. LOGO CUADRADO
+    -- 1. LOGO CUADRADO (ESCALADO + CLICK TOGGLE)
     -- =============================================================
 
     local logoHolder = Instance.new("Frame")
     logoHolder.Name = "LogoHolder"
-    logoHolder.Size = UDim2.new(0, 42, 0, 42)
+    logoHolder.Size = UDim2.new(0, LOGO_SIZE, 0, LOGO_SIZE)
     logoHolder.BackgroundTransparency = 1
     logoHolder.LayoutOrder = 1
     logoHolder.ZIndex = 5
@@ -454,7 +465,7 @@ local function createHub()
     logoClip.Parent = logoHolder
 
     local logoClipCorner = Instance.new("UICorner")
-    logoClipCorner.CornerRadius = UDim.new(0, 10)
+    logoClipCorner.CornerRadius = UDim.new(0, 8)
     logoClipCorner.Parent = logoClip
 
     local logoBg = Instance.new("Frame")
@@ -465,7 +476,7 @@ local function createHub()
     logoBg.Parent = logoClip
 
     local logoBgCorner = Instance.new("UICorner")
-    logoBgCorner.CornerRadius = UDim.new(0, 10)
+    logoBgCorner.CornerRadius = UDim.new(0, 8)
     logoBgCorner.Parent = logoBg
 
     local logo = Instance.new("ImageLabel")
@@ -479,7 +490,7 @@ local function createHub()
     logo.Parent = logoClip
 
     local logoRing = Instance.new("UIStroke")
-    logoRing.Thickness = 2.5
+    logoRing.Thickness = 2
     logoRing.Color = COLORS.Orange
     logoRing.Transparency = 0
     logoRing.Parent = logoClip
@@ -502,18 +513,18 @@ local function createHub()
 
     local outerRing = Instance.new("Frame")
     outerRing.Name = "OuterRing"
-    outerRing.Size = UDim2.new(1, 6, 1, 6)
-    outerRing.Position = UDim2.new(0, -3, 0, -3)
+    outerRing.Size = UDim2.new(1, 5, 1, 5)
+    outerRing.Position = UDim2.new(0, -2.5, 0, -2.5)
     outerRing.BackgroundTransparency = 1
     outerRing.ZIndex = 10
     outerRing.Parent = logoHolder
 
     local outerRingCorner = Instance.new("UICorner")
-    outerRingCorner.CornerRadius = UDim.new(0, 12)
+    outerRingCorner.CornerRadius = UDim.new(0, 10)
     outerRingCorner.Parent = outerRing
 
     local outerRingStroke = Instance.new("UIStroke")
-    outerRingStroke.Thickness = 1.8
+    outerRingStroke.Thickness = 1.5
     outerRingStroke.Color = COLORS.Orange
     outerRingStroke.Transparency = 0.15
     outerRingStroke.Parent = outerRing
@@ -534,8 +545,8 @@ local function createHub()
     end))
 
     local logoGlow = Instance.new("Frame")
-    logoGlow.Size = UDim2.new(1, 14, 1, 14)
-    logoGlow.Position = UDim2.new(0, -7, 0, -7)
+    logoGlow.Size = UDim2.new(1, 10, 1, 10)
+    logoGlow.Position = UDim2.new(0, -5, 0, -5)
     logoGlow.BackgroundColor3 = COLORS.Orange
     logoGlow.BackgroundTransparency = 0.82
     logoGlow.BorderSizePixel = 0
@@ -543,7 +554,7 @@ local function createHub()
     logoGlow.Parent = logoHolder
 
     local logoGlowCorner = Instance.new("UICorner")
-    logoGlowCorner.CornerRadius = UDim.new(0, 14)
+    logoGlowCorner.CornerRadius = UDim.new(0, 10)
     logoGlowCorner.Parent = logoGlow
 
     local logoGlowA = TweenService:Create(logoGlow, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundTransparency = 0.92})
@@ -553,7 +564,7 @@ local function createHub()
     logoGlowB:Play()
 
     -- =============================================================
-    -- PUNTOS ORBITANDO EN TRAYECTORIA CUADRADA
+    -- PUNTOS ORBITANDO EN TRAYECTORIA CUADRADA (ESCALADO)
     -- =============================================================
     local function squareOrbitPos(angle, dist, cx, cy)
         local a = ((angle % (math.pi * 2)) + math.pi * 2) % (math.pi * 2)
@@ -592,8 +603,8 @@ local function createHub()
         dCorner.Parent = dot
 
         local dotGlow = Instance.new("Frame")
-        dotGlow.Size = UDim2.new(1, 6, 1, 6)
-        dotGlow.Position = UDim2.new(0, -3, 0, -3)
+        dotGlow.Size = UDim2.new(1, 5, 1, 5)
+        dotGlow.Position = UDim2.new(0, -2.5, 0, -2.5)
         dotGlow.BackgroundColor3 = COLORS.Orange
         dotGlow.BackgroundTransparency = 0.65
         dotGlow.BorderSizePixel = 0
@@ -604,7 +615,7 @@ local function createHub()
         dgCorner.CornerRadius = UDim.new(0, 3)
         dgCorner.Parent = dotGlow
 
-        local cx, cy = 21, 21
+        local cx, cy = LOGO_SIZE / 2, LOGO_SIZE / 2
         local a = startAngle
 
         table.insert(hubConnections, RunService.Heartbeat:Connect(function(dt)
@@ -620,26 +631,49 @@ local function createHub()
         gB:Play()
     end
 
-    makeSquareOrbitDot(0,             30, 5, 1.0)
-    makeSquareOrbitDot(math.pi/2,     30, 4, 1.2)
-    makeSquareOrbitDot(math.pi,       30, 5, 0.9)
-    makeSquareOrbitDot(3*math.pi/2,   30, 4, 1.1)
-    makeSquareOrbitDot(math.pi/4,     32, 3, 0.8)
-    makeSquareOrbitDot(3*math.pi/4,   32, 3, 0.85)
-    makeSquareOrbitDot(5*math.pi/4,   32, 3, 0.9)
-    makeSquareOrbitDot(7*math.pi/4,   32, 3, 0.95)
+    -- Órbitas escaladas (distancias de 22/24 en vez de 30/32)
+    makeSquareOrbitDot(0,             22, 4, 1.0)
+    makeSquareOrbitDot(math.pi/2,     22, 3, 1.2)
+    makeSquareOrbitDot(math.pi,       22, 4, 0.9)
+    makeSquareOrbitDot(3*math.pi/2,   22, 3, 1.1)
+    makeSquareOrbitDot(math.pi/4,     24, 3, 0.8)
+    makeSquareOrbitDot(3*math.pi/4,   24, 3, 0.85)
+    makeSquareOrbitDot(5*math.pi/4,   24, 3, 0.9)
+    makeSquareOrbitDot(7*math.pi/4,   24, 3, 0.95)
+
+    -- =============================================================
+    -- BOTÓN INVISIBLE SOBRE EL LOGO PARA TOGGLE
+    -- =============================================================
+    local logoClick = Instance.new("TextButton")
+    logoClick.Name = "LogoToggle"
+    logoClick.Size = UDim2.new(1, 0, 1, 0)
+    logoClick.BackgroundTransparency = 1
+    logoClick.Text = ""
+    logoClick.ZIndex = 20
+    logoClick.Parent = logoHolder
+
+    logoClick.MouseButton1Click:Connect(function()
+        isCollapsed = not isCollapsed
+        if isCollapsed then
+            TweenService:Create(mainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = UDim2.new(0, COLLAPSED_WIDTH, 0, BAR_HEIGHT)
+            }):Play()
+        else
+            TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Size = UDim2.new(0, BAR_WIDTH, 0, BAR_HEIGHT)
+            }):Play()
+        end
+    end)
 
     makeVSep(2)
 
     -- =============================================================
-    -- FUNCIÓN: BOTÓN TOGGLE CON LOADSTRING
+    -- FUNCIÓN: BOTÓN TOGGLE CON LOADSTRING (ESCALADO)
     -- =============================================================
     local function createToggleButton(name, order)
-        local btnW = 130
-
         local btn = Instance.new("Frame")
         btn.Name = name
-        btn.Size = UDim2.new(0, btnW, 0, 38)
+        btn.Size = UDim2.new(0, BTN_W, 0, BTN_H)
         btn.BackgroundColor3 = COLORS.ButtonOff
         btn.BorderSizePixel = 0
         btn.LayoutOrder = order
@@ -648,7 +682,7 @@ local function createHub()
         btn.Parent = container
 
         local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 10)
+        btnCorner.CornerRadius = UDim.new(0, 8)
         btnCorner.Parent = btn
 
         local btnBgGrad = Instance.new("UIGradient")
@@ -678,11 +712,11 @@ local function createHub()
         overlay.Parent = btn
 
         local oCorner = Instance.new("UICorner")
-        oCorner.CornerRadius = UDim.new(0, 10)
+        oCorner.CornerRadius = UDim.new(0, 8)
         oCorner.Parent = overlay
 
         local btnStroke = Instance.new("UIStroke")
-        btnStroke.Thickness = 1.2
+        btnStroke.Thickness = 1
         btnStroke.Color = COLORS.Stroke
         btnStroke.Transparency = 0.35
         btnStroke.Parent = btn
@@ -697,27 +731,27 @@ local function createHub()
         shine.Parent = btn
 
         local btnText = Instance.new("TextLabel")
-        btnText.Size = UDim2.new(1, -32, 1, 0)
-        btnText.Position = UDim2.new(0, 10, 0, 0)
+        btnText.Size = UDim2.new(1, -26, 1, 0)
+        btnText.Position = UDim2.new(0, 8, 0, 0)
         btnText.BackgroundTransparency = 1
         btnText.Text = name
         btnText.TextColor3 = COLORS.TextOff
-        btnText.TextSize = 11
+        btnText.TextSize = 9
         btnText.Font = Enum.Font.GothamBold
         btnText.TextXAlignment = Enum.TextXAlignment.Left
         btnText.ZIndex = 8
         btnText.Parent = btn
 
         local dotHolder = Instance.new("Frame")
-        dotHolder.Size = UDim2.new(0, 14, 0, 14)
-        dotHolder.Position = UDim2.new(1, -20, 0.5, -7)
+        dotHolder.Size = UDim2.new(0, 12, 0, 12)
+        dotHolder.Position = UDim2.new(1, -16, 0.5, -6)
         dotHolder.BackgroundTransparency = 1
         dotHolder.ZIndex = 8
         dotHolder.Parent = btn
 
         local statusDot = Instance.new("Frame")
-        statusDot.Size = UDim2.new(0, 7, 0, 7)
-        statusDot.Position = UDim2.new(0.5, -3.5, 0.5, -3.5)
+        statusDot.Size = UDim2.new(0, 5, 0, 5)
+        statusDot.Position = UDim2.new(0.5, -2.5, 0.5, -2.5)
         statusDot.BackgroundColor3 = COLORS.DotOff
         statusDot.BorderSizePixel = 0
         statusDot.ZIndex = 9
@@ -728,8 +762,8 @@ local function createHub()
         dotCorner.Parent = statusDot
 
         local dotGlow = Instance.new("Frame")
-        dotGlow.Size = UDim2.new(1, 5, 1, 5)
-        dotGlow.Position = UDim2.new(0, -2.5, 0, -2.5)
+        dotGlow.Size = UDim2.new(1, 4, 1, 4)
+        dotGlow.Position = UDim2.new(0, -2, 0, -2)
         dotGlow.BackgroundColor3 = COLORS.DotOff
         dotGlow.BackgroundTransparency = 0.7
         dotGlow.BorderSizePixel = 0
@@ -766,8 +800,8 @@ local function createHub()
 
         -- CLICK TOGGLE
         clickBtn.MouseButton1Click:Connect(function()
-            local down = TweenService:Create(btn, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, btnW, 0, 34)})
-            local up = TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, btnW, 0, 38)})
+            local down = TweenService:Create(btn, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, BTN_W, 0, BTN_H - 4)})
+            local up = TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, BTN_W, 0, BTN_H)})
             down:Play()
             down.Completed:Connect(function() up:Play() end)
 
@@ -775,9 +809,8 @@ local function createHub()
             local isOn = toggleStates[name]
 
             if isOn then
-                -- VISUAL: ACTIVADO
                 TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = COLORS.ButtonOn}):Play()
-                TweenService:Create(btnText, TweenInfo.new(0.3), {TextColor3 = COLORS.TextOn, TextSize = 11.5}):Play()
+                TweenService:Create(btnText, TweenInfo.new(0.3), {TextColor3 = COLORS.TextOn, TextSize = 9.5}):Play()
                 TweenService:Create(statusDot, TweenInfo.new(0.3), {BackgroundColor3 = COLORS.DotOn}):Play()
                 TweenService:Create(dotGlow, TweenInfo.new(0.3), {BackgroundColor3 = COLORS.DotOn, BackgroundTransparency = 0.5}):Play()
                 TweenService:Create(btnStroke, TweenInfo.new(0.3), {Color = COLORS.Orange, Transparency = 0}):Play()
@@ -790,14 +823,12 @@ local function createHub()
                     ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 80, 0)),
                 })
 
-                -- EJECUTAR SCRIPT
                 if functionMap[name] and functionMap[name].start then
                     functionMap[name].start()
                 end
             else
-                -- VISUAL: DESACTIVADO
                 TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = COLORS.ButtonOff}):Play()
-                TweenService:Create(btnText, TweenInfo.new(0.3), {TextColor3 = COLORS.TextOff, TextSize = 11}):Play()
+                TweenService:Create(btnText, TweenInfo.new(0.3), {TextColor3 = COLORS.TextOff, TextSize = 9}):Play()
                 TweenService:Create(statusDot, TweenInfo.new(0.3), {BackgroundColor3 = COLORS.DotOff}):Play()
                 TweenService:Create(dotGlow, TweenInfo.new(0.3), {BackgroundColor3 = COLORS.DotOff, BackgroundTransparency = 0.7}):Play()
                 TweenService:Create(btnStroke, TweenInfo.new(0.3), {Color = COLORS.Stroke, Transparency = 0.35}):Play()
@@ -810,7 +841,6 @@ local function createHub()
                     ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 28, 38)),
                 })
 
-                -- DETENER SCRIPT
                 if functionMap[name] and functionMap[name].stop then
                     functionMap[name].stop()
                 end
@@ -832,11 +862,11 @@ local function createHub()
     makeVSep(5)
 
     -- =============================================================
-    -- PANEL FPS + PING
+    -- PANEL FPS + PING (ESCALADO)
     -- =============================================================
     local infoPanel = Instance.new("Frame")
     infoPanel.Name = "InfoPanel"
-    infoPanel.Size = UDim2.new(0, 158, 0, 38)
+    infoPanel.Size = UDim2.new(0, INFO_W, 0, INFO_H)
     infoPanel.BackgroundColor3 = COLORS.Surface
     infoPanel.BackgroundTransparency = 0.2
     infoPanel.BorderSizePixel = 0
@@ -845,7 +875,7 @@ local function createHub()
     infoPanel.Parent = container
 
     local infoCorner = Instance.new("UICorner")
-    infoCorner.CornerRadius = UDim.new(0, 10)
+    infoCorner.CornerRadius = UDim.new(0, 8)
     infoCorner.Parent = infoPanel
 
     local infoGrad = Instance.new("UIGradient")
@@ -873,23 +903,23 @@ local function createHub()
 
     local fpsLabel = Instance.new("TextLabel")
     fpsLabel.Size = UDim2.new(0.5, -2, 1, 0)
-    fpsLabel.Position = UDim2.new(0, 10, 0, 0)
+    fpsLabel.Position = UDim2.new(0, 8, 0, 0)
     fpsLabel.BackgroundTransparency = 1
     fpsLabel.RichText = true
     fpsLabel.Text = '<font color="#a8a8b8">FPS:</font> <font color="#ff8c00">--</font>'
-    fpsLabel.TextSize = 10.5
+    fpsLabel.TextSize = 8.5
     fpsLabel.Font = Enum.Font.GothamSemibold
     fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
     fpsLabel.ZIndex = 8
     fpsLabel.Parent = infoPanel
 
     local pingLabel = Instance.new("TextLabel")
-    pingLabel.Size = UDim2.new(0.5, -6, 1, 0)
+    pingLabel.Size = UDim2.new(0.5, -4, 1, 0)
     pingLabel.Position = UDim2.new(0.5, 0, 0, 0)
     pingLabel.BackgroundTransparency = 1
     pingLabel.RichText = true
     pingLabel.Text = '<font color="#a8a8b8">Ping:</font> <font color="#ff8c00">--ms</font>'
-    pingLabel.TextSize = 10.5
+    pingLabel.TextSize = 8.5
     pingLabel.Font = Enum.Font.GothamSemibold
     pingLabel.TextXAlignment = Enum.TextXAlignment.Left
     pingLabel.ZIndex = 8
@@ -927,10 +957,10 @@ local function createHub()
     makeVSep(10)
 
     -- =============================================================
-    -- BOTÓN NARANJA ≡ — SOLO DECORATIVO
+    -- BOTÓN NARANJA ≡ — DECORATIVO (ESCALADO)
     -- =============================================================
     local decoHolder = Instance.new("Frame")
-    decoHolder.Size = UDim2.new(0, 34, 0, 34)
+    decoHolder.Size = UDim2.new(0, DECO_SIZE, 0, DECO_SIZE)
     decoHolder.BackgroundColor3 = COLORS.Orange
     decoHolder.BorderSizePixel = 0
     decoHolder.LayoutOrder = 11
@@ -938,7 +968,7 @@ local function createHub()
     decoHolder.Parent = container
 
     local decoCorner = Instance.new("UICorner")
-    decoCorner.CornerRadius = UDim.new(0, 10)
+    decoCorner.CornerRadius = UDim.new(0, 8)
     decoCorner.Parent = decoHolder
 
     local decoGrad = Instance.new("UIGradient")
@@ -951,7 +981,7 @@ local function createHub()
     decoGrad.Parent = decoHolder
 
     local decoStroke = Instance.new("UIStroke")
-    decoStroke.Thickness = 1.5
+    decoStroke.Thickness = 1.2
     decoStroke.Color = COLORS.OrangeBright
     decoStroke.Transparency = 0.2
     decoStroke.Parent = decoHolder
@@ -961,13 +991,13 @@ local function createHub()
     decoLabel.BackgroundTransparency = 1
     decoLabel.Text = "≡"
     decoLabel.TextColor3 = COLORS.TextOn
-    decoLabel.TextSize = 18
+    decoLabel.TextSize = 14
     decoLabel.Font = Enum.Font.GothamBold
     decoLabel.ZIndex = 9
     decoLabel.Parent = decoHolder
 
     local decoGlow = Instance.new("UIStroke")
-    decoGlow.Thickness = 6
+    decoGlow.Thickness = 5
     decoGlow.Color = COLORS.Orange
     decoGlow.Transparency = 0.7
     decoGlow.Parent = decoHolder
@@ -990,25 +1020,26 @@ local function createHub()
     -- =============================================================
     -- APERTURA
     -- =============================================================
+    isCollapsed = false
     mainFrame.Size = UDim2.new(0, BAR_WIDTH, 0, 0)
     TweenService:Create(mainFrame, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
         Size = UDim2.new(0, BAR_WIDTH, 0, BAR_HEIGHT)
     }):Play()
 
     -- =============================================================
-    -- TOGGLE KEY: RightControl
+    -- TOGGLE KEY: RightControl (también colapsa/expande)
     -- =============================================================
     table.insert(hubConnections, UserInputService.InputBegan:Connect(function(input, processed)
         if processed then return end
         if input.KeyCode == Enum.KeyCode.RightControl then
-            menuOpen = not menuOpen
-            if menuOpen then
-                TweenService:Create(mainFrame, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-                    Size = UDim2.new(0, BAR_WIDTH, 0, BAR_HEIGHT)
+            isCollapsed = not isCollapsed
+            if isCollapsed then
+                TweenService:Create(mainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(0, COLLAPSED_WIDTH, 0, BAR_HEIGHT)
                 }):Play()
             else
-                TweenService:Create(mainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-                    Size = UDim2.new(0, BAR_WIDTH, 0, 0)
+                TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(0, BAR_WIDTH, 0, BAR_HEIGHT)
                 }):Play()
             end
         end
@@ -1027,4 +1058,4 @@ player.CharacterAdded:Connect(function()
     createHub()
 end)
 
-print("⚡ Hub v7.0 | Loadstrings ON/OFF | OG Sniper + Eclipse Duels + Auto Code + More Opts | RightControl")
+print("⚡ Hub v7.0 Mobile | Logo Toggle | OG Sniper + Eclipse Duels + Auto Code + More Opts | RightControl")
