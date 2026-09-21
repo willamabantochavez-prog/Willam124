@@ -1,0 +1,198 @@
+-- LocalScript para Delta Roblox
+-- AntiDetection 3s + Animación ultra fluida + Auto-destruir
+
+local Players = game:GetService("Players")
+local ContentProvider = game:GetService("ContentProvider")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Limpiar todo anterior
+for _, gui in ipairs(playerGui:GetChildren()) do
+    if gui.Name == "AnimationGui" then
+        gui:Destroy()
+    end
+end
+
+-- ScreenGui principal
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AnimationGui"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.IgnoreGuiInset = true
+screenGui.DisplayOrder = 999
+screenGui.Parent = playerGui
+
+-- ===== FONDO NEGRO TOTAL =====
+local blackBg = Instance.new("Frame")
+blackBg.Name = "BlackBackground"
+blackBg.Size = UDim2.new(1, 0, 1, 0)
+blackBg.Position = UDim2.new(0, 0, 0, 0)
+blackBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+blackBg.BackgroundTransparency = 0
+blackBg.BorderSizePixel = 0
+blackBg.ZIndex = 1
+blackBg.Parent = screenGui
+
+-- ===== LOADING SCREEN =====
+local loadingFrame = Instance.new("Frame")
+loadingFrame.Name = "LoadingScreen"
+loadingFrame.Size = UDim2.new(1, 0, 1, 0)
+loadingFrame.Position = UDim2.new(0, 0, 0, 0)
+loadingFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+loadingFrame.BackgroundTransparency = 0
+loadingFrame.BorderSizePixel = 0
+loadingFrame.ZIndex = 100
+loadingFrame.Parent = screenGui
+
+local loadingText = Instance.new("TextLabel")
+loadingText.Size = UDim2.new(0.6, 0, 0.06, 0)
+loadingText.Position = UDim2.new(0.2, 0, 0.47, 0)
+loadingText.BackgroundTransparency = 1
+loadingText.Text = "AntiDetection Loading..."
+loadingText.TextColor3 = Color3.fromRGB(255, 255, 255)
+loadingText.TextScaled = true
+loadingText.Font = Enum.Font.GothamBold
+loadingText.ZIndex = 101
+loadingText.Parent = loadingFrame
+
+-- Animación puntos
+local loading = true
+task.spawn(function()
+    local dots = {".", "..", "..."}
+    local i = 1
+    while loading do
+        loadingText.Text = "AntiDetection Loading" .. dots[i]
+        i = i % #dots + 1
+        task.wait(0.4)
+    end
+end)
+
+-- Frames
+local frames = {
+    112361203464707,
+    128856110425072,
+    112729754845250,
+    76651133393671,
+    136408118364412,
+    135286601165660,
+    99672400636706,
+    130654089347186,
+    127950236070652,
+    127355758086540,
+    114367871875234,
+    119952648501209,
+    110921528634814,
+    73536775694104,
+    129324495427127,
+    78463658064917,
+    81784257626813,
+    115759838437466,
+    111907050200498,
+    129595980459444,
+    86042427741680,
+    89899235043973,
+    108917744303172,
+    109302266506261,
+    86595632851562,
+    113680203743001,
+    125557967517345,
+    70949070626870,
+    73218351069274,
+    132721920280359,
+    116679964518713,
+    107500384102446,
+    133446264095023,
+    125747152290008,
+    94691906043509,
+    121218526925135,
+    124292738379029,
+    79382144197231,
+    131891146815082,
+    104715779074188,
+    100674318200446,
+    90495539209476,
+    76925909051430,
+    118978240747288,
+    95659546222914,
+    78951661538817,
+    114397595663944,
+}
+
+-- Precargar assets
+local assetsToPreload = {}
+for _, id in ipairs(frames) do
+    table.insert(assetsToPreload, "rbxassetid://" .. id)
+end
+ContentProvider:PreloadAsync(assetsToPreload)
+
+-- Esperar 3 segundos total
+task.wait(3)
+loading = false
+
+-- Fade out loading
+local fadeOut = TweenInfo.new(0.3, Enum.EasingStyle.Linear)
+TweenService:Create(loadingText, fadeOut, {TextTransparency = 1}):Play()
+task.wait(0.35)
+loadingFrame:Destroy()
+
+-- ===== ANIMACIÓN ULTRA FLUIDA (ZIndex swap) =====
+-- Ambos labels SIEMPRE visibles, se cambia cuál está adelante
+
+local img1 = Instance.new("ImageLabel")
+img1.Size = UDim2.new(1, 0, 1, 0)
+img1.Position = UDim2.new(0, 0, 0, 0)
+img1.BackgroundTransparency = 1
+img1.ImageTransparency = 0
+img1.ScaleType = Enum.ScaleType.Stretch
+img1.BorderSizePixel = 0
+img1.ZIndex = 5
+img1.Visible = true
+img1.Image = "rbxassetid://" .. frames[1]
+img1.Parent = screenGui
+
+local img2 = Instance.new("ImageLabel")
+img2.Size = UDim2.new(1, 0, 1, 0)
+img2.Position = UDim2.new(0, 0, 0, 0)
+img2.BackgroundTransparency = 1
+img2.ImageTransparency = 0
+img2.ScaleType = Enum.ScaleType.Stretch
+img2.BorderSizePixel = 0
+img2.ZIndex = 4
+img2.Visible = true
+img2.Image = "rbxassetid://" .. frames[1]
+img2.Parent = screenGui
+
+-- Configuración
+local fps = 10
+local frameDelay = 1 / fps
+local frontIsImg1 = true
+
+-- Loop sin loop - una sola pasada
+for i = 2, #frames do
+    task.wait(frameDelay)
+    
+    local nextAsset = "rbxassetid://" .. frames[i]
+    
+    if frontIsImg1 then
+        -- img1 está adelante, preparar img2 detrás
+        img2.Image = nextAsset
+        img2.ZIndex = 6  -- traer adelante
+        img1.ZIndex = 5  -- enviar atrás
+    else
+        -- img2 está adelante, preparar img1 detrás
+        img1.Image = nextAsset
+        img1.ZIndex = 6  -- traer adelante
+        img2.ZIndex = 5  -- enviar atrás
+    end
+    
+    frontIsImg1 = not frontIsImg1
+end
+
+-- Mantener último frame
+task.wait(0.5)
+
+-- ===== DESTRUIR TODO =====
+screenGui:Destroy()
+script:Destroy()
+
