@@ -79,7 +79,7 @@ local RDB={
 ["favorite game"]="ROBLOX",["game"]="ROBLOX",
 ["favorite number"]="SEVEN",["lucky number"]="SEVEN",["number"]="SEVEN",
 ["youtube channel"]="SPYDERSAMMY",["my youtube"]="SPYDERSAMMY",["youtube"]="SPYDERSAMMY",
-["discord server"]="ACE",["sammy discord"]="SPYDERSAMMY",
+["discord server"]="Eclipse.Vs",["sammy discord"]="SPYDERSAMMY",
 ["twitter"]="SPYDERSAMMY",["tiktok"]="SPYDERSAMMY",["instagram"]="SPYDERSAMMY",
 ["game created on"]="FRIDAY",["created on"]="FRIDAY",
 ["release month"]="MAY",["release year"]="2025",["year sab was created"]="2025",
@@ -258,9 +258,6 @@ local _capturedParts = {}
 local _lastWatchedBox = nil
 local _boxTextConn = nil
 local _boxAncestryConn = nil
-local _pendingRejectedText = nil
-local _pendingRejectedUntil = 0
-local _pendingRejectedToken = 0
 local ACE_WORD_COUNT = 1
 local _lastRiddleKey = ""
 local _lastRiddleAt = 0
@@ -310,7 +307,16 @@ local V3_RED = Color3.fromRGB(220,60,60)
 local V3_GREEN = Color3.fromRGB(50,220,80)
 local V3_HOLD = 10
 
-local MFRAMES = {134000276327841,134210239183104,135254668520742,133450668455851}
+-- Mascot frames (7 frames, 14 FPS)
+local MFRAMES = {
+    135718098604928,
+    123987527303576,
+    116697721761973,
+    97600017213952,
+    123238595674310,
+    76181470667370,
+    108087581031096,
+}
 
 local themed = {cards={},cardStrokes={},toggleBtns={},counterBtns={},consoleF=nil,consoleS=nil,tabBtns={},tabStrokes={},kbFrames={},kbStrokes={},kbLabels={},bgBtns={},bgStrokes={},discordLbl=nil,farmT=nil,settingsT=nil}
 local currentTab = "MAIN"
@@ -511,7 +517,7 @@ local function startSnow()
 end
 local function stopSnow() snowRun=false;if snowCont then snowCont.Visible=false end end
 
--- ═══ MASCOT (doble buffering exacto como script original) ═══
+-- ═══ MASCOT (7 frames, 14 FPS, double buffer with ImageTransparency) ═══
 local MascotCont = Instance.new("Frame")
 MascotCont.Name = "MascotCont"
 MascotCont.Size = UDim2.fromOffset(180, 180)
@@ -522,28 +528,49 @@ MascotCont.ZIndex = 50
 MascotCont.Visible = cfg.mascot
 MascotCont.Parent = GUI
 
+-- Precargar usando cpLabels temporales (igual que script original)
+local assetUrls = {}
+for i, id in ipairs(MFRAMES) do assetUrls[i] = "rbxassetid://" .. id end
+
+task.spawn(function()
+    pcall(function()
+        local cpLabels = {}
+        for i, url in ipairs(assetUrls) do
+            local lbl = Instance.new("ImageLabel")
+            lbl.Image = url
+            lbl.Size = UDim2.new(1, 0, 1, 0)
+            lbl.Visible = false
+            lbl.Parent = GUI
+            cpLabels[i] = lbl
+        end
+        CP:PreloadAsync(cpLabels)
+        for _, lbl in ipairs(cpLabels) do lbl:Destroy() end
+    end)
+end)
+
+-- Imagen 1 (frontal)
 local MascotImg1 = Instance.new("ImageLabel")
 MascotImg1.Name = "Img1"
 MascotImg1.Size = UDim2.new(1, 0, 1, 0)
-MascotImg1.Position = UDim2.new(0, 0, 0, 0)
 MascotImg1.BackgroundTransparency = 1
 MascotImg1.ImageTransparency = 0
 MascotImg1.ScaleType = Enum.ScaleType.Fit
 MascotImg1.BorderSizePixel = 0
-MascotImg1.ZIndex = 51
+MascotImg1.ZIndex = 52
 MascotImg1.Visible = true
+MascotImg1.Image = assetUrls[1]
 MascotImg1.Parent = MascotCont
 
+-- Imagen 2 (oculta)
 local MascotImg2 = Instance.new("ImageLabel")
 MascotImg2.Name = "Img2"
 MascotImg2.Size = UDim2.new(1, 0, 1, 0)
-MascotImg2.Position = UDim2.new(0, 0, 0, 0)
 MascotImg2.BackgroundTransparency = 1
-MascotImg2.ImageTransparency = 0
+MascotImg2.ImageTransparency = 1
 MascotImg2.ScaleType = Enum.ScaleType.Fit
 MascotImg2.BorderSizePixel = 0
 MascotImg2.ZIndex = 51
-MascotImg2.Visible = false
+MascotImg2.Visible = true
 MascotImg2.Parent = MascotCont
 
 -- Position tracking (follows Window)
@@ -556,46 +583,34 @@ RunService.Heartbeat:Connect(function()
     end)
 end)
 
--- Precargar TODOS los assets antes de iniciar (igual que script original)
-local assetsToPreload = {}
-for _, id in ipairs(MFRAMES) do
-    table.insert(assetsToPreload, "rbxassetid://" .. id)
-end
-CP:PreloadAsync(assetsToPreload)
-
--- Cargar primer frame (igual que script original)
-MascotImg1.Image = "rbxassetid://" .. MFRAMES[1]
-MascotImg1.Visible = true
-
-local currentFrame = 1
-local useFirst = true
-
--- Esperar un momento antes de iniciar (igual que script original)
-task.wait(0.5)
-
--- Loop con doble buffering instantáneo (igual que script original)
+-- Animation loop (14 FPS, ImageTransparency swap, sin frames anteriores)
 task.spawn(function()
+    local fps = 14
+    local totalFrames = #MFRAMES
+    local currentFrame = 1
+    local frontIsImg1 = true
+    task.wait(0.3)
     while MascotCont and MascotCont.Parent do
-        task.wait(1/7)
-
+        task.wait(1 / fps)
         if not MascotCont.Visible then continue end
-
         currentFrame = currentFrame + 1
-        if currentFrame > #MFRAMES then currentFrame = 1 end
-
-        local nextAsset = "rbxassetid://" .. MFRAMES[currentFrame]
-
-        if useFirst then
-            MascotImg2.Image = nextAsset
-            MascotImg2.Visible = true
-            MascotImg1.Visible = false
+        if currentFrame > totalFrames then currentFrame = 1 end
+        if frontIsImg1 then
+            MascotImg2.Image = assetUrls[currentFrame]
+            MascotImg2.ImageTransparency = 1
+            MascotImg2.ZIndex = 52
+            MascotImg1.ZIndex = 51
+            MascotImg2.ImageTransparency = 0
+            MascotImg1.ImageTransparency = 1
         else
-            MascotImg1.Image = nextAsset
-            MascotImg1.Visible = true
-            MascotImg2.Visible = false
+            MascotImg1.Image = assetUrls[currentFrame]
+            MascotImg1.ImageTransparency = 1
+            MascotImg1.ZIndex = 52
+            MascotImg2.ZIndex = 51
+            MascotImg1.ImageTransparency = 0
+            MascotImg2.ImageTransparency = 1
         end
-
-        useFirst = not useFirst
+        frontIsImg1 = not frontIsImg1
     end
 end)
 
@@ -805,7 +820,8 @@ settingRow(SetP,"Falling Snow",cfg.snow,"SNW",function(s) cfg.snow=s;saveCfg();i
 settingRow(SetP,"N Animation Test",cfg.mascot,"MSC",function(s) cfg.mascot=s;_mascotEnabled=s;saveCfg();MascotCont.Visible=s end,"Mascot sitting on UI")
 settingRow(SetP,"Optimization",cfg.optimize,"OPT",function(s) cfg.optimize=s;saveCfg();if s then pcall(function() for _,d in ipairs(WS:GetDescendants()) do if d:IsA("Sound") then d:Stop();d.Volume=0 end end end) end end,"Disable sounds")
 
-local DF=Instance.new("TextLabel");DF.Size=UDim2.fromOffset(200,16);DF.Position=UDim2.new(0.5,-100,1,-20);DF.BackgroundTransparency=1;DF.Text="discord.gg/aQKQSyNBV";DF.TextSize=10;DF.TextColor3=COLORS.Accent;DF.Font=Enum.Font.GothamBold;DF.TextXAlignment=Enum.TextXAlignment.Center;DF.TextStrokeColor3=Color3.fromRGB(0,0,0);DF.TextStrokeTransparency=0.15;DF.ZIndex=10;DF.Parent=Window;themed.discordLbl=DF
+local DF=Instance.new("TextLabel");DF.Size=UDim2.fromOffset(200,16);DF.Position=UDim2.new(0.5,-100,1,-20);DF.BackgroundTransparency=1;DF.Text="
+dc.gg/eclipse.vs";DF.TextSize=10;DF.TextColor3=COLORS.Accent;DF.Font=Enum.Font.GothamBold;DF.TextXAlignment=Enum.TextXAlignment.Center;DF.TextStrokeColor3=Color3.fromRGB(0,0,0);DF.TextStrokeTransparency=0.15;DF.ZIndex=10;DF.Parent=Window;themed.discordLbl=DF
 
 -- ═══ CORE LOGIC ═══
 local function resetCapture() _capturedParts={} end
