@@ -1,5 +1,5 @@
 --═══════════════════════════════════════════════════
--- ECLIPSE CODE SNIPER v4.1
+-- ECLIPSE CODE SNIPER v4.2
 --═══════════════════════════════════════════════════
 
 local script_ok, script_err = pcall(function()
@@ -22,7 +22,7 @@ pcall(function() pg:FindFirstChild("EclipseUI"):Destroy() end)
 local http = (syn and syn.request) or (http and http.request) or request or http_request
 
 -- ═══ CONFIG ═══
-local CF = "eclipse_v4f.json"
+local CF = "eclipse_v4g.json"
 local cfg = {
     sniper=true, codeV1=true, codeV2=false, codeV3=false,
     submitV1=true, submitV2=false, submitV3=false, submitV4=false, after=3,
@@ -179,11 +179,12 @@ local function looksLikeRiddle(text)
     if not l:find(" ") then return false end
     if text:find("?") then return true end
     local fw = l:match("^(%S+)")
-    for _,w in ipairs({"what","whats","who","whos","when","where","which","how","name","tell","type","say","guess","answer","riddle","spell"}) do
+    for _,w in ipairs({"what","whats","who","whos","when","where","which","how","name","tell","type","say","guess","answer","riddle","spell","give","give me","whats the"}) do
         if fw==w then return true end
     end
     if l:find("favorite") or l:find("favourite") then return true end
     if l:find("%f[%a]my%f[%A]") and l:find("%f[%a]and%f[%A]") then return true end
+    if l:find("how many") then return true end
     return false
 end
 
@@ -199,38 +200,94 @@ local function getGroqPrompt()
 end
 
 local function groqSolve(question)
-    if not http or not HS then return nil,"no http" end
+    if not http then return nil,"no_http" end
     local body = HS:JSONEncode({model="openai/gpt-oss-120b",messages={{role="system",content=getGroqPrompt()},{role="user",content=tostring(question or "")}},temperature=0,max_completion_tokens=96,stream=false})
     local ok2,res = pcall(http,{Url="https://api.groq.com/openai/v1/chat/completions",Method="POST",Headers={["Authorization"]="Bearer "..GROQ_KEY,["Content-Type"]="application/json"},Body=body})
-    if not ok2 or type(res)~="table" then return nil,"fail" end
+    if not ok2 then return nil,"request_fail" end
+    if type(res)~="table" then return nil,"bad_res" end
     local rb = res.Body or res.body
-    if type(rb)~="string" then return nil,"no body" end
+    if type(rb)~="string" then return nil,"no_body" end
     local st = tonumber(res.StatusCode or res.Status or 0) or 0
-    if st<200 or st>=300 then return nil,"HTTP "..st end
+    if st<200 or st>=300 then return nil,"HTTP"..st end
     local d,data = pcall(function() return HS:JSONDecode(rb) end)
-    if not d or type(data)~="table" then return nil,"json" end
+    if not d or type(data)~="table" then return nil,"json_err" end
     local ch = data.choices and data.choices[1]
     local msg = ch and ch.message and ch.message.content
     if not msg then return nil,"empty" end
     msg = msg:gsub("<[^>]->",""):match("([^\r\n]+)") or msg
     msg = msg:gsub("^%s+",""):gsub("%s+$",""):gsub("^[\"']+",""):gsub("[\"']+$",""):upper():gsub("%s+",""):gsub("[%?%.%,!]","")
-    if msg=="" or #msg>160 then return nil,"bad" end
+    if msg=="" or #msg>160 then return nil,"bad_ans" end
     return msg
 end
 
+-- WORKER SOLVER - COMPLETELY REWRITTEN WITH FULL LOGGING
 local WURL = "https://worker-wandering-cloud-e4b3.willamabantochavez.workers.dev"
-local WTKN = "x7k9m2p4r6t8v0w1y3z5a8b5c2d9e6f3g0h7"
+local WTKN = "mk_live_a9499b6a5a278b03bbb74a3bdf65922147b8d56dee13e881"
+
 local function workerSolve(question)
-    if not http then return nil end
-    local ok2,res = pcall(http,{Url=WURL.."/solve",Method="POST",Headers={["Content-Type"]="application/json",["Authorization"]="Bearer "..WTKN},Body=HS:JSONEncode({riddle=question})})
-    if not ok2 or type(res)~="table" then return nil end
+    if not http then
+        setStatus("[worker] NO HTTP LIBRARY!",COLORS.Red)
+        return nil
+    end
+    setStatus("[worker] Sending: "..tostring(question):sub(1,60),COLORS.Dim)
+    local reqBody = HS:JSONEncode({riddle=question})
+    local reqUrl = WURL.."/solve"
+    local ok2,res = pcall(http,{
+        Url = reqUrl,
+        Method = "POST",
+        Headers = {
+            ["Content-Type"] = "application/json",
+            ["Authorization"] = "Bearer "..WTKN
+        },
+        Body = reqBody
+    })
+    if not ok2 then
+        setStatus("[worker] REQUEST CRASHED: "..tostring(res),COLORS.Red)
+        return nil
+    end
+    if type(res)~="table" then
+        setStatus("[worker] BAD RESPONSE TYPE: "..type(res),COLORS.Red)
+        return nil
+    end
     local raw = res.Body or res.body
-    if type(raw)~="string" then return nil end
+    local st = tonumber(res.StatusCode or res.Status or 0) or 0
+    if st==0 and not raw then
+        setStatus("[worker] NO RESPONSE (timeout/blocked)",COLORS.Red)
+        return nil
+    end
+    if st<200 or st>=300 then
+        setStatus("[worker] HTTP "..st..": "..tostring(raw or ""):sub(1,80),COLORS.Red)
+        return nil
+    end
+    if type(raw)~="string" then
+        setStatus("[worker] BODY NOT STRING: "..type(raw),COLORS.Red)
+        return nil
+    end
+    setStatus("[worker] Got response ("..#raw.." bytes)",COLORS.Dim)
     local d,data = pcall(function() return HS:JSONDecode(raw) end)
-    if not d or type(data)~="table" or not data.answer then return nil end
+    if not d then
+        setStatus("[worker] JSON PARSE ERROR: "..tostring(data),COLORS.Red)
+        return nil
+    end
+    if type(data)~="table" then
+        setStatus("[worker] JSON NOT TABLE",COLORS.Red)
+        return nil
+    end
+    if data.error then
+        setStatus("[worker] SERVER ERROR: "..tostring(data.error),COLORS.Red)
+        return nil
+    end
+    if not data.answer then
+        setStatus("[worker] NO ANSWER FIELD. Keys: "..tostring(HS:JSONEncode(data)):sub(1,100),COLORS.Red)
+        return nil
+    end
     local ans = tostring(data.answer):gsub("^%s+",""):gsub("%s+$","")
-    if ans~="" then return ans end
-    return nil
+    if ans=="" then
+        setStatus("[worker] EMPTY ANSWER",COLORS.Red)
+        return nil
+    end
+    setStatus("[worker] SOLVED: "..ans,COLORS.Green)
+    return ans
 end
 
 -- ═══ STATE ═══
@@ -482,7 +539,6 @@ local setStatus, flashCode, appendToBox, clearCapture, riddleSubmitAnswer
 
 local function setStatusFn(msg,col)
     if not ConsoleOutput or not _enabled then return end
-    if msg==_lastStatusMsg then return end
     _lastStatusMsg=msg
     col=col or COLORS.Dim
     local l='<font color="'..col3ToRich(col)..'">'..tostring(msg)..'</font>'
@@ -594,7 +650,7 @@ local Header=Instance.new("Frame");Header.Size=UDim2.new(1,0,0,50);Header.Backgr
 local BrandMark=Instance.new("Frame");BrandMark.Size=UDim2.fromOffset(30,30);BrandMark.Position=UDim2.fromOffset(10,10);BrandMark.BackgroundTransparency=1;BrandMark.ZIndex=6;BrandMark.Parent=Window;addC(BrandMark,15)
 local BrandImg=Instance.new("ImageLabel");BrandImg.Size=UDim2.fromScale(1,1);BrandImg.BackgroundTransparency=1;BrandImg.Image="rbxassetid://104937666038724";BrandImg.ScaleType=Enum.ScaleType.Fit;BrandImg.ZIndex=7;BrandImg.Parent=BrandMark;addC(BrandImg,15)
 local TTL=Instance.new("TextLabel");TTL.Size=UDim2.fromOffset(160,20);TTL.Position=UDim2.fromOffset(46,6);TTL.BackgroundTransparency=1;TTL.RichText=true;TTL.Text='<font color="rgb(255,180,50)">Eclipse</font> <font color="rgb(255,255,255)">Code Sniper</font>';TTL.TextSize=13;TTL.Font=Enum.Font.GothamBold;TTL.TextXAlignment=Enum.TextXAlignment.Left;TTL.ZIndex=8;TTL.Parent=Header
-local Sub=Instance.new("TextLabel");Sub.Size=UDim2.fromOffset(160,14);Sub.Position=UDim2.fromOffset(46,24);Sub.BackgroundTransparency=1;Sub.Text="v4.1 - Triple Solver";Sub.TextSize=8;Sub.TextColor3=COLORS.Dim;Sub.Font=Enum.Font.GothamMedium;Sub.TextXAlignment=Enum.TextXAlignment.Left;Sub.ZIndex=8;Sub.Parent=Header
+local Sub=Instance.new("TextLabel");Sub.Size=UDim2.fromOffset(160,14);Sub.Position=UDim2.fromOffset(46,24);Sub.BackgroundTransparency=1;Sub.Text="v4.2 - Triple Solver";Sub.TextSize=8;Sub.TextColor3=COLORS.Dim;Sub.Font=Enum.Font.GothamMedium;Sub.TextXAlignment=Enum.TextXAlignment.Left;Sub.ZIndex=8;Sub.Parent=Header
 
 local AWBtn=Instance.new("TextButton");AWBtn.Size=UDim2.fromOffset(47,22);AWBtn.Position=UDim2.new(1,-58,0,14);AWBtn.BackgroundColor3=COLORS.Accent;AWBtn.BorderSizePixel=0;AWBtn.AutoButtonColor=false;AWBtn.Text="";AWBtn.ZIndex=8;AWBtn.Parent=Header;addC(AWBtn,11)
 local AWStroke=addS(AWBtn,COLORS.Accent,1,0.5)
@@ -804,76 +860,154 @@ appendToBox = function(text)
         end
         if _autoSubmitV1 then
             local ok2,msg=voltSubmit(combined)
-            if ok2 then setStatus("sub v1 volt: "..combined,COLORS.Green) else setStatus("sub v1 fail: "..tostring(msg),COLORS.Red) end
+            if ok2 then setStatus("sub v1: "..combined,COLORS.Green) else setStatus("sub v1 fail: "..tostring(msg),COLORS.Red) end
         end
         if _autoSubmitV2 then
             local ok2,msg=basicSubmit(combined)
-            if ok2 then setStatus("sub v2 basic: "..combined,COLORS.Green) else setStatus("sub v2 fail: "..tostring(msg),COLORS.Red) end
+            if ok2 then setStatus("sub v2: "..combined,COLORS.Green) else setStatus("sub v2 fail: "..tostring(msg),COLORS.Red) end
         end
         if _autoSubmitV3 then
             updateV3Ind(count,_submitAfter)
         end
         if _autoSubmitV4 then
             local ok2,msg=typeAndSubmit(combined)
-            if ok2 then setStatus("sub v4 test: "..combined,COLORS.Green) else setStatus("sub v4 fail: "..tostring(msg),COLORS.Red) end
+            if ok2 then setStatus("sub v4: "..combined,COLORS.Green) else setStatus("sub v4 fail: "..tostring(msg),COLORS.Red) end
         end
     end
 end
 
-riddleSubmitAnswer = function(ans)
-    if not ans or ans=="" then return end
-    if _autoCodeV1 then
-        if type(setclipboard)=="function" then pcall(setclipboard,ans) end
-        setStatus("v1 copied: "..ans,COLORS.Green)
+-- ═══ RIDDLE SUBMIT — COMPLETELY REWRITTEN ═══
+-- riddleSubmitV1 = Worker only → paste + submit
+-- riddleSubmitV2 = Local → AI → Worker → paste + submit  
+-- riddleSubmitV3 = Same as v2 + AHK indicator
+
+riddleSubmitAnswer = function(ans, source)
+    if not ans or ans=="" then
+        setStatus("[riddle] EMPTY ANSWER!",COLORS.Red)
+        return
     end
-    if _autoCodeV2 then
-        local box=aceBox()
-        if box then pcall(function() box.Text=ans end);fireFocusLost(box);setStatus("v2 typed: "..ans,COLORS.Green)
-        else setStatus("v2 no box",COLORS.Red) end
+    setStatus("[riddle] Answer ready: "..ans.." (from "..tostring(source or "?")..")",COLORS.Green)
+
+    -- STEP 1: ALWAYS paste into box first
+    local box = aceBox()
+    if box then
+        pcall(function() box.Text = ans end)
+        setStatus("[riddle] PASTED into box: "..ans,COLORS.Green)
+    else
+        setStatus("[riddle] NO CODE BOX FOUND!",COLORS.Red)
+        -- Try clipboard as fallback
+        if type(setclipboard)=="function" then pcall(setclipboard,ans);setStatus("[riddle] Copied to clipboard (no box)",COLORS.Dim) end
     end
-    if _autoCodeV3 then
-        local box=aceBox()
-        if box then pcall(function() box.Text=ans end);fireFocusLost(box);setStatus("v3 typed+fl: "..ans,COLORS.Green)
-        else setStatus("v3 no box",COLORS.Red) end
+
+    -- STEP 2: Submit based on riddle toggle
+    if _riddleSubmitV1 then
+        -- V1: Volt style - FocusLost then click
+        setStatus("[riddle] Submitting v1 (volt)...",COLORS.Dim)
+        task.wait(0.05)
+        if box then fireFocusLost(box) end
+        task.wait(0.02)
+        local rb = box and findSubmitBtn(box)
+        if rb then clickBtn(rb);setStatus("[riddle] v1 SUBMIT CLICKED",COLORS.Green)
+        else setStatus("[riddle] v1 no submit btn found",COLORS.Dim) end
     end
-    if _autoSubmitV1 then
-        local ok2,msg=voltSubmit(ans)
-        if ok2 then setStatus("sub v1 volt: "..ans,COLORS.Green) else setStatus("sub v1 fail: "..tostring(msg),COLORS.Red) end
+
+    if _riddleSubmitV2 then
+        -- V2: Basic style - Click then FocusLost
+        setStatus("[riddle] Submitting v2 (basic)...",COLORS.Dim)
+        task.wait(0.1)
+        local rb = box and findSubmitBtn(box)
+        if rb then clickBtn(rb);setStatus("[riddle] v2 SUBMIT CLICKED",COLORS.Green)
+        else setStatus("[riddle] v2 no submit btn found",COLORS.Dim) end
+        task.wait(0.05)
+        if box then fireFocusLost(box) end
     end
-    if _autoSubmitV2 then
-        local ok2,msg=basicSubmit(ans)
-        if ok2 then setStatus("sub v2 basic: "..ans,COLORS.Green) else setStatus("sub v2 fail: "..tostring(msg),COLORS.Red) end
+
+    if _riddleSubmitV3 then
+        -- V3: AHK indicator only - flash green for user to press AHK
+        setStatus("[riddle] v3 AHK indicator ON - press AHK key",COLORS.Green)
+        showV3Green(V3_HOLD)
     end
-    if _autoSubmitV3 then showV3Green(V3_HOLD) end
-    if _autoSubmitV4 then
-        local ok2,msg=typeAndSubmit(ans)
-        if ok2 then setStatus("sub v4 test: "..ans,COLORS.Green) else setStatus("sub v4 fail: "..tostring(msg),COLORS.Red) end
+
+    -- If none of the riddle submit toggles are on, at least try basic submit
+    if not(_riddleSubmitV1 or _riddleSubmitV2 or _riddleSubmitV3) then
+        setStatus("[riddle] No submit toggle ON! Trying basic...",COLORS.Dim)
+        task.wait(0.1)
+        local rb = box and findSubmitBtn(box)
+        if rb then clickBtn(rb);setStatus("[riddle] AUTO SUBMIT CLICKED",COLORS.Green) end
+        if box then fireFocusLost(box) end
     end
-    if not(_autoCodeV1 or _autoCodeV2 or _autoCodeV3 or _autoSubmitV1 or _autoSubmitV2 or _autoSubmitV4) then
-        setStatus("Answer: "..ans,COLORS.White)
-    end
+
+    setStatus("[riddle] DONE: "..ans,COLORS.Green)
 end
 
 local function solveRiddle(msg)
-    setStatus("Riddle detected!",COLORS.Text)
-    if _riddleSubmitV1 and not _riddleSubmitV2 then
-        task.spawn(function() local a=workerSolve(msg);if a then setStatus("Worker: "..a,COLORS.Green);riddleSubmitAnswer(a) else setStatus("Worker failed",COLORS.Red) end end);return
-    end
-    if _riddleSubmitV2 then
+    if not _riddleSolver then return end
+    setStatus("═══ RIDDLE DETECTED ═══",COLORS.Text)
+    setStatus("[riddle] "..tostring(msg):sub(1,80),COLORS.Dim)
+
+    -- STRATEGY 1: Worker FIRST (most reliable)
+    if _riddleSubmitV1 then
+        -- V1 = Worker only
+        setStatus("[riddle] Strategy: Worker only (v1)",COLORS.Dim)
         task.spawn(function()
-            local la=localSolve(msg);if la then setStatus("Local: "..la,COLORS.Green);riddleSubmitAnswer(la);return end
-            local ga,ge=groqSolve(msg);if ga then setStatus("AI: "..ga,COLORS.Green);riddleSubmitAnswer(ga);return end
-            local wa=workerSolve(msg);if wa then setStatus("Worker: "..wa,COLORS.Green);riddleSubmitAnswer(wa);return end
-            setStatus("All failed ("..tostring(ge or "miss")..")",COLORS.Red)
-        end);return
+            local ans = workerSolve(msg)
+            if ans then
+                riddleSubmitAnswer(ans, "worker")
+            else
+                setStatus("[riddle] Worker FAILED, trying local...",COLORS.Red)
+                local la = localSolve(msg)
+                if la then riddleSubmitAnswer(la, "local-fallback")
+                else setStatus("[riddle] ALL FAILED (v1)",COLORS.Red) end
+            end
+        end)
+        return
     end
+
+    if _riddleSubmitV2 or _riddleSubmitV3 then
+        -- V2/V3 = Local → Worker → AI (full chain)
+        setStatus("[riddle] Strategy: Full chain (v2/v3)",COLORS.Dim)
+        task.spawn(function()
+            -- 1. Try local DB first (instant)
+            local la = localSolve(msg)
+            if la then
+                setStatus("[riddle] LOCAL HIT: "..la,COLORS.Green)
+                riddleSubmitAnswer(la, "local")
+                return
+            end
+            setStatus("[riddle] Local miss, trying Worker...",COLORS.Dim)
+
+            -- 2. Try Worker (most important)
+            local wa = workerSolve(msg)
+            if wa then
+                riddleSubmitAnswer(wa, "worker")
+                return
+            end
+            setStatus("[riddle] Worker miss, trying AI...",COLORS.Dim)
+
+            -- 3. Try Groq AI as last resort
+            local ga, ge = groqSolve(msg)
+            if ga then
+                riddleSubmitAnswer(ga, "groq-ai")
+                return
+            end
+            setStatus("[riddle] ALL SOLVERS FAILED ("..tostring(ge or "unknown")..")",COLORS.Red)
+        end)
+        return
+    end
+
     if _backupRiddle then
+        setStatus("[riddle] Strategy: Backup (local+worker)",COLORS.Dim)
         task.spawn(function()
-            local la=localSolve(msg);if la then setStatus("Local: "..la,COLORS.Green);riddleSubmitAnswer(la);return end
-            local wa=workerSolve(msg);if wa then setStatus("Worker: "..wa,COLORS.Green);riddleSubmitAnswer(wa);return end
-            setStatus("Backup failed",COLORS.Red)
-        end);return
+            local la = localSolve(msg)
+            if la then riddleSubmitAnswer(la, "local"); return end
+            local wa = workerSolve(msg)
+            if wa then riddleSubmitAnswer(wa, "worker"); return end
+            setStatus("[riddle] Backup FAILED",COLORS.Red)
+        end)
+        return
     end
+
+    setStatus("[riddle] No riddle submit toggle ON!",COLORS.Red)
 end
 
 local function stripRich(t) if type(t)~="string" then return tostring(t) end;return (t:gsub("<[^>]->","")) end
@@ -884,12 +1018,22 @@ local function onAnnounce(...)
     local text=stripRich(tostring((...) or ""))
     text=text:match("^%s*(.-)%s*$") or ""
     if text=="" then return end
+
+    -- Log every announcement for debugging
+    setStatus("[recv] "..text:sub(1,70),COLORS.Dim)
+
     if text:find("%s") then
         if _riddleSolver and looksLikeRiddle(text) then
             local key=text:lower():gsub("[%?%!%.%,]",""):gsub("^%s+",""):gsub("%s+$","")
-            if key==_lastRiddleKey and tick()-_lastRiddleAt<5 then return end
+            if key==_lastRiddleKey and tick()-_lastRiddleAt<5 then
+                setStatus("[riddle] Duplicate, skipping",COLORS.Dim)
+                return
+            end
             _lastRiddleKey=key;_lastRiddleAt=tick()
+            setStatus("[riddle] MATCHED! Solving...",COLORS.Text)
             solveRiddle(text)
+        else
+            setStatus("[recv] Not a riddle: "..text:sub(1,50),COLORS.Dim)
         end
         return
     end
@@ -997,7 +1141,7 @@ if getgenv then
 end
 
 print("═══════════════════════════════════════")
-print("Eclipse Code Sniper v4.1 loaded OK")
+print("Eclipse Code Sniper v4.2 loaded OK")
 print("═══════════════════════════════════════")
 
 end)
