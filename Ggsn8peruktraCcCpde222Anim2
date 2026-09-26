@@ -1,10 +1,9 @@
 --═══════════════════════════════════════════════════
--- ECLIPSE CODE SNIPER v4.0 - CLEAN REBUILD
+-- ECLIPSE CODE SNIPER v4.1
 --═══════════════════════════════════════════════════
 
 local script_ok, script_err = pcall(function()
 
--- ═══ SERVICES ═══
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -17,18 +16,16 @@ local CP = game:GetService("ContentProvider")
 local player = Players.LocalPlayer
 local pg = player:WaitForChild("PlayerGui")
 
--- ═══ CLEANUP ═══
 pcall(function() game.CoreGui:FindFirstChild("EclipseUI"):Destroy() end)
 pcall(function() pg:FindFirstChild("EclipseUI"):Destroy() end)
 
--- ═══ HTTP ═══
 local http = (syn and syn.request) or (http and http.request) or request or http_request
 
 -- ═══ CONFIG ═══
-local CF = "eclipse_v4c.json"
+local CF = "eclipse_v4f.json"
 local cfg = {
-    sniper=true, codeV1=true, codeV2=false, copyCode=false,
-    submitV1=true, submitV2=false, submitV3=false, after=3,
+    sniper=true, codeV1=true, codeV2=false, codeV3=false,
+    submitV1=true, submitV2=false, submitV3=false, submitV4=false, after=3,
     riddleOn=true, riddleV1=false, riddleV2=true, riddleV3=false, backup=false,
     anchor=false, anchorKey="Z", autoBuy=false, buyKey="X",
     antiLag=false, snow=true, optimize=false, scale=0.67, bg=1,
@@ -244,10 +241,11 @@ local _focused = nil
 local _lastBox = nil
 local _autoCodeV1 = cfg.codeV1
 local _autoCodeV2 = cfg.codeV2
-local _autoCopyCode = cfg.copyCode
+local _autoCodeV3 = cfg.codeV3
 local _autoSubmitV1 = cfg.submitV1
 local _autoSubmitV2 = cfg.submitV2
 local _autoSubmitV3 = cfg.submitV3
+local _autoSubmitV4 = cfg.submitV4
 local _submitAfter = cfg.after
 local _riddleSolver = cfg.riddleOn
 local _riddleSubmitV1 = cfg.riddleV1
@@ -307,25 +305,15 @@ local V3_RED = Color3.fromRGB(220,60,60)
 local V3_GREEN = Color3.fromRGB(50,220,80)
 local V3_HOLD = 10
 
--- Mascot frames (7 frames, 14 FPS)
-local MFRAMES = {
-    135718098604928,
-    123987527303576,
-    116697721761973,
-    97600017213952,
-    123238595674310,
-    76181470667370,
-    108087581031096,
-}
+local MFRAMES = {135718098604928,123987527303576,116697721761973,97600017213952,123238595674310,76181470667370,108087581031096}
 
 local themed = {cards={},cardStrokes={},toggleBtns={},counterBtns={},consoleF=nil,consoleS=nil,tabBtns={},tabStrokes={},kbFrames={},kbStrokes={},kbLabels={},bgBtns={},bgStrokes={},discordLbl=nil,farmT=nil,settingsT=nil}
 local currentTab = "MAIN"
 
 local function applyTheme(idx)
     local t = BG_THEMES[idx] or BG_THEMES[1]
-    copyTheme(t)
-    CC.Amber = t.CA; CC.Dim = t.CD
-    local ti = TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    copyTheme(t); CC.Amber=t.CA; CC.Dim=t.CD
+    local ti = TweenInfo.new(0.4,Enum.EasingStyle.Quart,Enum.EasingDirection.Out)
     pcall(function() TweenService:Create(Window,ti,{BackgroundColor3=t.Window}):Play() end)
     pcall(function() TweenService:Create(BGOverlay,ti,{BackgroundColor3=t.Window}):Play() end)
     for _,c in ipairs(themed.cards) do pcall(function() TweenService:Create(c,ti,{BackgroundColor3=t.Row}):Play() end) end
@@ -396,7 +384,7 @@ local function settingRow(parent,title,initial,tag,onChange,subtitle)
     mkToggle(card,initial,tag,onChange)
 end
 
--- ═══ UTILITY FUNCTIONS ═══
+-- ═══ UTILITY ═══
 local function isOurGui(i) local p=i;for _=1,10 do if not p then break end;if p.Name=="EclipseUI" then return true end;p=p.Parent end;return false end
 local function visChain(i) local c=i;while c do if c:IsA("GuiObject") and not c.Visible then return false end;if c:IsA("ScreenGui") then return c.Enabled end;c=c.Parent end;return true end
 local function findBoxes(b) for _,g in ipairs(pg:GetChildren()) do if g:IsA("ScreenGui") and g.Enabled and not isOurGui(g) then for _,d in ipairs(g:GetDescendants()) do if d:IsA("TextBox") and not isOurGui(d) then b[#b+1]=d end end end end;return b end
@@ -420,12 +408,8 @@ local function fireFocusLost(box)
     if type(firesignal)=="function" then pcall(firesignal,box.FocusLost,true) end
 end
 
-local function typeAndSubmit(code)
-    local box = aceBox()
-    if not box then return false,"no box" end
-    pcall(function() box.Text=code end)
-    task.wait(0.05)
-    local rb;local nm={"submit","redeem","claim","confirm","enter","send","apply","ok","use","go","check"}
+local function findSubmitBtn(box)
+    local nm={"submit","redeem","claim","confirm","enter","send","apply","ok","use","go","check"}
     local p=box.Parent
     for _=1,8 do
         if not p then break end
@@ -434,17 +418,47 @@ local function typeAndSubmit(code)
                 local n=d.Name:lower();local txt=""
                 pcall(function() txt=(d.Text or ""):lower() end)
                 for _,sn in ipairs(nm) do
-                    if (n:find(sn) or txt:find(sn)) and visChain(d) then rb=d;break end
+                    if (n:find(sn) or txt:find(sn)) and visChain(d) then return d end
                 end
-                if rb then break end
             end
         end
-        if rb then break end
         p=p.Parent
     end
+    return nil
+end
+
+local function typeAndSubmit(code)
+    local box = aceBox()
+    if not box then return false,"no box" end
+    pcall(function() box.Text=code end)
+    task.wait(0.05)
+    local rb = findSubmitBtn(box)
     if rb then clickBtn(rb) end
     fireFocusLost(box)
-    return true,"submitted"
+    return true,"ok"
+end
+
+local function voltSubmit(code)
+    local box = aceBox()
+    if not box then return false,"no box" end
+    pcall(function() box.Text=code end)
+    task.wait(0.02)
+    fireFocusLost(box)
+    task.wait(0.02)
+    local rb = findSubmitBtn(box)
+    if rb then clickBtn(rb) end
+    return true,"volt"
+end
+
+local function basicSubmit(code)
+    local box = aceBox()
+    if not box then return false,"no box" end
+    pcall(function() box.Text=code end)
+    task.wait(0.1)
+    local rb = findSubmitBtn(box)
+    if rb then clickBtn(rb) end
+    fireFocusLost(box)
+    return true,"basic"
 end
 
 local function scrollConsole()
@@ -476,12 +490,10 @@ local function setStatusFn(msg,col)
     scrollConsole()
 end
 setStatus = setStatusFn
-
 flashCode = function(code,col) if code and code~="" then setStatus("[code] "..tostring(code),col or COLORS.White) end end
-
 clearCapture = function() _capturedParts={};updateV3Ind(0,_submitAfter) end
 
--- ═══ GUI CREATION ═══
+-- ═══ GUI ═══
 local GUI = Instance.new("ScreenGui");GUI.Name="EclipseUI";GUI.ResetOnSpawn=false;GUI.IgnoreGuiInset=true;GUI.DisplayOrder=999
 if not pcall(function() GUI.Parent=game.CoreGui end) then GUI.Parent=pg end
 
@@ -517,85 +529,31 @@ local function startSnow()
 end
 local function stopSnow() snowRun=false;if snowCont then snowCont.Visible=false end end
 
--- ═══ MASCOT (7 frames, 14 FPS, double buffer ImageTransparency) ═══
-local MascotCont = Instance.new("Frame")
-MascotCont.Name = "MascotCont"
-MascotCont.Size = UDim2.fromOffset(180, 180)
-MascotCont.BackgroundTransparency = 1
-MascotCont.BorderSizePixel = 0
-MascotCont.ClipsDescendants = true
-MascotCont.ZIndex = 50
-MascotCont.Visible = cfg.mascot
-MascotCont.Parent = GUI
-
--- Build asset URLs
+-- ═══ MASCOT ═══
+local MascotCont = Instance.new("Frame");MascotCont.Name="MascotCont";MascotCont.Size=UDim2.fromOffset(180,180);MascotCont.BackgroundTransparency=1;MascotCont.BorderSizePixel=0;MascotCont.ClipsDescendants=true;MascotCont.ZIndex=50;MascotCont.Visible=cfg.mascot;MascotCont.Parent=GUI
 local mascotUrls = {}
-for i, id in ipairs(MFRAMES) do mascotUrls[i] = "rbxassetid://" .. id end
-
--- Preload with direct URL strings (no temp labels)
-task.spawn(function()
-    pcall(function() CP:PreloadAsync(mascotUrls) end)
-end)
-
--- Img1 (frontal, visible)
-local MascotImg1 = Instance.new("ImageLabel")
-MascotImg1.Size = UDim2.new(1, 0, 1, 0)
-MascotImg1.BackgroundTransparency = 1
-MascotImg1.ImageTransparency = 0
-MascotImg1.ScaleType = Enum.ScaleType.Fit
-MascotImg1.BorderSizePixel = 0
-MascotImg1.ZIndex = 52
-MascotImg1.Image = mascotUrls[1]
-MascotImg1.Parent = MascotCont
-
--- Img2 (hidden, for double buffering)
-local MascotImg2 = Instance.new("ImageLabel")
-MascotImg2.Size = UDim2.new(1, 0, 1, 0)
-MascotImg2.BackgroundTransparency = 1
-MascotImg2.ImageTransparency = 1
-MascotImg2.ScaleType = Enum.ScaleType.Fit
-MascotImg2.BorderSizePixel = 0
-MascotImg2.ZIndex = 51
-MascotImg2.Parent = MascotCont
-
--- Position tracking (follows Window)
+for i,id in ipairs(MFRAMES) do mascotUrls[i]="rbxassetid://"..id end
+task.spawn(function() pcall(function() CP:PreloadAsync(mascotUrls) end) end)
+local MascotImg1=Instance.new("ImageLabel");MascotImg1.Size=UDim2.new(1,0,1,0);MascotImg1.BackgroundTransparency=1;MascotImg1.ImageTransparency=0;MascotImg1.ScaleType=Enum.ScaleType.Fit;MascotImg1.BorderSizePixel=0;MascotImg1.ZIndex=52;MascotImg1.Image=mascotUrls[1];MascotImg1.Parent=MascotCont
+local MascotImg2=Instance.new("ImageLabel");MascotImg2.Size=UDim2.new(1,0,1,0);MascotImg2.BackgroundTransparency=1;MascotImg2.ImageTransparency=1;MascotImg2.ScaleType=Enum.ScaleType.Fit;MascotImg2.BorderSizePixel=0;MascotImg2.ZIndex=51;MascotImg2.Parent=MascotCont
 RunService.Heartbeat:Connect(function()
     pcall(function()
         if MascotCont.Visible and Window and Window.Parent then
-            local wp = Window.AbsolutePosition
-            MascotCont.Position = UDim2.fromOffset(wp.X - 10 + 50, wp.Y - 40)
+            local wp=Window.AbsolutePosition
+            MascotCont.Position=UDim2.fromOffset(wp.X-10+50,wp.Y-40)
         end
     end)
 end)
-
--- Animation loop (NO 'continue', ImageTransparency swap, 14 FPS)
 task.spawn(function()
-    local fps = 14
-    local totalFrames = #MFRAMES
-    local curFrame = 1
-    local frontIs1 = true
+    local fps=14;local totalFrames=#MFRAMES;local curFrame=1;local frontIs1=true
     task.wait(0.3)
     while MascotCont and MascotCont.Parent do
-        task.wait(1 / fps)
+        task.wait(1/fps)
         if MascotCont.Visible then
-            curFrame = curFrame + 1
-            if curFrame > totalFrames then curFrame = 1 end
-            if frontIs1 then
-                MascotImg2.Image = mascotUrls[curFrame]
-                MascotImg2.ImageTransparency = 1
-                MascotImg2.ZIndex = 52
-                MascotImg1.ZIndex = 51
-                MascotImg2.ImageTransparency = 0
-                MascotImg1.ImageTransparency = 1
-            else
-                MascotImg1.Image = mascotUrls[curFrame]
-                MascotImg1.ImageTransparency = 1
-                MascotImg1.ZIndex = 52
-                MascotImg2.ZIndex = 51
-                MascotImg1.ImageTransparency = 0
-                MascotImg2.ImageTransparency = 1
-            end
-            frontIs1 = not frontIs1
+            curFrame=curFrame+1;if curFrame>totalFrames then curFrame=1 end
+            if frontIs1 then MascotImg2.Image=mascotUrls[curFrame];MascotImg2.ImageTransparency=1;MascotImg2.ZIndex=52;MascotImg1.ZIndex=51;MascotImg2.ImageTransparency=0;MascotImg1.ImageTransparency=1
+            else MascotImg1.Image=mascotUrls[curFrame];MascotImg1.ImageTransparency=1;MascotImg1.ZIndex=52;MascotImg2.ZIndex=51;MascotImg1.ImageTransparency=0;MascotImg2.ImageTransparency=1 end
+            frontIs1=not frontIs1
         end
     end
 end)
@@ -614,10 +572,8 @@ local function buildV3()
     UIS.InputChanged:Connect(function(i) if not vd or not vi then return end;local iT=vi.UserInputType==Enum.UserInputType.Touch and i==vi;local iM=vi.UserInputType==Enum.UserInputType.MouseButton1 and i.UserInputType==Enum.UserInputType.MouseMovement;if not iT and not iM then return end;local dl=Vector2.new(i.Position.X,i.Position.Y)-vs;if not vm and dl.Magnitude<3 then return end;vm=true;V3P.Position=UDim2.new(vp.X.Scale,vp.X.Offset+dl.X,vp.Y.Scale,vp.Y.Offset+dl.Y) end)
     UIS.InputEnded:Connect(function(i) if vd and vm then cfg.v3x=V3P.Position.X.Scale;cfg.v3y=V3P.Position.Y.Scale;saveCfg() end;if i==vi then vd=false end end)
 end
-
 local function v3Green() if V3Mini then V3Mini.BackgroundColor3=V3_GREEN end;if V3Big then V3Big.BackgroundColor3=V3_GREEN end end
 local function v3Red() if V3Mini then V3Mini.BackgroundColor3=V3_RED end;if V3Big then V3Big.BackgroundColor3=V3_RED end end
-
 function updateV3Ind(count,total)
     if not _autoSubmitV3 and not _riddleSubmitV3 then if V3P then V3P.Visible=false end;return end
     if not V3P then buildV3() end;V3P.Visible=true
@@ -627,7 +583,6 @@ function updateV3Ind(count,total)
         task.spawn(function() task.wait(V3_HOLD);if tok==_v3ResetToken and V3P then V3Lbl.Text="AHK 0/".._submitAfter;v3Red() end end)
     else v3Red() end
 end
-
 local function showV3Green(sec)
     if not V3P then buildV3() end;V3P.Visible=true;V3Lbl.Text="AHK ".._submitAfter.."/".._submitAfter
     v3Green();_v3ResetToken=_v3ResetToken+1;local tok=_v3ResetToken
@@ -639,7 +594,7 @@ local Header=Instance.new("Frame");Header.Size=UDim2.new(1,0,0,50);Header.Backgr
 local BrandMark=Instance.new("Frame");BrandMark.Size=UDim2.fromOffset(30,30);BrandMark.Position=UDim2.fromOffset(10,10);BrandMark.BackgroundTransparency=1;BrandMark.ZIndex=6;BrandMark.Parent=Window;addC(BrandMark,15)
 local BrandImg=Instance.new("ImageLabel");BrandImg.Size=UDim2.fromScale(1,1);BrandImg.BackgroundTransparency=1;BrandImg.Image="rbxassetid://104937666038724";BrandImg.ScaleType=Enum.ScaleType.Fit;BrandImg.ZIndex=7;BrandImg.Parent=BrandMark;addC(BrandImg,15)
 local TTL=Instance.new("TextLabel");TTL.Size=UDim2.fromOffset(160,20);TTL.Position=UDim2.fromOffset(46,6);TTL.BackgroundTransparency=1;TTL.RichText=true;TTL.Text='<font color="rgb(255,180,50)">Eclipse</font> <font color="rgb(255,255,255)">Code Sniper</font>';TTL.TextSize=13;TTL.Font=Enum.Font.GothamBold;TTL.TextXAlignment=Enum.TextXAlignment.Left;TTL.ZIndex=8;TTL.Parent=Header
-local Sub=Instance.new("TextLabel");Sub.Size=UDim2.fromOffset(160,14);Sub.Position=UDim2.fromOffset(46,24);Sub.BackgroundTransparency=1;Sub.Text="v4.0 - Triple Solver";Sub.TextSize=8;Sub.TextColor3=COLORS.Dim;Sub.Font=Enum.Font.GothamMedium;Sub.TextXAlignment=Enum.TextXAlignment.Left;Sub.ZIndex=8;Sub.Parent=Header
+local Sub=Instance.new("TextLabel");Sub.Size=UDim2.fromOffset(160,14);Sub.Position=UDim2.fromOffset(46,24);Sub.BackgroundTransparency=1;Sub.Text="v4.1 - Triple Solver";Sub.TextSize=8;Sub.TextColor3=COLORS.Dim;Sub.Font=Enum.Font.GothamMedium;Sub.TextXAlignment=Enum.TextXAlignment.Left;Sub.ZIndex=8;Sub.Parent=Header
 
 local AWBtn=Instance.new("TextButton");AWBtn.Size=UDim2.fromOffset(47,22);AWBtn.Position=UDim2.new(1,-58,0,14);AWBtn.BackgroundColor3=COLORS.Accent;AWBtn.BorderSizePixel=0;AWBtn.AutoButtonColor=false;AWBtn.Text="";AWBtn.ZIndex=8;AWBtn.Parent=Header;addC(AWBtn,11)
 local AWStroke=addS(AWBtn,COLORS.Accent,1,0.5)
@@ -692,7 +647,7 @@ mkTab("MAIN");mkTab("FARM");mkTab("SETTINGS")
 local PanelCont=Instance.new("Frame");PanelCont.Size=UDim2.new(1,0,1,-84);PanelCont.Position=UDim2.fromOffset(0,84);PanelCont.BackgroundTransparency=1;PanelCont.ZIndex=5;PanelCont.Parent=Window
 
 -- ═══ MAIN PANEL ═══
-local MainP=Instance.new("ScrollingFrame");MainP.Size=UDim2.new(1,0,1,0);MainP.BackgroundTransparency=1;MainP.BorderSizePixel=0;MainP.ScrollBarThickness=3;MainP.ScrollBarImageColor3=COLORS.Dim;MainP.CanvasSize=UDim2.new(0,0,0,820);MainP.ZIndex=5;MainP.Parent=PanelCont;tabPanels["MAIN"]=MainP
+local MainP=Instance.new("ScrollingFrame");MainP.Size=UDim2.new(1,0,1,0);MainP.BackgroundTransparency=1;MainP.BorderSizePixel=0;MainP.ScrollBarThickness=3;MainP.ScrollBarImageColor3=COLORS.Dim;MainP.CanvasSize=UDim2.new(0,0,0,1100);MainP.ZIndex=5;MainP.Parent=PanelCont;tabPanels["MAIN"]=MainP
 local MPP=Instance.new("UIPadding");MPP.PaddingLeft=UDim.new(0,10);MPP.PaddingRight=UDim.new(0,10);MPP.PaddingTop=UDim.new(0,8);MPP.Parent=MainP
 local MPL=Instance.new("UIListLayout");MPL.Padding=UDim.new(0,5);MPL.Parent=MainP
 
@@ -701,13 +656,17 @@ ConsoleOutput=Instance.new("TextLabel");ConsoleOutput.Size=UDim2.new(1,-16,0,80)
 updateCCanvas=function() if not Console or not ConsoleOutput then return end;Console.CanvasSize=UDim2.new(0,0,0,ConsoleOutput.Position.Y.Offset+ConsoleOutput.AbsoluteSize.Y+30) end
 ConsoleOutput:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateCCanvas)
 
+-- ═══ CODES SECTION ═══
 mkHeader(MainP,"CODES")
-settingRow(MainP,"Auto Code v1",_autoCodeV1,"AC1",function(s) _autoCodeV1=s;cfg.codeV1=s;saveCfg() end)
-settingRow(MainP,"Auto Code v2",_autoCodeV2,"AC2",function(s) _autoCodeV2=s;cfg.codeV2=s;saveCfg() end)
-settingRow(MainP,"Auto Copy Code",_autoCopyCode,"ACC",function(s) _autoCopyCode=s;cfg.copyCode=s;saveCfg() end)
-settingRow(MainP,"Auto Submit v1 [Volt]",_autoSubmitV1,"AS1",function(s) _autoSubmitV1=s;cfg.submitV1=s;saveCfg() end)
-settingRow(MainP,"Auto Submit v2 [New]",_autoSubmitV2,"AS2",function(s) _autoSubmitV2=s;cfg.submitV2=s;saveCfg() end)
-settingRow(MainP,"Auto Submit External [AHK]",_autoSubmitV3,"AS3",function(s) _autoSubmitV3=s;cfg.submitV3=s;saveCfg();if not s then _v3ResetToken=_v3ResetToken+1;if V3P then V3P.Visible=false end else updateV3Ind(#_capturedParts,_submitAfter) end end)
+settingRow(MainP,"Auto Code v1 [Basic]",_autoCodeV1,"AC1",function(s) _autoCodeV1=s;cfg.codeV1=s;saveCfg() end,"Copy to clipboard")
+settingRow(MainP,"Auto Code v2 [Complex]",_autoCodeV2,"AC2",function(s) _autoCodeV2=s;cfg.codeV2=s;saveCfg() end,"Type into game box")
+settingRow(MainP,"Auto Code v3 [In test]",_autoCodeV3,"AC3",function(s) _autoCodeV3=s;cfg.codeV3=s;saveCfg() end,"Type + FocusLost")
+
+mkHeader(MainP,"AUTO SUBMIT")
+settingRow(MainP,"Auto Submit v1 [ONLY VOLT EXC]",_autoSubmitV1,"AS1",function(s) _autoSubmitV1=s;cfg.submitV1=s;saveCfg() end,"Volt executor specific")
+settingRow(MainP,"Auto Submit v2 [BASIC ONE]",_autoSubmitV2,"AS2",function(s) _autoSubmitV2=s;cfg.submitV2=s;saveCfg() end,"Find + click submit")
+settingRow(MainP,"Auto Submit v3 [EXTERNAL APP AHK]",_autoSubmitV3,"AS3",function(s) _autoSubmitV3=s;cfg.submitV3=s;saveCfg();if not s then _v3ResetToken=_v3ResetToken+1;if V3P then V3P.Visible=false end else updateV3Ind(#_capturedParts,_submitAfter) end end,"AHK floating indicator")
+settingRow(MainP,"Auto Submit v4 [IN TEST]",_autoSubmitV4,"AS4",function(s) _autoSubmitV4=s;cfg.submitV4=s;saveCfg() end,"New test method")
 
 local DC=Instance.new("Frame");DC.Size=UDim2.new(1,0,0,42);DC.BackgroundColor3=COLORS.Row;DC.BackgroundTransparency=0.4;DC.BorderSizePixel=0;DC.ZIndex=6;DC.Parent=MainP;addC(DC,9);table.insert(themed.cards,DC);table.insert(themed.cardStrokes,addS(DC,COLORS.Border,1,0.55))
 mkLabel(DC,"Submit after",UDim2.new(1,-100,0,42),UDim2.fromOffset(10,0),10,COLORS.White)
@@ -718,6 +677,7 @@ local Plus=Instance.new("TextButton");Plus.Size=UDim2.fromOffset(22,22);Plus.Pos
 local lastD=0;Minus.Activated:Connect(function() if tick()-lastD<0.15 then return end;lastD=tick();_submitAfter=math.max(1,_submitAfter-1);CntLbl.Text=tostring(_submitAfter);cfg.after=_submitAfter;saveCfg();updateV3Ind(#_capturedParts,_submitAfter) end)
 local lastI=0;Plus.Activated:Connect(function() if tick()-lastI<0.15 then return end;lastI=tick();_submitAfter=_submitAfter+1;CntLbl.Text=tostring(_submitAfter);cfg.after=_submitAfter;saveCfg();updateV3Ind(#_capturedParts,_submitAfter) end)
 
+-- ═══ RIDDLES ═══
 mkHeader(MainP,"RIDDLES")
 settingRow(MainP,"AI riddles",_riddleSolver,"RD",function(s) _riddleSolver=s;cfg.riddleOn=s;saveCfg() end)
 settingRow(MainP,"Auto Submit v1 [Old]",_riddleSubmitV1,"RV1",function(s) _riddleSubmitV1=s;cfg.riddleV1=s;saveCfg() end)
@@ -823,29 +783,74 @@ appendToBox = function(text)
     _capturedParts[#_capturedParts+1]=text
     local combined=table.concat(_capturedParts)
     local count=#_capturedParts
-    if _autoSubmitV3 then updateV3Ind(count,_submitAfter) end
     if box then _lastBox=box;watchBox(box);pcall(function() box.Text=combined end) end
     setStatus(count.."/".._submitAfter.." "..combined,COLORS.Green)
     flashCode(combined,COLORS.Green)
-    if _autoCopyCode and type(setclipboard)=="function" then pcall(setclipboard,combined) end
     if count>=_submitAfter then
         _capturedParts={}
-        if _autoSubmitV1 or _autoSubmitV2 then
+        if _autoCodeV1 then
+            if type(setclipboard)=="function" then pcall(setclipboard,combined) end
+            setStatus("v1 copied: "..combined,COLORS.Green)
+        end
+        if _autoCodeV2 then
+            local b2=aceBox()
+            if b2 then pcall(function() b2.Text=combined end);fireFocusLost(b2);setStatus("v2 typed: "..combined,COLORS.Green)
+            else setStatus("v2 no box",COLORS.Red) end
+        end
+        if _autoCodeV3 then
+            local b3=aceBox()
+            if b3 then pcall(function() b3.Text=combined end);fireFocusLost(b3);setStatus("v3 typed+fl: "..combined,COLORS.Green)
+            else setStatus("v3 no box",COLORS.Red) end
+        end
+        if _autoSubmitV1 then
+            local ok2,msg=voltSubmit(combined)
+            if ok2 then setStatus("sub v1 volt: "..combined,COLORS.Green) else setStatus("sub v1 fail: "..tostring(msg),COLORS.Red) end
+        end
+        if _autoSubmitV2 then
+            local ok2,msg=basicSubmit(combined)
+            if ok2 then setStatus("sub v2 basic: "..combined,COLORS.Green) else setStatus("sub v2 fail: "..tostring(msg),COLORS.Red) end
+        end
+        if _autoSubmitV3 then
+            updateV3Ind(count,_submitAfter)
+        end
+        if _autoSubmitV4 then
             local ok2,msg=typeAndSubmit(combined)
-            if ok2 then setStatus("Submitted: "..combined,COLORS.Green) else setStatus("Failed: "..tostring(msg),COLORS.Red) end
+            if ok2 then setStatus("sub v4 test: "..combined,COLORS.Green) else setStatus("sub v4 fail: "..tostring(msg),COLORS.Red) end
         end
     end
 end
 
 riddleSubmitAnswer = function(ans)
     if not ans or ans=="" then return end
-    local box=aceBox()
-    if box then pcall(function() box.Text=ans end);fireFocusLost(box);setStatus("Answer: "..ans,COLORS.Green) else setStatus("Answer (no box): "..ans,COLORS.White) end
-    if _autoCopyCode and type(setclipboard)=="function" then pcall(setclipboard,ans) end
-    if _riddleSubmitV3 then showV3Green(V3_HOLD) end
-    if _riddleSubmitV1 or _riddleSubmitV2 then
-        local ok2,sm=typeAndSubmit(ans)
-        if ok2 then setStatus("Submitted: "..ans,COLORS.Green) else setStatus("Failed: "..tostring(sm),COLORS.Red) end
+    if _autoCodeV1 then
+        if type(setclipboard)=="function" then pcall(setclipboard,ans) end
+        setStatus("v1 copied: "..ans,COLORS.Green)
+    end
+    if _autoCodeV2 then
+        local box=aceBox()
+        if box then pcall(function() box.Text=ans end);fireFocusLost(box);setStatus("v2 typed: "..ans,COLORS.Green)
+        else setStatus("v2 no box",COLORS.Red) end
+    end
+    if _autoCodeV3 then
+        local box=aceBox()
+        if box then pcall(function() box.Text=ans end);fireFocusLost(box);setStatus("v3 typed+fl: "..ans,COLORS.Green)
+        else setStatus("v3 no box",COLORS.Red) end
+    end
+    if _autoSubmitV1 then
+        local ok2,msg=voltSubmit(ans)
+        if ok2 then setStatus("sub v1 volt: "..ans,COLORS.Green) else setStatus("sub v1 fail: "..tostring(msg),COLORS.Red) end
+    end
+    if _autoSubmitV2 then
+        local ok2,msg=basicSubmit(ans)
+        if ok2 then setStatus("sub v2 basic: "..ans,COLORS.Green) else setStatus("sub v2 fail: "..tostring(msg),COLORS.Red) end
+    end
+    if _autoSubmitV3 then showV3Green(V3_HOLD) end
+    if _autoSubmitV4 then
+        local ok2,msg=typeAndSubmit(ans)
+        if ok2 then setStatus("sub v4 test: "..ans,COLORS.Green) else setStatus("sub v4 fail: "..tostring(msg),COLORS.Red) end
+    end
+    if not(_autoCodeV1 or _autoCodeV2 or _autoCodeV3 or _autoSubmitV1 or _autoSubmitV2 or _autoSubmitV4) then
+        setStatus("Answer: "..ans,COLORS.White)
     end
 end
 
@@ -888,7 +893,7 @@ local function onAnnounce(...)
         end
         return
     end
-    if not(_autoCodeV1 or _autoCodeV2) then return end
+    if not(_autoCodeV1 or _autoCodeV2 or _autoCodeV3) then return end
     for _,word in ipairs(tokenize(text)) do aceBuffer[#aceBuffer+1]=word end
     local parts={};for i=1,math.min(#aceBuffer,ACE_WORD_COUNT) do parts[i]=aceBuffer[i] end
     if #aceBuffer<ACE_WORD_COUNT then return end
@@ -930,13 +935,7 @@ if aceRemote then
     if getgenv then getgenv().EclipseConn=aceConn end
 end
 
-local function watchFeedback(obj)
-    if not(obj:IsA("TextLabel") or obj:IsA("TextButton")) then return end
-    obj:GetPropertyChangedSignal("Text"):Connect(function() end)
-end
-for _,obj in ipairs(pg:GetDescendants()) do pcall(watchFeedback,obj) end
-
--- ═══ DRAG HANDLER ═══
+-- ═══ DRAG ═══
 do
     local dragging=false;local aDI;local ds;local sp;local dm=false
     Header.InputBegan:Connect(function(input)
@@ -958,7 +957,7 @@ do
     end)
 end
 
--- ═══ KEYBIND HANDLER ═══
+-- ═══ KEYBINDS ═══
 UIS.InputBegan:Connect(function(input,processed)
     if processed then return end
     if input.UserInputType~=Enum.UserInputType.Keyboard then return end
@@ -998,7 +997,7 @@ if getgenv then
 end
 
 print("═══════════════════════════════════════")
-print("Eclipse Code Sniper v4.0 loaded OK")
+print("Eclipse Code Sniper v4.1 loaded OK")
 print("═══════════════════════════════════════")
 
 end)
