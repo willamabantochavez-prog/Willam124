@@ -1,0 +1,1053 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- VAIL — Code Sniper v1.3
+-- By: hskery50 | discord - dc.gg/vail.vs
+-- Font: FredokaOne | 5 Dynamic Themes
+-- ═══════════════════════════════════════════════════════════════════
+
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local TweenService      = game:GetService("TweenService")
+local UserInputService  = game:GetService("UserInputService")
+local CoreGui           = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LP = Players.LocalPlayer
+local playerGui = LP:WaitForChild("PlayerGui")
+
+local environment
+do
+    local ok, result = pcall(function()
+        if getgenv then return getgenv() end
+        return nil
+    end)
+    environment = (ok and result) or _G
+end
+
+local RUNTIME_KEY = "__VAIL_v12"
+for _, key in ipairs({"__VAIL_v3","__VAIL_v12","__VAIL_v2"}) do
+    local prev = environment[key]
+    if type(prev) == "table" and type(prev.destroy) == "function" then
+        pcall(prev.destroy)
+    end
+end
+
+local runtime = {
+    alive=true, enabled=false,
+    snipeKey=Enum.KeyCode.Z, listeningKey=false,
+    connections={},
+    submitAfter=1,
+    autoTypeV3=false, autoSubmitV4=false, autoCopy=false,
+    gui=nil, settingsGui=nil, headDisplay=nil,
+    lastCode=nil,
+    notifConn=nil, notifyRemote=nil,
+    seen={}, capturedParts={},
+    currentTheme=1,
+    particlesEnabled=true,
+}
+environment[RUNTIME_KEY] = runtime
+
+-- ═══════ FONT ═══════
+local FONT = Enum.Font.FredokaOne
+
+-- ═══════ UTILS ═══════
+local function disconnect(c) if c then pcall(function() c:Disconnect() end) end end
+local function connect(sig, fn)
+    local c = sig:Connect(fn); table.insert(runtime.connections, c); return c
+end
+local function new(cls, props, par)
+    local o = Instance.new(cls)
+    if props then for k,v in pairs(props) do pcall(function() o[k]=v end) end end
+    if par then o.Parent = par end
+    return o
+end
+local function corner(p, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = type(r)=="number" and UDim.new(0,r) or r
+    if p then c.Parent = p end
+    return c
+end
+local function mstroke(p, col, t, th)
+    local s = Instance.new("UIStroke")
+    s.Color=col; s.Transparency=t or 0; s.Thickness=th or 1; s.Parent=p
+    return s
+end
+
+-- Color registry
+local reg = {}
+local function Rbg(o,k)  reg[#reg+1]={o=o, p="BackgroundColor3", k=k} end
+local function Rtxt(o,k) reg[#reg+1]={o=o, p="TextColor3", k=k} end
+local function Rstr(o,k) reg[#reg+1]={o=o, p="Color", k=k} end
+
+-- Optional functions
+local firesignal_fn  = type(firesignal)=="function" and firesignal or nil
+local fireclick_fn   = type(fireclick)=="function" and fireclick or nil
+local getconns_fn    = type(getconnections)=="function" and getconnections
+    or (debug and type(debug.getconnections)=="function" and debug.getconnections) or nil
+local getupvalues_fn = (debug and type(debug.getupvalues)=="function" and debug.getupvalues)
+    or type(getupvalues)=="function" and getupvalues or nil
+local setupvalue_fn  = (debug and type(debug.setupvalue)=="function" and debug.setupvalue)
+    or type(setupvalue)=="function" and setupvalue or nil
+
+-- ═══════ THEMES ═══════
+local RGB = Color3.fromRGB
+local THEMES = {
+    {
+        name="Monochrome", image="129795477038812", imgTrans=0.73,
+        hueMin=0, hueMax=0,
+        c={
+            bg=RGB(14,14,14),surface=RGB(22,22,22),card=RGB(30,30,30),
+            elevated=RGB(38,38,38),accent=RGB(210,210,210),accentDk=RGB(50,50,50),
+            text=RGB(235,235,235),textSec=RGB(170,170,170),textMut=RGB(90,90,90),
+            green=RGB(180,220,180),greenBg=RGB(35,50,35),red=RGB(220,100,100),
+            redBg=RGB(50,22,22),border=RGB(45,45,45),divider=RGB(50,50,50),
+            conBg=RGB(10,10,10),
+        },
+    },
+    {
+        name="Crimson", image="100090135396228", imgTrans=0.67,
+        hueMin=345, hueMax=375,
+        c={
+            bg=RGB(18,10,12),surface=RGB(30,16,20),card=RGB(40,22,26),
+            elevated=RGB(50,28,32),accent=RGB(235,60,75),accentDk=RGB(70,20,28),
+            text=RGB(250,225,228),textSec=RGB(190,140,150),textMut=RGB(110,65,72),
+            green=RGB(130,220,130),greenBg=RGB(30,50,30),red=RGB(235,70,85),
+            redBg=RGB(55,18,22),border=RGB(55,28,34),divider=RGB(60,32,38),
+            conBg=RGB(12,6,8),
+        },
+    },
+    {
+        name="Verdant", image="128212570011805", imgTrans=0.70,
+        hueMin=95, hueMax=155,
+        c={
+            bg=RGB(10,16,12),surface=RGB(16,28,20),card=RGB(22,36,26),
+            elevated=RGB(28,46,32),accent=RGB(70,215,120),accentDk=RGB(20,60,35),
+            text=RGB(225,248,232),textSec=RGB(135,178,148),textMut=RGB(60,90,70),
+            green=RGB(70,210,120),greenBg=RGB(18,50,30),red=RGB(225,80,95),
+            redBg=RGB(48,20,24),border=RGB(32,50,38),divider=RGB(36,55,42),
+            conBg=RGB(7,12,9),
+        },
+    },
+    {
+        name="Azure Rose", image="125073471896905", imgTrans=0.65,
+        hueMin=200, hueMax=310,
+        c={
+            bg=RGB(12,12,18),surface=RGB(20,20,30),card=RGB(28,26,38),
+            elevated=RGB(34,32,48),accent=RGB(100,140,255),accentDk=RGB(28,35,70),
+            text=RGB(235,228,248),textSec=RGB(155,148,190),textMut=RGB(78,72,105),
+            green=RGB(90,210,140),greenBg=RGB(22,48,35),red=RGB(230,80,130),
+            redBg=RGB(52,18,30),border=RGB(42,38,60),divider=RGB(48,42,68),
+            conBg=RGB(9,8,14),
+        },
+    },
+    {
+        name="Sakura", image="126435022530070", imgTrans=0.63,
+        hueMin=300, hueMax=340,
+        c={
+            bg=RGB(18,12,16),surface=RGB(28,18,24),card=RGB(38,24,32),
+            elevated=RGB(48,30,40),accent=RGB(240,110,175),accentDk=RGB(68,24,45),
+            text=RGB(250,230,242),textSec=RGB(192,150,172),textMut=RGB(108,70,90),
+            green=RGB(120,215,140),greenBg=RGB(28,48,32),red=RGB(235,75,110),
+            redBg=RGB(52,18,26),border=RGB(55,34,48),divider=RGB(60,38,52),
+            conBg=RGB(12,8,10),
+        },
+    },
+}
+
+-- Current colors
+local C = {}
+for k,v in pairs(THEMES[1].c) do C[k]=v end
+
+-- ═══════ DIMENSIONS ═══════
+local WIN_W=244; local WIN_H=374; local PAD=12; local RAD=10
+
+-- ═══════ GUI ═══════
+local parentGui = (gethui and gethui()) or CoreGui
+local oldGui = parentGui:FindFirstChild("VailUI")
+if oldGui then oldGui:Destroy() end
+
+local Gui = new("ScreenGui", {
+    Name="VailUI", DisplayOrder=999, IgnoreGuiInset=true,
+    ResetOnSpawn=false, ZIndexBehavior=Enum.ZIndexBehavior.Sibling,
+}, parentGui)
+runtime.gui = Gui
+
+-- ═══════ WINDOW ═══════
+local Window = new("Frame", {
+    Name="Win", Size=UDim2.new(0,WIN_W,0,WIN_H),
+    AnchorPoint=Vector2.new(0.5,0.5), Position=UDim2.new(0.5,0,0.5,0),
+    BackgroundColor3=C.bg, BorderSizePixel=0, ClipsDescendants=true,
+    Active=true, ZIndex=5,
+}, Gui)
+Rbg(Window,"bg"); corner(Window,RAD)
+local ws=mstroke(Window,C.border,0.25,1); Rstr(ws,"border")
+
+local BgImage = new("ImageLabel", {
+    Name="Bg", Size=UDim2.new(1,0,1,0), BackgroundTransparency=1,
+    Image="rbxassetid://"..THEMES[1].image,
+    ImageTransparency=THEMES[1].imgTrans,
+    ScaleType=Enum.ScaleType.Stretch, ZIndex=1,
+}, Window)
+
+local ParticleLayer = new("Frame", {
+    Name="Particles", Size=UDim2.new(1,0,1,0),
+    BackgroundTransparency=1, ClipsDescendants=true, ZIndex=2,
+}, Window)
+
+local Content = new("Frame", {
+    Name="Content", Size=UDim2.new(1,0,1,0), BackgroundTransparency=1, ZIndex=5,
+}, Window)
+
+-- ═══════ PARTICLES ═══════
+local P_TEXTURES = {
+    "rbxassetid://5833235272","rbxassetid://5833323391",
+    "rbxassetid://5857892330","rbxassetid://5857851618","rbxassetid://6711256324",
+}
+
+local function spawnParticle()
+    if not runtime.particlesEnabled then return end
+    if not ParticleLayer or not ParticleLayer.Parent then return end
+    local tex = P_TEXTURES[math.random(1,#P_TEXTURES)]
+    local size = math.random(18,48)
+    local startX = math.random(-10,WIN_W-size+10)
+    local startY = WIN_H+10
+    local driftX = math.random(-25,25)/10
+    local riseSpeed = 40+math.random(15,55)
+    local theme = THEMES[runtime.currentTheme]
+    local hue, sat, val
+    if theme.hueMin == 0 and theme.hueMax == 0 then
+        hue = 0; sat = 0; val = 0.6+math.random()*0.4
+    else
+        hue = (theme.hueMin + math.random()*(theme.hueMax-theme.hueMin))/360
+        sat = 0.35+math.random()*0.35
+        val = 0.85+math.random()*0.15
+    end
+    local tint = Color3.fromHSV(hue%1, sat, val)
+    local p = new("ImageLabel", {
+        Size=UDim2.new(0,size,0,size), Position=UDim2.new(0,startX,0,startY),
+        BackgroundTransparency=1, Image=tex, ImageColor3=tint,
+        ImageTransparency=0.4, Rotation=math.random(0,360), ZIndex=2,
+    }, ParticleLayer)
+    local life=0; local rotSpeed=math.random(-30,30)
+    local wobbleAmp=math.random(5,20)/10; local wobbleFreq=0.5+math.random()*1.5
+    local baseX=startX
+    local mc
+    mc = RunService.Heartbeat:Connect(function(dt)
+        if not p.Parent then if mc then mc:Disconnect() end return end
+        life=life+dt
+        local newY=p.Position.Y.Offset-riseSpeed*dt
+        local wobble=math.sin(life*wobbleFreq*math.pi*2)*wobbleAmp
+        local newX=baseX+driftX*life*8+wobble*6
+        p.Position=UDim2.new(0,newX,0,newY)
+        p.Rotation=p.Rotation+rotSpeed*dt
+        local progress=1-(newY/startY)
+        if progress<0.2 then p.ImageTransparency=0.4+(1-progress/0.2)*0.6
+        else p.ImageTransparency=0.4+((progress-0.2)/0.8)*0.6 end
+        if newY<-size-20 then p:Destroy() if mc then mc:Disconnect() end end
+    end)
+end
+
+task.spawn(function()
+    while runtime.alive and Gui and Gui.Parent do
+        if runtime.particlesEnabled then
+            spawnParticle()
+            if math.random()>0.65 then task.wait(0.05) spawnParticle() end
+        end
+        task.wait(0.3+math.random()*0.5)
+    end
+end)
+
+-- ═══════ HEADER ═══════
+local HDR_H=44
+
+local Header = new("Frame", {
+    Name="Header", Size=UDim2.new(1,0,0,HDR_H),
+    BackgroundTransparency=1, Active=true, ZIndex=6,
+}, Content)
+
+new("ImageLabel", {
+    Size=UDim2.new(0,18,0,18), Position=UDim2.new(0,PAD,0.5,-9),
+    BackgroundTransparency=1, Image="rbxassetid://102835976293723", ZIndex=7,
+}, Header)
+
+local titleLbl = new("TextLabel", {
+    Size=UDim2.new(0,28,1,0), Position=UDim2.new(0,PAD+24,0,0),
+    BackgroundTransparency=1, Text="Vail", TextColor3=C.text,
+    Font=FONT, TextSize=14, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=7,
+}, Header)
+Rtxt(titleLbl,"text")
+
+local vTag = new("TextLabel", {
+    Size=UDim2.new(0,30,0,13), Position=UDim2.new(0,PAD+52,0.5,-6),
+    BackgroundColor3=C.accentDk, BackgroundTransparency=0.3,
+    Text="v1.3", TextColor3=C.accent, Font=FONT, TextSize=7, ZIndex=7,
+}, Header)
+Rbg(vTag,"accentDk"); Rtxt(vTag,"accent"); corner(vTag,3)
+
+local BTN_HDR_H=22; local HDR_GAP=6
+
+local MinBtn = new("TextButton", {
+    Name="MinBtn", Size=UDim2.new(0,22,0,BTN_HDR_H),
+    Position=UDim2.new(1,-PAD-22,0.5,-BTN_HDR_H/2),
+    BackgroundColor3=C.surface, BackgroundTransparency=0.1,
+    Text="-", TextColor3=C.textMut, Font=FONT, TextSize=15,
+    AutoButtonColor=false, BorderSizePixel=0, ZIndex=7,
+}, Header)
+Rbg(MinBtn,"surface"); Rtxt(MinBtn,"textMut")
+corner(MinBtn,6); local mns=mstroke(MinBtn,C.border,0.5,1); Rstr(mns,"border")
+
+local SettingsBtn = new("TextButton", {
+    Name="SettingsBtn", Size=UDim2.new(0,54,0,BTN_HDR_H),
+    Position=UDim2.new(1,-PAD-22-HDR_GAP-54,0.5,-BTN_HDR_H/2),
+    BackgroundColor3=C.surface, BackgroundTransparency=0.1,
+    Text="Settings", TextColor3=C.textSec, Font=FONT, TextSize=8,
+    AutoButtonColor=false, BorderSizePixel=0, ZIndex=7,
+}, Header)
+Rbg(SettingsBtn,"surface"); Rtxt(SettingsBtn,"textSec")
+corner(SettingsBtn,6); local sts=mstroke(SettingsBtn,C.border,0.5,1); Rstr(sts,"border")
+
+local hdrDiv = new("Frame", {
+    Size=UDim2.new(1,-PAD*2,0,1), Position=UDim2.new(0,PAD,0,HDR_H),
+    BackgroundColor3=C.divider, BackgroundTransparency=0.35, BorderSizePixel=0, ZIndex=5,
+}, Content)
+Rbg(hdrDiv,"divider")
+
+-- ═══════ CONSOLE ═══════
+local CON_Y=HDR_H+8; local CON_H=40
+
+local ConFrame = new("Frame", {
+    Size=UDim2.new(1,-PAD*2,0,CON_H), Position=UDim2.new(0,PAD,0,CON_Y),
+    BackgroundColor3=C.conBg, BorderSizePixel=0, ZIndex=6,
+}, Content)
+Rbg(ConFrame,"conBg"); corner(ConFrame,8)
+local cns=mstroke(ConFrame,C.border,0.55,1); Rstr(cns,"border")
+
+local StatusDot = new("Frame", {
+    Size=UDim2.new(0,6,0,6), Position=UDim2.new(0,10,0,CON_H/2-3),
+    BackgroundColor3=C.textMut, BorderSizePixel=0, ZIndex=7,
+}, ConFrame)
+Rbg(StatusDot,"textMut"); corner(StatusDot,UDim.new(1,0))
+
+local ConOut = new("TextLabel", {
+    Size=UDim2.new(1,-28,1,0), Position=UDim2.new(0,22,0,0),
+    BackgroundTransparency=1, RichText=true,
+    Text='<font color="#8a8ea8">Ready</font>',
+    TextColor3=C.textSec, Font=FONT, TextSize=9,
+    TextWrapped=true, TextYAlignment=Enum.TextYAlignment.Center,
+    TextXAlignment=Enum.TextXAlignment.Left, ZIndex=7,
+}, ConFrame)
+Rtxt(ConOut,"textSec")
+
+local function consoleLog(t) ConOut.Text=t end
+
+-- ═══════ ACTION BUTTONS ═══════
+local BTN_Y=CON_Y+CON_H+10; local BTN_ACT_H=26; local BTN_GAP=7
+local BTN_TOTAL=WIN_W-PAD*2; local BTN_W=math.floor((BTN_TOTAL-BTN_GAP*2)/3)
+
+local BtnRow = new("Frame", {
+    Size=UDim2.new(1,-PAD*2,0,BTN_ACT_H), Position=UDim2.new(0,PAD,0,BTN_Y),
+    BackgroundTransparency=1, ZIndex=6,
+}, Content)
+
+local function makeActionBtn(text,x,primary)
+    local b = new("TextButton", {
+        Size=UDim2.new(0,BTN_W,0,BTN_ACT_H), Position=UDim2.new(0,x,0,0),
+        BackgroundColor3=primary and C.elevated or C.surface,
+        BackgroundTransparency=primary and 0.1 or 0.05,
+        Text=text, TextColor3=primary and C.accent or C.textSec,
+        Font=FONT, TextSize=9, AutoButtonColor=false, BorderSizePixel=0, ZIndex=7,
+    }, BtnRow)
+    corner(b,7)
+    local s = mstroke(b, primary and C.accent or C.border, primary and 0.5 or 0.6, 1)
+    return b, s
+end
+
+local ClearBtn, ClearStr = makeActionBtn("Clear",0,false)
+Rbg(ClearBtn,"surface"); Rtxt(ClearBtn,"textSec"); Rstr(ClearStr,"border")
+
+local RedeemBtn, RedeemStr = makeActionBtn("Redeem",BTN_W+BTN_GAP,true)
+Rbg(RedeemBtn,"elevated"); Rtxt(RedeemBtn,"accent"); Rstr(RedeemStr,"accent")
+
+local StartBtn, StartStr = makeActionBtn("Start",(BTN_W+BTN_GAP)*2,false)
+Rbg(StartBtn,"surface"); Rtxt(StartBtn,"textSec"); Rstr(StartStr,"border")
+
+-- ═══════ TOGGLE ROWS ═══════
+local ROW_Y0=BTN_Y+BTN_ACT_H+12; local ROW_H=30; local ROW_GAP=6; local rowIdx=0
+
+local function makeToggleRow(label)
+    rowIdx=rowIdx+1
+    local y=ROW_Y0+(rowIdx-1)*(ROW_H+ROW_GAP)
+    local r = new("Frame", {
+        Size=UDim2.new(1,-PAD*2,0,ROW_H), Position=UDim2.new(0,PAD,0,y),
+        BackgroundColor3=C.card, BackgroundTransparency=0.12, BorderSizePixel=0, ZIndex=6,
+    }, Content)
+    Rbg(r,"card"); corner(r,8)
+    local rs=mstroke(r,C.border,0.65,1); Rstr(rs,"border")
+
+    local lbl = new("TextLabel", {
+        Size=UDim2.new(0.6,0,1,0), Position=UDim2.new(0,14,0,0),
+        BackgroundTransparency=1, Text=label, TextColor3=C.text,
+        Font=FONT, TextSize=10, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=7,
+    }, r)
+    Rtxt(lbl,"text")
+
+    local btn = new("TextButton", {
+        Size=UDim2.new(0,44,0,20), Position=UDim2.new(1,-56,0.5,-10),
+        BackgroundColor3=C.surface, Text="OFF", TextColor3=C.red,
+        Font=FONT, TextSize=8, AutoButtonColor=false, BorderSizePixel=0, ZIndex=8,
+    }, r)
+    Rbg(btn,"surface"); Rtxt(btn,"red")
+    corner(btn,6)
+    local bs=mstroke(btn,C.border,0.55,1); Rstr(bs,"border")
+    return r, btn
+end
+
+local function setToggle(btn,on)
+    pcall(function()
+        TweenService:Create(btn,TweenInfo.new(0.15),{
+            BackgroundColor3=on and C.greenBg or C.surface
+        }):Play()
+    end)
+    btn.Text=on and "ON" or "OFF"
+    btn.TextColor3=on and C.green or C.red
+    for _,ch in ipairs(btn:GetChildren()) do
+        if ch:IsA("UIStroke") then
+            pcall(function() TweenService:Create(ch,TweenInfo.new(0.15),{Color=on and C.green or C.border}):Play() end)
+        end
+    end
+end
+
+-- NEW: Auto Type v3 (In test) and Auto Submit v4 (In test)
+local R_TypeV3, TypeV3Tgl = makeToggleRow("Auto Type v3 (In test)")
+local R_SubmitV4, SubmitV4Tgl = makeToggleRow("Auto Submit v4 (In test)")
+
+-- counter row
+rowIdx=rowIdx+1
+local CTR_Y=ROW_Y0+(rowIdx-1)*(ROW_H+ROW_GAP)
+local CtrRow = new("Frame", {
+    Size=UDim2.new(1,-PAD*2,0,ROW_H), Position=UDim2.new(0,PAD,0,CTR_Y),
+    BackgroundColor3=C.card, BackgroundTransparency=0.12, BorderSizePixel=0, ZIndex=6,
+}, Content)
+Rbg(CtrRow,"card"); corner(CtrRow,8)
+local crs=mstroke(CtrRow,C.border,0.65,1); Rstr(crs,"border")
+
+local ctrLbl1 = new("TextLabel", {
+    Size=UDim2.new(0.5,0,1,0), Position=UDim2.new(0,14,0,0),
+    BackgroundTransparency=1, Text="Submit After", TextColor3=C.text,
+    Font=FONT, TextSize=10, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=7,
+}, CtrRow)
+Rtxt(ctrLbl1,"text")
+
+local CtrBox = new("Frame", {
+    Size=UDim2.new(0,74,0,20), Position=UDim2.new(1,-86,0.5,-10),
+    BackgroundColor3=C.surface, BackgroundTransparency=0.05, BorderSizePixel=0, ZIndex=8,
+}, CtrRow)
+Rbg(CtrBox,"surface"); corner(CtrBox,6)
+local cbs=mstroke(CtrBox,C.border,0.55,1); Rstr(cbs,"border")
+
+local CtrMin = new("TextButton", {
+    Size=UDim2.new(0,20,0,18), Position=UDim2.new(0,2,0,1),
+    BackgroundColor3=C.elevated, BackgroundTransparency=0.3,
+    Text="-", TextColor3=C.textSec, Font=FONT, TextSize=12,
+    AutoButtonColor=false, BorderSizePixel=0, ZIndex=9,
+}, CtrBox)
+Rbg(CtrMin,"elevated"); Rtxt(CtrMin,"textSec"); corner(CtrMin,4)
+
+local CtrLbl = new("TextLabel", {
+    Size=UDim2.new(0,24,1,0), Position=UDim2.new(0,25,0,0),
+    BackgroundTransparency=1, Text="1", TextColor3=C.text,
+    Font=FONT, TextSize=10, ZIndex=9,
+}, CtrBox)
+Rtxt(CtrLbl,"text")
+
+local CtrPlus = new("TextButton", {
+    Size=UDim2.new(0,20,0,18), Position=UDim2.new(0,52,0,1),
+    BackgroundColor3=C.elevated, BackgroundTransparency=0.3,
+    Text="+", TextColor3=C.textSec, Font=FONT, TextSize=12,
+    AutoButtonColor=false, BorderSizePixel=0, ZIndex=9,
+}, CtrBox)
+Rbg(CtrPlus,"elevated"); Rtxt(CtrPlus,"textSec"); corner(CtrPlus,4)
+
+local R_Copy, CopyTgl = makeToggleRow("Auto Copy")
+
+-- ═══════ FOOTER ═══════
+local FT_Y=ROW_Y0+rowIdx*(ROW_H+ROW_GAP)+6
+local ftDiv = new("Frame", {
+    Size=UDim2.new(1,-PAD*2,0,1), Position=UDim2.new(0,PAD,0,FT_Y-3),
+    BackgroundColor3=C.divider, BackgroundTransparency=0.35, BorderSizePixel=0, ZIndex=5,
+}, Content)
+Rbg(ftDiv,"divider")
+
+local ftLbl = new("TextLabel", {
+    Size=UDim2.new(1,-PAD*2,0,14), Position=UDim2.new(0,PAD,0,FT_Y+1),
+    BackgroundTransparency=1, Text="by hskery50  |  discord - dc.gg/vail.vs",
+    TextColor3=C.textMut, Font=FONT, TextSize=7,
+    TextXAlignment=Enum.TextXAlignment.Center, ZIndex=6,
+}, Content)
+Rtxt(ftLbl,"textMut")
+
+-- ═══════ MINIMIZE ═══════
+local minimized=false
+MinBtn.MouseButton1Click:Connect(function()
+    minimized=not minimized
+    TweenService:Create(Window,TweenInfo.new(0.2,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{
+        Size=UDim2.new(0,WIN_W,0,minimized and HDR_H+2 or WIN_H)
+    }):Play()
+    MinBtn.Text=minimized and "+" or "-"
+end)
+
+-- ═══════ DRAG ═══════
+local dragging,ds,sp
+connect(Header.InputBegan,function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+        dragging=true; ds=i.Position; sp=Window.Position
+    end
+end)
+connect(UserInputService.InputChanged,function(i)
+    if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+        local d=i.Position-ds
+        Window.Position=UDim2.new(sp.X.Scale,sp.X.Offset+d.X,sp.Y.Scale,sp.Y.Offset+d.Y)
+    end
+end)
+connect(UserInputService.InputEnded,function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dragging=false end
+end)
+
+-- ═══════ START VISUAL ═══════
+local function syncStartVisual()
+    if runtime.enabled then
+        StatusDot.BackgroundColor3=C.green
+        StartBtn.Text="Stop"; StartBtn.TextColor3=C.red
+        pcall(function() TweenService:Create(StartBtn,TweenInfo.new(0.15),{BackgroundColor3=C.redBg}):Play() end)
+        for _,ch in ipairs(StartBtn:GetChildren()) do
+            if ch:IsA("UIStroke") then pcall(function() TweenService:Create(ch,TweenInfo.new(0.15),{Color=C.red,Transparency=0.35}):Play() end) end
+        end
+    else
+        StatusDot.BackgroundColor3=C.textMut
+        StartBtn.Text="Start"; StartBtn.TextColor3=C.textSec
+        pcall(function() TweenService:Create(StartBtn,TweenInfo.new(0.15),{BackgroundColor3=C.surface}):Play() end)
+        for _,ch in ipairs(StartBtn:GetChildren()) do
+            if ch:IsA("UIStroke") then pcall(function() TweenService:Create(ch,TweenInfo.new(0.15),{Color=C.border,Transparency=0.6}):Play() end) end
+        end
+    end
+end
+
+-- ═══════ SETTINGS MENU ═══════
+local settingsOpen=false
+
+local function createSettingsMenu()
+    if settingsOpen then return end
+    settingsOpen=true
+    local oldS=parentGui:FindFirstChild("VailSettingsUI")
+    if oldS then oldS:Destroy() end
+    local SG = new("ScreenGui", {
+        Name="VailSettingsUI", ResetOnSpawn=false, IgnoreGuiInset=true, DisplayOrder=998,
+    }, parentGui)
+    runtime.settingsGui=SG
+    local SW,SH=220,290
+    local SWin = new("Frame", {
+        Size=UDim2.new(0,SW,0,SH), AnchorPoint=Vector2.new(0.5,0.5),
+        Position=UDim2.new(0.5,SW/2+10,0.5,0),
+        BackgroundColor3=C.bg, BorderSizePixel=0, ClipsDescendants=true,
+        Active=true, ZIndex=15,
+    }, SG)
+    corner(SWin,RAD); mstroke(SWin,C.border,0.25,1)
+
+    new("ImageLabel", {
+        Size=UDim2.new(1,0,1,0), BackgroundTransparency=1,
+        Image="rbxassetid://"..THEMES[runtime.currentTheme].image,
+        ImageTransparency=THEMES[runtime.currentTheme].imgTrans,
+        ScaleType=Enum.ScaleType.Stretch, ZIndex=15,
+    }, SWin)
+
+    local SC = new("Frame", {Size=UDim2.new(1,0,1,0), BackgroundTransparency=1, ZIndex=16}, SWin)
+    local SHdr = new("Frame", {Size=UDim2.new(1,0,0,34), BackgroundTransparency=1, ZIndex=17}, SC)
+
+    new("TextLabel", {
+        Size=UDim2.new(1,-36,1,0), Position=UDim2.new(0,PAD,0,0),
+        BackgroundTransparency=1, Text="Settings", TextColor3=C.text,
+        Font=FONT, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=17,
+    }, SHdr)
+
+    local SClose = new("TextButton", {
+        Size=UDim2.new(0,20,0,20), Position=UDim2.new(1,-PAD-20,0.5,-10),
+        BackgroundColor3=C.surface, BackgroundTransparency=0.1,
+        Text="x", TextColor3=C.textMut, Font=FONT, TextSize=13,
+        AutoButtonColor=false, BorderSizePixel=0, ZIndex=17,
+    }, SHdr)
+    corner(SClose,5); mstroke(SClose,C.border,0.5,1)
+
+    new("Frame", {
+        Size=UDim2.new(1,-PAD*2,0,1), Position=UDim2.new(0,PAD,0,34),
+        BackgroundColor3=C.divider, BackgroundTransparency=0.35, BorderSizePixel=0, ZIndex=16,
+    }, SC)
+
+    local LPad = new("Frame", {
+        Size=UDim2.new(1,-PAD*2,0,SH-42), Position=UDim2.new(0,PAD,0,40),
+        BackgroundTransparency=1, ZIndex=16,
+    }, SC)
+    new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,5)}, LPad)
+
+    -- Particles toggle
+    local function sToggle(order,label,default,cb)
+        local r = new("Frame", {
+            Size=UDim2.new(1,0,0,28), BackgroundColor3=C.card,
+            BackgroundTransparency=0.12, LayoutOrder=order, ZIndex=17,
+        }, LPad)
+        corner(r,7); mstroke(r,C.border,0.65,1)
+        new("TextLabel", {
+            Size=UDim2.new(0.6,0,1,0), Position=UDim2.new(0,12,0,0),
+            BackgroundTransparency=1, Text=label, TextColor3=C.text,
+            Font=FONT, TextSize=9, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=18,
+        }, r)
+        local b = new("TextButton", {
+            Size=UDim2.new(0,40,0,18), Position=UDim2.new(1,-52,0.5,-9),
+            BackgroundColor3=default and C.greenBg or C.surface,
+            Text=default and "ON" or "OFF",
+            TextColor3=default and C.green or C.red,
+            Font=FONT, TextSize=8, AutoButtonColor=false, BorderSizePixel=0, ZIndex=18,
+        }, r)
+        corner(b,5); mstroke(b,default and C.green or C.border,0.5,1)
+        b.MouseButton1Click:Connect(function()
+            local on=(b.Text=="OFF"); setToggle(b,on); cb(on)
+        end)
+    end
+
+    sToggle(1,"Particles",runtime.particlesEnabled,function(on)
+        runtime.particlesEnabled=on
+        if not on then for _,c in ipairs(ParticleLayer:GetChildren()) do c:Destroy() end end
+    end)
+
+    -- Background picker
+    new("TextLabel", {
+        Size=UDim2.new(1,0,0,18), BackgroundTransparency=1,
+        Text="--- BACKGROUND ---", TextColor3=C.textMut,
+        Font=FONT, TextSize=7, TextXAlignment=Enum.TextXAlignment.Center,
+        LayoutOrder=2, ZIndex=17,
+    }, LPad)
+
+    local bgPicker = new("Frame", {
+        Size=UDim2.new(1,0,0,36), BackgroundTransparency=1,
+        LayoutOrder=3, ZIndex=17,
+    }, LPad)
+
+    local thumbSize=32; local thumbGap=5
+    local totalW=thumbSize*5+thumbGap*4
+    local pickStartX=math.floor((SW-PAD*2-totalW)/2)
+
+    for i,theme in ipairs(THEMES) do
+        local isSelected=(i==runtime.currentTheme)
+        local thumb = new("ImageButton", {
+            Size=UDim2.new(0,thumbSize,0,thumbSize),
+            Position=UDim2.new(0,pickStartX+(i-1)*(thumbSize+thumbGap),0,0),
+            Image="rbxassetid://"..theme.image,
+            ImageTransparency=theme.imgTrans*0.5,
+            ScaleType=Enum.ScaleType.Crop,
+            BackgroundColor3=C.surface, AutoButtonColor=true,
+            BorderSizePixel=0, ZIndex=18,
+        }, bgPicker)
+        corner(thumb,6)
+        mstroke(thumb, isSelected and C.accent or C.border, isSelected and 0 or 0.5, isSelected and 2 or 1)
+
+        thumb.MouseButton1Click:Connect(function()
+            applyTheme(i)
+        end)
+    end
+
+    -- VS Community
+    new("TextLabel", {
+        Size=UDim2.new(1,0,0,18), BackgroundTransparency=1,
+        Text="--- VS COMMUNITY ---", TextColor3=C.textMut,
+        Font=FONT, TextSize=7, TextXAlignment=Enum.TextXAlignment.Center,
+        LayoutOrder=4, ZIndex=17,
+    }, LPad)
+
+    local function sCopyBtn(order,label,link)
+        local r = new("Frame", {
+            Size=UDim2.new(1,0,0,28), BackgroundColor3=C.card,
+            BackgroundTransparency=0.12, LayoutOrder=order, ZIndex=17,
+        }, LPad)
+        corner(r,7); mstroke(r,C.border,0.65,1)
+        new("TextLabel", {
+            Size=UDim2.new(0.55,0,1,0), Position=UDim2.new(0,12,0,0),
+            BackgroundTransparency=1, Text=label, TextColor3=C.textSec,
+            Font=FONT, TextSize=8, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=18,
+        }, r)
+        local b = new("TextButton", {
+            Size=UDim2.new(0,46,0,18), Position=UDim2.new(1,-56,0.5,-9),
+            BackgroundColor3=C.surface, Text="Copy", TextColor3=C.accent,
+            Font=FONT, TextSize=8, AutoButtonColor=false, BorderSizePixel=0, ZIndex=18,
+        }, r)
+        corner(b,5); mstroke(b,C.accent,0.55,1)
+        b.MouseButton1Click:Connect(function()
+            pcall(function()
+                if setclipboard then setclipboard(link)
+                elseif toclipboard then toclipboard(link) end
+            end)
+            b.Text="OK"; b.TextColor3=C.green
+            for _,ch in ipairs(b:GetChildren()) do if ch:IsA("UIStroke") then ch.Color=C.green end end
+            task.delay(1.2,function()
+                if b and b.Parent then
+                    b.Text="Copy"; b.TextColor3=C.accent
+                    for _,ch in ipairs(b:GetChildren()) do if ch:IsA("UIStroke") then ch.Color=C.accent end end
+                end
+            end)
+        end)
+    end
+
+    sCopyBtn(5,"Discord Owner","https://dc.gg/vail.vs")
+    sCopyBtn(6,"Discord Partner","https://dc.gg/eclipse.vs")
+
+    SClose.MouseButton1Click:Connect(function()
+        if SG then SG:Destroy() end
+        runtime.settingsGui=nil; settingsOpen=false
+    end)
+
+    local sd,sds,ssp
+    connect(SHdr.InputBegan,function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+            sd=true;sds=i.Position;ssp=SWin.Position
+        end
+    end)
+    connect(UserInputService.InputChanged,function(i)
+        if sd and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+            local dt=i.Position-sds
+            SWin.Position=UDim2.new(ssp.X.Scale,ssp.X.Offset+dt.X,ssp.Y.Scale,ssp.Y.Offset+dt.Y)
+        end
+    end)
+    connect(UserInputService.InputEnded,function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then sd=false end
+    end)
+end
+
+SettingsBtn.MouseButton1Click:Connect(createSettingsMenu)
+
+-- ═══════ APPLY THEME ═══════
+function applyTheme(idx)
+    local theme=THEMES[idx]
+    if not theme then return end
+    runtime.currentTheme=idx
+
+    for k,v in pairs(theme.c) do C[k]=v end
+
+    BgImage.Image="rbxassetid://"..theme.image
+    BgImage.ImageTransparency=theme.imgTrans
+
+    for _,e in ipairs(reg) do
+        pcall(function() e.o[e.p]=C[e.k] end)
+    end
+
+    syncStartVisual()
+    setToggle(TypeV3Tgl,runtime.autoTypeV3)
+    setToggle(SubmitV4Tgl,runtime.autoSubmitV4)
+    setToggle(CopyTgl,runtime.autoCopy)
+    StatusDot.BackgroundColor3=runtime.enabled and C.green or C.textMut
+
+    if settingsOpen then
+        settingsOpen=false
+        if runtime.settingsGui then pcall(function() runtime.settingsGui:Destroy() end) end
+        task.defer(createSettingsMenu)
+    end
+end
+
+-- ═══════ HEAD DISPLAY ═══════
+local function createHeadDisplay()
+    local char=LP.Character; if not char then return end
+    local head=char:FindFirstChild("Head"); if not head then return end
+    local oldHD=head:FindFirstChild("VailHD"); if oldHD then oldHD:Destroy() end
+    local bb = new("BillboardGui", {
+        Name="VailHD", Adornee=head, Size=UDim2.new(0,140,0,18),
+        StudsOffset=Vector3.new(0,2.5,0), MaxDistance=100, AlwaysOnTop=true,
+    }, head)
+    local hdLbl = new("TextLabel", {
+        Size=UDim2.new(1,0,1,0), BackgroundTransparency=1,
+        Text="dc.gg/vail.vs", TextColor3=C.accent,
+        Font=FONT, TextScaled=true, ZIndex=1,
+    }, bb)
+    Rtxt(hdLbl,"accent")
+    runtime.headDisplay=bb
+end
+
+-- ═══════ GAME LOGIC ═══════
+local function isOurGui(inst)
+    local p=inst
+    for _=1,10 do
+        if not p then break end
+        if p.Name=="VailUI" or p.Name=="VailSettingsUI" then return true end
+        p=p.Parent
+    end
+    return false
+end
+
+local function isVisibleChain(inst)
+    local c=inst
+    while c do
+        if c:IsA("GuiObject") and not c.Visible then return false end
+        if c:IsA("ScreenGui") then return c.Enabled end
+        c=c.Parent
+    end
+    return true
+end
+
+local function findCodeBox()
+    local pg=playerGui; if not pg then return nil end
+    local boxes={}
+    for _,gui in ipairs(pg:GetChildren()) do
+        if gui:IsA("ScreenGui") and gui.Enabled and not isOurGui(gui) then
+            for _,d in ipairs(gui:GetDescendants()) do
+                if d:IsA("TextBox") and not isOurGui(d) then boxes[#boxes+1]=d end
+            end
+        end
+    end
+    for _,box in ipairs(boxes) do
+        if isVisibleChain(box) then
+            local n=box.Name:lower()
+            local pn=(box.Parent and box.Parent.Name or ""):lower()
+            if n:find("code") or pn:find("code") or n:find("redeem") or pn:find("redeem")
+            or n:find("input") or n:find("enter") then return box end
+        end
+    end
+    for _,box in ipairs(boxes) do if isVisibleChain(box) then return box end end
+    return nil
+end
+
+local function findSubmitButton(box)
+    local pg=playerGui; if not pg then return nil end
+    local names={"submit","redeem","claim","confirm","enter","send","apply","ok","use","go","check"}
+    if box then
+        local p=box.Parent
+        for _=1,6 do
+            if not p then break end
+            for _,d in ipairs(p:GetDescendants()) do
+                if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) and d~=box then
+                    local n=d.Name:lower()
+                    local txt=""; pcall(function() txt=d.Text:lower() end)
+                    for _,sn in ipairs(names) do
+                        if (n:find(sn) or txt:find(sn)) and isVisibleChain(d) then return d end
+                    end
+                end
+            end
+            p=p.Parent
+        end
+    end
+    local btns={}
+    for _,gui in ipairs(pg:GetChildren()) do
+        if gui:IsA("ScreenGui") and gui.Enabled and not isOurGui(gui) then
+            for _,d in ipairs(gui:GetDescendants()) do
+                if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) then
+                    local n=d.Name:lower()
+                    local txt=""; pcall(function() txt=d.Text:lower() end)
+                    for _,sn in ipairs(names) do
+                        if (n:find(sn) or txt:find(sn)) and isVisibleChain(d) then
+                            table.insert(btns,d); break
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return btns[1]
+end
+
+local function clickButton(btn)
+    if not btn then return false end
+    local ok=false
+    local methods={
+        function() btn.MouseButton1Click:Fire() end,
+        function() btn.Activated:Fire() end,
+    }
+    if firesignal_fn then
+        table.insert(methods,function() firesignal_fn(btn.MouseButton1Click) end)
+        table.insert(methods,function() firesignal_fn(btn.Activated) end)
+    end
+    if getconns_fn then
+        table.insert(methods,function()
+            local s,c=pcall(getconns_fn,btn.MouseButton1Click)
+            if s and type(c)=="table" then for _,x in ipairs(c) do pcall(function() x:Fire() end) end end
+            local s2,c2=pcall(getconns_fn,btn.Activated)
+            if s2 and type(c2)=="table" then for _,x in ipairs(c2) do pcall(function() x:Fire() end) end end
+        end)
+    end
+    if fireclick_fn then table.insert(methods,function() fireclick_fn(btn) end) end
+    for _,fn in ipairs(methods) do ok=ok or pcall(fn) end
+    return ok
+end
+
+local function fireBoxFocusLost(box)
+    if not box then return false end
+    local fired=false
+    if firesignal_fn then fired=fired or pcall(firesignal_fn,box.FocusLost,true) end
+    if getconns_fn then
+        local s,c=pcall(getconns_fn,box.FocusLost)
+        if s and type(c)=="table" then
+            for _,x in ipairs(c) do
+                local fn; pcall(function() fn=x.Function end)
+                if fn and getupvalues_fn and setupvalue_fn then
+                    local u,ups=pcall(getupvalues_fn,fn)
+                    if u and type(ups)=="table" then
+                        for i,v in pairs(ups) do
+                            if type(v)=="boolean" and v==true then pcall(setupvalue_fn,fn,i,false) end
+                        end
+                    end
+                end
+                fired=fired or pcall(function() if x.Enabled~=false then x:Fire(true) end end)
+            end
+        end
+    end
+    return fired
+end
+
+local function processCode(code)
+    if not code or code=="" then return end
+    runtime.lastCode=code
+    if runtime.autoCopy then
+        pcall(function()
+            if setclipboard then setclipboard(code)
+            elseif toclipboard then toclipboard(code) end
+        end)
+    end
+    -- Auto Type v3 (In test)
+    if runtime.autoTypeV3 then
+        local box=findCodeBox()
+        if not box then consoleLog('<font color="#e6505f">No code box</font>') return end
+        pcall(function() box.Text=code end)
+        fireBoxFocusLost(box)
+        consoleLog('<font color="#9ba5ff">Typed v3: '..code..'</font>')
+        -- Auto Submit v4 (In test) after typing
+        if runtime.autoSubmitV4 then
+            task.wait(0.15)
+            local btn=findSubmitButton(box)
+            if btn then clickButton(btn)
+                consoleLog('<font color="#55d282">Submitted v4: '..code..'</font>')
+            else consoleLog('<font color="#e6505f">No submit button</font>') end
+        end
+    elseif runtime.autoSubmitV4 then
+        -- Auto Submit v4 alone (without typing first)
+        local box=findCodeBox()
+        local btn=box and findSubmitButton(box)
+        if btn then clickButton(btn)
+            consoleLog('<font color="#55d282">Submitted v4: '..code..'</font>')
+        else consoleLog('<font color="#e6505f">No submit found</font>') end
+    end
+    if runtime.autoCopy then consoleLog('<font color="#55d282">Copied: '..code..'</font>') end
+end
+
+local function resolveNotifyRemote()
+    if runtime.notifyRemote and runtime.notifyRemote.Parent then return runtime.notifyRemote end
+    local cands={}
+    pcall(function()
+        for _,d in ipairs(ReplicatedStorage:GetDescendants()) do
+            if d:IsA("RemoteEvent") then
+                local n=d.Name:lower()
+                if n:find("notif") or n:find("announce") or n:find("broadcast")
+                or n:find("global") or n:find("message") or n:find("chat") then
+                    table.insert(cands,d)
+                end
+            end
+        end
+    end)
+    if #cands>0 then runtime.notifyRemote=cands[1]; return cands[1] end
+    return nil
+end
+
+local function stripRich(t) return type(t)=="string" and (t:gsub("<[^>]->","")) or tostring(t) end
+local function tokenize(t)
+    local w={} for word in t:gmatch("[%w_]+") do w[#w+1]=word end return w
+end
+
+local function onAnnouncement(...)
+    if not runtime.enabled then return end
+    local text=stripRich(tostring((...) or "")):match("^%s*(.-)%s*$") or ""
+    if text=="" or text:find("%s") then return end
+    if runtime.seen[text] then return end
+    runtime.seen[text]=true
+    task.delay(1.25,function() runtime.seen[text]=nil end)
+    for _,w in ipairs(tokenize(text)) do table.insert(runtime.capturedParts,w) end
+    local cnt=#runtime.capturedParts
+    local joined=table.concat(runtime.capturedParts)
+    consoleLog(string.format('<font color="#9ba5ff">%d/%d</font> <font color="#6b7099">[%s]</font>',cnt,runtime.submitAfter,joined))
+    if cnt>=runtime.submitAfter then
+        runtime.lastCode=joined; runtime.capturedParts={}
+        consoleLog('<font color="#9ba5ff">Code: '..joined..'</font>')
+        processCode(joined)
+    end
+end
+
+local function startNotifListener()
+    if runtime.notifConn then return end
+    local r=resolveNotifyRemote()
+    if r then runtime.notifConn=r.OnClientEvent:Connect(function(...) pcall(onAnnouncement,...) end) end
+end
+
+local function stopNotifListener()
+    if runtime.notifConn then disconnect(runtime.notifConn); runtime.notifConn=nil end
+end
+
+local function toggleEnabled()
+    runtime.enabled=not runtime.enabled
+    syncStartVisual()
+    if runtime.enabled then startNotifListener()
+        consoleLog('<font color="#55d282">Listening for codes</font>')
+    else stopNotifListener()
+        consoleLog('<font color="#e6505f">Stopped</font>')
+    end
+end
+
+-- ═══════ CONNECTIONS ═══════
+StartBtn.MouseButton1Click:Connect(toggleEnabled)
+
+TypeV3Tgl.MouseButton1Click:Connect(function() runtime.autoTypeV3=not runtime.autoTypeV3; setToggle(TypeV3Tgl,runtime.autoTypeV3) end)
+SubmitV4Tgl.MouseButton1Click:Connect(function() runtime.autoSubmitV4=not runtime.autoSubmitV4; setToggle(SubmitV4Tgl,runtime.autoSubmitV4) end)
+CopyTgl.MouseButton1Click:Connect(function() runtime.autoCopy=not runtime.autoCopy; setToggle(CopyTgl,runtime.autoCopy) end)
+CtrMin.MouseButton1Click:Connect(function()
+    runtime.submitAfter=math.clamp(runtime.submitAfter-1,1,10)
+    CtrLbl.Text=tostring(runtime.submitAfter); runtime.capturedParts={}
+end)
+CtrPlus.MouseButton1Click:Connect(function()
+    runtime.submitAfter=math.clamp(runtime.submitAfter+1,1,10)
+    CtrLbl.Text=tostring(runtime.submitAfter); runtime.capturedParts={}
+end)
+ClearBtn.MouseButton1Click:Connect(function() consoleLog("") end)
+RedeemBtn.MouseButton1Click:Connect(function()
+    local code=runtime.lastCode
+    if (not code or code=="") and #runtime.capturedParts>0 then code=table.concat(runtime.capturedParts) end
+    if code and code~="" then runtime.lastCode=code; processCode(code)
+    else consoleLog('<font color="#6b7099">No code captured</font>') end
+end)
+
+connect(UserInputService.InputBegan,function(input,gpe)
+    if gpe then return end
+    if runtime.listeningKey then
+        if input.UserInputType==Enum.UserInputType.Keyboard then
+            runtime.snipeKey=input.KeyCode; runtime.listeningKey=false
+        end
+        return
+    end
+    if input.KeyCode==runtime.snipeKey then toggleEnabled() end
+end)
+
+connect(LP.CharacterAdded,function() task.wait(1) createHeadDisplay() end)
+task.spawn(function() task.wait(0.5) createHeadDisplay() end)
+
+-- ═══════ DESTROY ═══════
+function runtime.destroy()
+    runtime.alive=false; runtime.enabled=false
+    stopNotifListener()
+    for _,c in ipairs(runtime.connections) do disconnect(c) end
+    table.clear(runtime.connections)
+    if runtime.gui then pcall(function() runtime.gui:Destroy() end) end
+    if runtime.settingsGui then pcall(function() runtime.settingsGui:Destroy() end) end
+    if runtime.headDisplay then pcall(function() runtime.headDisplay:Destroy() end) end
+    local kb=parentGui:FindFirstChild("VailSettingsUI")
+    if kb then pcall(function() kb:Destroy() end) end
+    if environment[RUNTIME_KEY]==runtime then environment[RUNTIME_KEY]=nil end
+end
+
+_G.Vail = {
+    Toggle=toggleEnabled,
+    SetKey=function(k) runtime.snipeKey=k end,
+    SetCode=function(c) runtime.lastCode=c end,
+    Redeem=function() if runtime.lastCode then processCode(runtime.lastCode) end end,
+    SetTheme=applyTheme,
+    Announce=function(text) pcall(onAnnouncement, text) end,
+    Destroy=runtime.destroy,
+}
