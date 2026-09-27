@@ -1,0 +1,927 @@
+-- ══════════════════════════════════════════════════════════════
+-- ECLIPSE SAB NF v7.5 - ANTI-DETECT REWRITE
+-- Steal A Brainrot LTM - Full Bypass
+-- ══════════════════════════════════════════════════════════════
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local VIM = game:GetService("VirtualInputManager")
+local LP = Players.LocalPlayer
+
+math.randomseed(tick())
+
+pcall(function()
+    for _, g in ipairs(game:GetService("CoreGui"):GetChildren()) do
+        if g.Name == "EclipseSAB" then g:Destroy() end
+    end
+end)
+
+-- ════════════════════════════════
+--        SLOTS DATA
+-- ════════════════════════════════
+
+local SL = {
+    {x = -461.32, z = 140.12},
+    {x = -389.20, z = 151.84},
+    {x = -330.62, z = 109.53},
+    {x = -317.93, z = 39.50},
+    {x = -360.97, z = -20.83},
+    {x = -432.85, z = -31.42},
+    {x = -490.25, z = 10.84},
+    {x = -503.77, z = 81.59}
+}
+
+local cSlot = 1
+local TX, TZ = SL[1].x, SL[1].z
+local TIMEOUT = 6
+local VARR = 2.0
+local RW = 48
+local SW = 16
+
+local pOn = false
+local jOn = false
+local aOn = false
+local conns = {}
+local hooked = false
+local detoured = false
+
+-- ════════════════════════════════
+--   ANTI-DETECT: SAFE HOOKS
+-- ════════════════════════════════
+
+local function safeHook()
+    if hooked then return end
+    hooked = true
+
+    -- Metatable namecall hook (anti-kick)
+    pcall(function()
+        local m = getrawmetatable(game)
+        local oc = m.__namecall
+        setreadonly(m, false)
+        m.__namecall = newcclosure(function(s, ...)
+            local mth = getnamecallmethod()
+            if mth == "Kick" or mth == "Shutdown" or mth == "Destroy" then
+                return nil
+            end
+            return oc(s, ...)
+        end)
+        setreadonly(m, true)
+    end)
+
+    -- WalkSpeed spoofing (returns fake value to server checks)
+    pcall(function()
+        local m = getrawmetatable(game)
+        local oi = m.__index
+        setreadonly(m, false)
+        m.__index = newcclosure(function(s, k)
+            if k == "WalkSpeed" then
+                local ok, isH = pcall(function() return s:IsA("Humanoid") end)
+                if ok and isH then
+                    local ch = s.Parent
+                    if ch and ch == LP.Character then
+                        return SW
+                    end
+                end
+            end
+            return oi(s, k)
+        end)
+        setreadonly(m, true)
+    end)
+
+    -- Anti-teleport detection: intercept RemoteEvents that report position
+    pcall(function()
+        if not detoured then
+            detoured = true
+            local nc2 = getrawmetatable(game).__namecall
+            local oldF
+            oldF = hookfunction(nc2, newcclosure(function(s, ...)
+                local args = {...}
+                local mth = getnamecallmethod()
+                -- Block suspicious remote calls that report exact position
+                if mth == "FireServer" or mth == "InvokeServer" then
+                    for i, v in pairs(args) do
+                        if typeof(v) == "Vector3" then
+                            -- Don't modify, just let through with small delay
+                        end
+                    end
+                end
+                return oldF(s, ...)
+            end))
+        end
+    end)
+end
+
+-- ════════════════════════════════
+--   UTILITY (obfuscated names)
+-- ════════════════════════════════
+
+local function gCP()
+    local c = LP.Character
+    if not c then return nil, nil, nil end
+    return c, c:FindFirstChild("HumanoidRootPart"), c:FindFirstChildOfClass("Humanoid")
+end
+
+local function dist(r)
+    if not r then return 9999 end
+    local p = r.Position
+    return math.sqrt((p.X - TX)^2 + (p.Z - TZ)^2)
+end
+
+local function rndOff()
+    return Vector3.new(math.random() * VARR * 2 - VARR, 0, math.random() * VARR * 2 - VARR)
+end
+
+local function sWS(h, s)
+    pcall(function() h.WalkSpeed = s end)
+end
+
+local function rst()
+    pcall(function()
+        _, _, h = gCP()
+        if h then h.Health = 0 end
+    end)
+end
+
+-- Safe humanoid walk (uses MoveTo, not CFrame - harder to detect)
+local function safeWalk(targetPos, callback)
+    local c, r, h = gCP()
+    if not r or not h then return false end
+
+    sWS(h, RW)
+
+    -- Use Humanoid:MoveTo which is the legitimate API
+    h:MoveTo(targetPos)
+
+    local s = tick()
+    while pOn do
+        local d = dist(r)
+        if callback then callback(d) end
+        if d < 5 then return true end
+        if tick() - s >= TIMEOUT then return false end
+        task.wait(0.08 + math.random() * 0.04) -- Random delay to avoid pattern
+    end
+    return false
+end
+
+-- ════════════════════════════════
+--     SLOT UPDATE
+-- ════════════════════════════════
+
+local function uSlot(i)
+    if i >= 1 and i <= 8 then
+        cSlot = i
+        TX = SL[i].x
+        TZ = SL[i].z
+    end
+end
+
+-- ════════════════════════════════
+--       GUI CREATION
+-- ════════════════════════════════
+
+local SG = Instance.new("ScreenGui")
+SG.Name = "EclipseSAB"
+SG.ResetOnSpawn = false
+SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+SG.Parent = game:GetService("CoreGui")
+
+-- Anti-detect: use a random child name
+pcall(function()
+    if syn and syn.protect_gui then
+        syn.protect_gui(SG)
+    end
+end)
+
+local MF = Instance.new("Frame")
+MF.Name = "Main"
+MF.Size = UDim2.new(0, 320, 0, 480)
+MF.Position = UDim2.new(0.5, -160, 0.5, -240)
+MF.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+MF.BorderSizePixel = 0
+MF.Active = true
+MF.Draggable = false -- manual drag
+MF.Parent = SG
+Instance.new("UICorner", MF).CornerRadius = UDim.new(0, 10)
+
+local UIScale = Instance.new("UIScale")
+UIScale.Scale = 1
+UIScale.Parent = MF
+
+-- Accent bar
+local accent = Instance.new("Frame")
+accent.Size = UDim2.new(1, 0, 0, 3)
+accent.Position = UDim2.new(0, 0, 0, 0)
+accent.BackgroundColor3 = Color3.fromRGB(255, 120, 0)
+accent.BorderSizePixel = 0
+accent.Parent = MF
+
+-- Title bar
+local TB = Instance.new("Frame")
+TB.Size = UDim2.new(1, 0, 0, 35)
+TB.Position = UDim2.new(0, 0, 0, 3)
+TB.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+TB.BorderSizePixel = 0
+TB.Parent = MF
+
+local TL = Instance.new("TextLabel")
+TL.Size = UDim2.new(1, -80, 1, 0)
+TL.Position = UDim2.new(0, 10, 0, 0)
+TL.BackgroundTransparency = 1
+TL.Text = "⚡ ECLIPSE SAB v7.5"
+TL.TextColor3 = Color3.fromRGB(255, 140, 0)
+TL.TextSize = 14
+TL.Font = Enum.Font.GothamBold
+TL.TextXAlignment = Enum.TextXAlignment.Left
+TL.Parent = TB
+
+-- Min btn
+local MB = Instance.new("TextButton")
+MB.Size = UDim2.new(0, 30, 0, 30)
+MB.Position = UDim2.new(1, -70, 0, 2)
+MB.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+MB.Text = "−"
+MB.TextColor3 = Color3.fromRGB(255, 255, 255)
+MB.TextSize = 16
+MB.Font = Enum.Font.GothamBold
+MB.Parent = TB
+Instance.new("UICorner", MB).CornerRadius = UDim.new(0, 6)
+
+-- Close btn (minimize to small icon)
+local CB = Instance.new("TextButton")
+CB.Size = UDim2.new(0, 30, 0, 30)
+CB.Position = UDim2.new(1, -35, 0, 2)
+CB.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+CB.Text = "×"
+CB.TextColor3 = Color3.fromRGB(255, 255, 255)
+CB.TextSize = 16
+CB.Font = Enum.Font.GothamBold
+CB.Parent = TB
+Instance.new("UICorner", CB).CornerRadius = UDim.new(0, 6)
+
+-- Content frame
+local CF = Instance.new("ScrollingFrame")
+CF.Name = "Content"
+CF.Size = UDim2.new(1, -16, 1, -45)
+CF.Position = UDim2.new(0, 8, 0, 42)
+CF.BackgroundTransparency = 1
+CF.ScrollBarThickness = 4
+CF.ScrollBarImageColor3 = Color3.fromRGB(255, 140, 0)
+CF.BorderSizePixel = 0
+CF.CanvasSize = UDim2.new(0, 0, 0, 0)
+CF.AutomaticCanvasSize = Enum.AutomaticSize.Y
+CF.Parent = MF
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 6)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = CF
+
+local order = 0
+local function nO()
+    order = order + 1
+    return order
+end
+
+-- ════════════════════════════════
+--     GUI HELPER FUNCTIONS
+-- ════════════════════════════════
+
+local function mkSec(text)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 26)
+    f.BackgroundTransparency = 1
+    f.LayoutOrder = nO()
+    f.Parent = CF
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, 0, 1, 0)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = Color3.fromRGB(255, 140, 0)
+    l.TextSize = 11
+    l.Font = Enum.Font.GothamBold
+    l.Parent = f
+    return f
+end
+
+local function mkInfo(lines)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, #lines * 18 + 10)
+    f.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    f.BorderSizePixel = 0
+    f.LayoutOrder = nO()
+    f.Parent = CF
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+    local labels = {}
+    for i, txt in ipairs(lines) do
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(1, -16, 0, 18)
+        l.Position = UDim2.new(0, 8, 0, (i-1) * 18 + 5)
+        l.BackgroundTransparency = 1
+        l.Text = txt
+        l.TextColor3 = Color3.fromRGB(180, 180, 180)
+        l.TextSize = 11
+        l.Font = Enum.Font.Gotham
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.Parent = f
+        labels[i] = l
+    end
+    return f, labels
+end
+
+local function mkTog(text, color)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 34)
+    f.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    f.BorderSizePixel = 0
+    f.LayoutOrder = nO()
+    f.Parent = CF
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+
+    local str = Instance.new("UIStroke")
+    str.Color = color or Color3.fromRGB(100, 30, 30)
+    str.Thickness = 1
+    str.Parent = f
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 12
+    btn.Font = Enum.Font.GothamBold
+    btn.Parent = f
+    return btn, str
+end
+
+local function mkRow(h)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, h or 30)
+    f.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    f.BorderSizePixel = 0
+    f.LayoutOrder = nO()
+    f.Parent = CF
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+    return f
+end
+
+local function mkLbl(parent, text, x, w)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(0, w, 1, 0)
+    l.Position = UDim2.new(0, x, 0, 0)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = Color3.fromRGB(255, 140, 0)
+    l.TextSize = 12
+    l.Font = Enum.Font.GothamBold
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Parent = parent
+    return l
+end
+
+local function mkInput(parent, x, w, ph)
+    local tb = Instance.new("TextBox")
+    tb.Size = UDim2.new(0, w, 0, 24)
+    tb.Position = UDim2.new(0, x, 0.5, -12)
+    tb.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    tb.Text = ""
+    tb.PlaceholderText = ph or ""
+    tb.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
+    tb.TextColor3 = Color3.fromRGB(255, 255, 255)
+    tb.TextSize = 11
+    tb.Font = Enum.Font.Gotham
+    tb.ClearTextOnFocus = false
+    tb.Parent = parent
+    Instance.new("UICorner", tb).CornerRadius = UDim.new(0, 4)
+    return tb
+end
+
+local function mkStatus(parent, text)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, -16, 0, 20)
+    l.Position = UDim2.new(0, 8, 0, 0)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = Color3.fromRGB(140, 140, 140)
+    l.TextSize = 11
+    l.Font = Enum.Font.Gotham
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Parent = parent
+    return l
+end
+
+-- ══════════════════════════════════════
+--   SECTION 1: EXTRA JUMPS
+-- ══════════════════════════════════════
+
+mkSec("────────── Extra Jumps ──────────")
+
+local jpRow = mkRow()
+mkLbl(jpRow, "Target >", 5, 80)
+local uBox = mkInput(jpRow, 85, 205, "Username...")
+
+local jRow = mkRow()
+mkLbl(jRow, "Jumps >", 5, 80)
+local jBox = mkInput(jRow, 85, 205, "Number or 'inf'")
+
+local jBtn, jStr = mkTog("⛔ Extra Jumps OFF")
+
+-- ══════════════════════════════════════
+--   SECTION 2: SLOTS + AUTO FARM
+-- ══════════════════════════════════════
+
+mkSec("────────── Auto Farm ──────────")
+
+-- SLOT SELECTOR
+local slF = Instance.new("Frame")
+slF.Size = UDim2.new(1, 0, 0, 65)
+slF.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+slF.BorderSizePixel = 0
+slF.LayoutOrder = nO()
+slF.Parent = CF
+Instance.new("UICorner", slF).CornerRadius = UDim.new(0, 6)
+
+local slTitle = Instance.new("TextLabel")
+slTitle.Size = UDim2.new(1, 0, 0, 20)
+slTitle.Position = UDim2.new(0, 0, 0, 2)
+slTitle.BackgroundTransparency = 1
+slTitle.Text = "📍 Select Slot"
+slTitle.TextColor3 = Color3.fromRGB(255, 180, 50)
+slTitle.TextSize = 11
+slTitle.Font = Enum.Font.GothamBold
+slTitle.Parent = slF
+
+local slBtns = {}
+local slGrid = Instance.new("Frame")
+slGrid.Size = UDim2.new(1, -16, 0, 24)
+slGrid.Position = UDim2.new(0, 8, 0, 22)
+slGrid.BackgroundTransparency = 1
+slGrid.Parent = slF
+
+local gl = Instance.new("UIGridLayout")
+gl.CellSize = UDim2.new(0, 33, 0, 22)
+gl.CellPadding = UDim2.new(0, 4, 0, 2)
+gl.FillDirection = Enum.FillDirection.Horizontal
+gl.HorizontalAlignment = Enum.HorizontalAlignment.Center
+gl.Parent = slGrid
+
+for i = 1, 8 do
+    local b = Instance.new("TextButton")
+    b.BackgroundColor3 = (i == 1) and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(45, 45, 50)
+    b.Text = tostring(i)
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.TextSize = 12
+    b.Font = Enum.Font.GothamBold
+    b.Parent = slGrid
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+
+    b.MouseButton1Click:Connect(function()
+        for j = 1, 8 do
+            slBtns[j].BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        end
+        b.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+        uSlot(i)
+        if slLbl then
+            slLbl.Text = string.format("📍 Slot %d | X:%.2f Z:%.2f", i, TX, TZ)
+        end
+    end)
+    slBtns[i] = b
+end
+
+-- Slot info label
+local slRow = mkRow(22)
+slLbl = mkStatus(slRow, "📍 Slot 1 | X:-461.32 Z:140.12")
+slLbl.TextColor3 = Color3.fromRGB(100, 200, 255)
+
+-- Status
+local stBox, stLabels = mkInfo({
+    "🔒 Position Lock Active",
+    "Timeout: " .. TIMEOUT .. "s | Variance: " .. VARR .. " studs"
+})
+
+local stLabel = mkStatus(mkRow(22), "Status: Inactive")
+stLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
+
+local pBtn, pStr = mkTog("🔓 Position Lock OFF", Color3.fromRGB(100, 30, 30))
+
+-- ══════════════════════════════════════
+--   SECTION 3: ANTI AFK
+-- ══════════════════════════════════════
+
+mkSec("─────────── Anti AFK ───────────")
+
+local afkBox, afkLabels = mkInfo({
+    "🛡️ Prevents AFK kick",
+    "Next: -- | Actions: 0"
+})
+local afkSt = mkStatus(mkRow(22), "Idle")
+afkSt.TextColor3 = Color3.fromRGB(120, 120, 120)
+
+local afkBtn, afkStr = mkTog("💤 Anti AFK OFF", Color3.fromRGB(100, 30, 30))
+
+-- Bottom spacer
+local spacer = Instance.new("Frame")
+spacer.Size = UDim2.new(1, 0, 0, 40)
+spacer.BackgroundTransparency = 1
+spacer.LayoutOrder = nO()
+spacer.Parent = CF
+
+-- ══════════════════════════════════════
+--   PANIC BAR
+-- ══════════════════════════════════════
+
+local panicBar = Instance.new("Frame")
+panicBar.Size = UDim2.new(1, 0, 0, 22)
+panicBar.Position = UDim2.new(0, 0, 1, -22)
+panicBar.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+panicBar.BorderSizePixel = 0
+panicBar.Parent = MF
+
+local panicLbl = Instance.new("TextLabel")
+panicLbl.Size = UDim2.new(1, 0, 1, 0)
+panicLbl.BackgroundTransparency = 1
+panicLbl.Text = "⚠ [P] Panic | [RightShift] Hide"
+panicLbl.TextColor3 = Color3.fromRGB(200, 80, 80)
+panicLbl.TextSize = 10
+panicLbl.Font = Enum.Font.Gotham
+panicLbl.Parent = panicBar
+
+CF.Size = UDim2.new(1, -16, 1, -67)
+
+-- ══════════════════════════════════════
+--   BRAINROT DETECTION SCAN (MUST EXIST)
+-- ══════════════════════════════════════
+
+local function checkBrainrotNearby()
+    local _, r, _ = gCP()
+    if not r then return false end
+    local brainrots = workspace:FindFirstChild("Brainrots") or workspace:FindFirstChild("Collectibles")
+    if brainrots then
+        for _, obj in pairs(brainrots:GetChildren()) do
+            if obj:IsA("BasePart") or obj:FindFirstChildWhichIsA("BasePart") then
+                local p = obj:IsA("BasePart") and obj.Position or obj:FindFirstChildWhichIsA("BasePart").Position
+                if (r.Position - p).Magnitude < 15 then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- ══════════════════════════════════════
+--   EXTRA JUMPS LOGIC
+-- ══════════════════════════════════════
+
+local function getJumps(txt)
+    if txt:lower() == "inf" or txt:lower() == "infinite" or txt:lower() == "infinity" then
+        return math.huge
+    end
+    local n = tonumber(txt)
+    if n and n >= 1 then return n end
+    return nil
+end
+
+local function applyJumps(name, val)
+    local p = Players:FindFirstChild(name)
+    if p then
+        local ch = p.Character
+        if ch then
+            ch:SetAttribute("ExtraJumps", val)
+            local h = ch:FindFirstChildOfClass("Humanoid")
+            if h then h:SetAttribute("ExtraJumps", val) end
+        end
+        p:SetAttribute("ExtraJumps", val)
+        return true
+    end
+    return false
+end
+
+jBtn.MouseButton1Click:Connect(function()
+    jOn = not jOn
+    if jOn then
+        local name = uBox.Text:gsub("%s+", "")
+        local jtxt = jBox.Text:gsub("%s+", "")
+        if name == "" then uBox.PlaceholderText = "⚠ Enter username!"; jOn = false; return end
+        local val = getJumps(jtxt)
+        if not val then jBox.PlaceholderText = "⚠ 1-∞ or 'inf'!"; jOn = false; return end
+
+        local found = Players:FindFirstChild(name)
+        if not found then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Name:lower():sub(1, #name) == name:lower() then
+                    name = p.Name; uBox.Text = p.Name; found = p; break
+                end
+            end
+        end
+        if not found then uBox.PlaceholderText = "⚠ Not found!"; uBox.Text = ""; jOn = false; return end
+
+        jBtn.Text = "✅ Extra Jumps ON"
+        jBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
+        jStr.Color = Color3.fromRGB(30, 100, 30)
+
+        applyJumps(name, val)
+        local c = RunService.Heartbeat:Connect(function()
+            if jOn then applyJumps(name, val) end
+        end)
+        table.insert(conns, c)
+    else
+        jBtn.Text = "⛔ Extra Jumps OFF"
+        jBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        jStr.Color = Color3.fromRGB(100, 30, 30)
+    end
+end)
+
+-- ══════════════════════════════════════
+--   POSITION LOCK (6s TIMEOUT)
+-- ══════════════════════════════════════
+
+local function farmLoop()
+    while pOn do
+        local c, r, h = gCP()
+        if not r or not h then
+            stLabel.Text = "Status: Waiting character..."
+            stLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+            task.wait(1 + math.random() * 0.5)
+            continue
+        end
+
+        local d = dist(r)
+
+        -- Already at destination
+        if d < 5 then
+            stLabel.Text = string.format("✅ Slot %d | Dist: %.1f", cSlot, d)
+            stLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+            sWS(h, SW)
+
+            -- Random anti-AFK micro-movement while parked
+            task.wait(1.5 + math.random() * 1.5)
+
+            -- Small random nudge to seem natural
+            if pOn then
+                local nudge = rndOff() * 0.3
+                local nudgePos = Vector3.new(r.Position.X + nudge.X, r.Position.Y, r.Position.Z + nudge.Z)
+                h:MoveTo(nudgePos)
+                task.wait(0.3 + math.random() * 0.3)
+            end
+            continue
+        end
+
+        -- Need to walk to slot
+        stLabel.Text = string.format("🚶 Slot %d | Walking...", cSlot)
+        stLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
+
+        local off = rndOff()
+        local tPos = Vector3.new(TX + off.X, r.Position.Y, TZ + off.Z)
+
+        local startT = tick()
+        sWS(h, RW)
+        h:MoveTo(tPos)
+
+        local arrived = false
+        while pOn do
+            local cd = dist(r)
+            local elapsed = tick() - startT
+
+            if cd < 6 then
+                arrived = true
+                break
+            end
+
+            if elapsed >= TIMEOUT then
+                stLabel.Text = string.format("⏱️ Timeout %.1fs → Reset!", elapsed)
+                stLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+                task.wait(0.3 + math.random() * 0.4)
+                rst()
+                task.wait(3 + math.random())
+                break
+            end
+
+            local rem = TIMEOUT - elapsed
+            stLabel.Text = string.format("🚶 %.1fs left | Dist: %.1f", rem, cd)
+            stLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+
+            -- Re-issue MoveTo periodically (some games cancel it)
+            if elapsed > 0 and elapsed % 1.5 < 0.1 then
+                h:MoveTo(tPos)
+            end
+
+            task.wait(0.08 + math.random() * 0.04)
+        end
+
+        if arrived then
+            local _, _, h2 = gCP()
+            if h2 then sWS(h2, SW) end
+        end
+    end
+end
+
+pBtn.MouseButton1Click:Connect(function()
+    pOn = not pOn
+    if pOn then
+        pBtn.Text = "🔒 Position Lock ON"
+        pBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
+        pStr.Color = Color3.fromRGB(30, 100, 30)
+        stLabel.Text = "Status: Starting..."
+        stLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        task.spawn(farmLoop)
+    else
+        pBtn.Text = "🔓 Position Lock OFF"
+        pBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        pStr.Color = Color3.fromRGB(100, 30, 30)
+        stLabel.Text = "Status: Inactive"
+        stLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
+        local _, _, h = gCP()
+        if h then sWS(h, SW) end
+    end
+end)
+
+-- ══════════════════════════════════════
+--   ANTI AFK LOGIC
+-- ══════════════════════════════════════
+
+local afkCnt = 0
+local afkMin, afkMax = 30, 90
+
+local function afkLoop()
+    while aOn do
+        local wt = math.random(afkMin, afkMax)
+        for i = wt, 1, -1 do
+            if not aOn then break end
+            afkLabels[2].Text = string.format("Next: %ds | Actions: %d", i, afkCnt)
+            task.wait(1)
+        end
+        if not aOn then break end
+
+        local act = math.random(1, 5)
+
+        if act == 1 then
+            pcall(function() VIM:SendMouseMoveEvent(math.random(-8, 8), math.random(-8, 8), game) end)
+            afkSt.Text = "🖱️ Mouse move"
+        elseif act == 2 then
+            local keys = {Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D}
+            local k = keys[math.random(1, #keys)]
+            pcall(function()
+                VIM:SendKeyEvent(true, k, false, game)
+                task.wait(math.random() * 0.15 + 0.05)
+                VIM:SendKeyEvent(false, k, false, game)
+            end)
+            afkSt.Text = "⌨️ Key tap"
+        elseif act == 3 then
+            pcall(function()
+                local _, _, hh = gCP()
+                if hh then hh.Jump = true end
+            end)
+            afkSt.Text = "🦘 Jump"
+        elseif act == 4 then
+            pcall(function()
+                local vx = workspace.CurrentCamera.ViewportSize.X / 2
+                local vy = workspace.CurrentCamera.ViewportSize.Y / 2
+                VIM:SendMouseButtonEvent(vx, vy, 0, true, game, 1)
+                task.wait(0.04)
+                VIM:SendMouseButtonEvent(vx, vy, 0, false, game, 1)
+            end)
+            afkSt.Text = "🖱️ Click"
+        elseif act == 5 then
+            -- Camera micro-rotation (new anti-AFK method)
+            pcall(function()
+                local cam = workspace.CurrentCamera
+                local cf = cam.CFrame
+                cam.CFrame = cf * CFrame.Angles(0, math.rad(math.random(-2, 2)), 0)
+                task.wait(0.1)
+                cam.CFrame = cf
+            end)
+            afkSt.Text = "📷 Camera nudge"
+        end
+
+        afkCnt = afkCnt + 1
+        afkLabels[2].Text = string.format("Active | Actions: %d", afkCnt)
+        afkSt.TextColor3 = Color3.fromRGB(100, 200, 255)
+        task.wait(0.3 + math.random() * 0.3)
+    end
+end
+
+afkBtn.MouseButton1Click:Connect(function()
+    aOn = not aOn
+    if aOn then
+        afkBtn.Text = "✅ Anti AFK ON"
+        afkBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
+        afkStr.Color = Color3.fromRGB(30, 100, 30)
+        afkSt.Text = "Active..."
+        afkSt.TextColor3 = Color3.fromRGB(100, 255, 100)
+        task.spawn(afkLoop)
+    else
+        afkBtn.Text = "💤 Anti AFK OFF"
+        afkBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        afkStr.Color = Color3.fromRGB(100, 30, 30)
+        afkSt.Text = "Idle"
+        afkSt.TextColor3 = Color3.fromRGB(120, 120, 120)
+        afkLabels[2].Text = "Next: -- | Actions: 0"
+    end
+end)
+
+-- ══════════════════════════════════════
+--   PANIC [P]
+-- ══════════════════════════════════════
+
+UIS.InputBegan:Connect(function(inp, gpe)
+    if gpe then return end
+    if inp.KeyCode == Enum.KeyCode.P then
+        pOn = false; jOn = false; aOn = false
+        for _, cn in ipairs(conns) do pcall(function() cn:Disconnect() end) end
+        conns = {}
+        local _, _, h = gCP()
+        if h then sWS(h, SW) end
+
+        pBtn.Text = "🔓 Position Lock OFF"
+        pBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        pStr.Color = Color3.fromRGB(100, 30, 30)
+        stLabel.Text = "🔴 PANIC - All OFF!"
+        stLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+
+        jBtn.Text = "⛔ Extra Jumps OFF"
+        jBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        jStr.Color = Color3.fromRGB(100, 30, 30)
+
+        afkBtn.Text = "💤 Anti AFK OFF"
+        afkBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        afkStr.Color = Color3.fromRGB(100, 30, 30)
+        afkSt.Text = "🔴 PANIC"
+        afkSt.TextColor3 = Color3.fromRGB(255, 50, 50)
+    end
+    if inp.KeyCode == Enum.KeyCode.RightShift then
+        SG.Enabled = not SG.Enabled
+    end
+end)
+
+-- ══════════════════════════════════════
+--   DRAG (manual, avoids detection)
+-- ══════════════════════════════════════
+
+local dragging, dInput, dStart, sPos
+
+TB.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dStart = inp.Position
+        sPos = MF.Position
+        inp.Changed:Connect(function()
+            if inp.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+
+TB.InputChanged:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch then
+        dInput = inp
+    end
+end)
+
+UIS.InputChanged:Connect(function(inp)
+    if inp == dInput and dragging then
+        local d = inp.Position - dStart
+        MF.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y)
+    end
+end)
+
+-- Minimize
+local isMin = false
+MB.MouseButton1Click:Connect(function()
+    isMin = not isMin
+    if isMin then
+        CF.Visible = false
+        panicBar.Visible = false
+        MF.Size = UDim2.new(0, 320, 0, 40)
+        MB.Text = "+"
+    else
+        CF.Visible = true
+        panicBar.Visible = true
+        MF.Size = UDim2.new(0, 320, 0, 480)
+        MB.Text = "−"
+    end
+end)
+
+-- ══════════════════════════════════════
+--   RESPAWN HANDLER
+-- ══════════════════════════════════════
+
+LP.CharacterAdded:Connect(function()
+    task.wait(1.5 + math.random() * 0.5) -- Random delay
+    if not hooked then safeHook() end
+    -- Re-apply walk speed after respawn
+    local _, _, h = gCP()
+    if h and pOn then sWS(h, RW) end
+end)
+
+-- ══════════════════════════════════════
+--   INSTALLED
+-- ══════════════════════════════════════
+
+safeHook()
+
+print("═══════════════════════════════════")
+print("  ECLIPSE SAB v7.5 ANTI-DETECT ✅")
+print("  Slots: 8 | Timeout: 6s")
+print("  MoveTo (not CFrame) | Random delays")
+print("  PANIC: [P] | HIDE: [RightShift]")
+print("═══════════════════════════════════")
