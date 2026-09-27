@@ -1,0 +1,598 @@
+-- ☾ ECLIPSE FINDER DEX
+-- Buscador de código/instancias en el juego
+-- Busca cualquier string en: nombres, propiedades, scripts, RemoteEvents, etc.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
+local StarterGui = game:GetService("StarterGui")
+local StarterPlayer = game:GetService("StarterPlayer")
+local Workspace = game:GetService("Workspace")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Variables
+local searching = false
+local results = {}
+
+-- ========================
+-- CREAR UI
+-- ========================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "EclipseFinderDEX"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = playerGui
+
+-- Main Frame
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, 420, 0, 520)
+main.Position = UDim2.new(0.5, -210, 0.5, -260)
+main.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+main.BorderSizePixel = 0
+main.Active = true
+main.Draggable = true
+main.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = main
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(255, 100, 0)
+mainStroke.Thickness = 2
+mainStroke.Parent = main
+
+-- Título
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 40)
+titleBar.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = main
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = titleBar
+
+local titleFix = Instance.new("Frame")
+titleFix.Size = UDim2.new(1, 0, 0, 15)
+titleFix.Position = UDim2.new(0, 0, 1, -15)
+titleFix.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+titleFix.BorderSizePixel = 0
+titleFix.Parent = titleBar
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -50, 1, 0)
+title.Position = UDim2.new(0, 15, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "☽ ECLIPSE FINDER DEX"
+title.TextColor3 = Color3.fromRGB(20, 20, 30)
+title.TextSize = 16
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = titleBar
+
+-- Botón Minimizar
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.new(0, 30, 0, 30)
+minBtn.Position = UDim2.new(1, -70, 0, 5)
+minBtn.BackgroundColor3 = Color3.fromRGB(200, 160, 0)
+minBtn.Text = "—"
+minBtn.TextColor3 = Color3.fromRGB(20, 20, 30)
+minBtn.TextSize = 16
+minBtn.Font = Enum.Font.GothamBold
+minBtn.Parent = titleBar
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 6)
+minCorner.Parent = minBtn
+
+-- Botón Cerrar
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.TextSize = 14
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = titleBar
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeBtn
+
+-- Label Buscar
+local searchLabel = Instance.new("TextLabel")
+searchLabel.Size = UDim2.new(1, -20, 0, 18)
+searchLabel.Position = UDim2.new(0, 10, 0, 48)
+searchLabel.BackgroundTransparency = 1
+searchLabel.Text = "🔍 Buscar en el código del juego:"
+searchLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+searchLabel.TextSize = 12
+searchLabel.Font = Enum.Font.Gotham
+searchLabel.TextXAlignment = Enum.TextXAlignment.Left
+searchLabel.Parent = main
+
+-- Input de búsqueda
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, -90, 0, 35)
+searchBox.Position = UDim2.new(0, 10, 0, 68)
+searchBox.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+searchBox.Text = ""
+searchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+searchBox.TextSize = 14
+searchBox.Font = Enum.Font.Gotham
+searchBox.PlaceholderText = "Escribe: XP, Money, Remote, etc."
+searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+searchBox.ClearTextOnFocus = true
+searchBox.Parent = main
+
+local searchCorner = Instance.new("UICorner")
+searchCorner.CornerRadius = UDim.new(0, 6)
+searchCorner.Parent = searchBox
+
+-- Botón BUSCAR
+local searchBtn = Instance.new("TextButton")
+searchBtn.Size = UDim2.new(0, 70, 0, 35)
+searchBtn.Position = UDim2.new(1, -80, 0, 68)
+searchBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+searchBtn.Text = "BUSCAR"
+searchBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+searchBtn.TextSize = 13
+searchBtn.Font = Enum.Font.GothamBold
+searchBtn.Parent = main
+
+local searchBtnCorner = Instance.new("UICorner")
+searchBtnCorner.CornerRadius = UDim.new(0, 6)
+searchBtnCorner.Parent = searchBtn
+
+-- Filtros de búsqueda
+local filterFrame = Instance.new("Frame")
+filterFrame.Size = UDim2.new(1, -20, 0, 25)
+filterFrame.Position = UDim2.new(0, 10, 0, 110)
+filterFrame.BackgroundTransparency = 1
+filterFrame.Parent = main
+
+local function createFilterToggle(parent, text, posX, default)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 90, 0, 22)
+    btn.Position = UDim2.new(0, posX, 0, 0)
+    btn.BackgroundColor3 = default and Color3.fromRGB(255, 100, 0) or Color3.fromRGB(40, 40, 55)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 10
+    btn.Font = Enum.Font.GothamBold
+    btn.Parent = parent
+    
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 4)
+    c.Parent = btn
+    
+    local active = default
+    
+    btn.MouseButton1Click:Connect(function()
+        active = not active
+        btn.BackgroundColor3 = active and Color3.fromRGB(255, 100, 0) or Color3.fromRGB(40, 40, 55)
+    end)
+    
+    return function() return active end
+end
+
+local getName = createFilterToggle(filterFrame, "Nombres", 0, true)
+local getProperties = createFilterToggle(filterFrame, "Propiedades", 95, true)
+local getScripts = createFilterToggle(filterFrame, "Scripts", 190, false)
+local getRemotes = createFilterToggle(filterFrame, "Remotes", 285, true)
+
+-- Estado
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -20, 0, 18)
+statusLabel.Position = UDim2.new(0, 10, 0, 140)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Listo para buscar"
+statusLabel.TextColor3 = Color3.fromRGB(255, 100, 0)
+statusLabel.TextSize = 11
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Parent = main
+
+-- Contador de resultados
+local countLabel = Instance.new("TextLabel")
+countLabel.Size = UDim2.new(0, 100, 0, 18)
+countLabel.Position = UDim2.new(1, -110, 0, 140)
+countLabel.BackgroundTransparency = 1
+countLabel.Text = "0 resultados"
+countLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+countLabel.TextSize = 11
+countLabel.Font = Enum.Font.Gotham
+countLabel.TextXAlignment = Enum.TextXAlignment.Right
+countLabel.Parent = main
+
+-- Scrolling Frame para resultados
+local resultFrame = Instance.new("ScrollingFrame")
+resultFrame.Size = UDim2.new(1, -20, 1, -195)
+resultFrame.Position = UDim2.new(0, 10, 0, 163)
+resultFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+resultFrame.BorderSizePixel = 0
+resultFrame.ScrollBarThickness = 6
+resultFrame.ScrollBarImageColor3 = Color3.fromRGB(255, 100, 0)
+resultFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+resultFrame.Parent = main
+
+local resultCorner = Instance.new("UICorner")
+resultCorner.CornerRadius = UDim.new(0, 6)
+resultCorner.Parent = resultFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 3)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = resultFrame
+
+local listPadding = Instance.new("UIPadding")
+listPadding.PaddingTop = UDim.new(0, 5)
+listPadding.PaddingLeft = UDim.new(0, 5)
+listPadding.PaddingRight = UDim.new(0, 5)
+listPadding.Parent = resultFrame
+
+-- ========================
+-- FUNCIONES DE BÚSQUEDA
+-- ========================
+
+local function getFullPath(instance)
+    local path = instance.Name
+    local current = instance.Parent
+    while current and current ~= game do
+        path = current.Name .. "." .. path
+        current = current.Parent
+    end
+    return path
+end
+
+local function getServiceName(instance)
+    local current = instance
+    while current.Parent and current.Parent ~= game do
+        current = current.Parent
+    end
+    return current.Name or "Unknown"
+end
+
+local function getServiceColor(serviceName)
+    local colors = {
+        Workspace = Color3.fromRGB(100, 200, 100),
+        ReplicatedStorage = Color3.fromRGB(100, 150, 255),
+        ServerStorage = Color3.fromRGB(255, 150, 100),
+        StarterGui = Color3.fromRGB(200, 100, 255),
+        StarterPlayer = Color3.fromRGB(255, 200, 100),
+        Players = Color3.fromRGB(255, 120, 120),
+        Lighting = Color3.fromRGB(255, 255, 150),
+        SoundService = Color3.fromRGB(150, 255, 255),
+        ["Server Script Service"] = Color3.fromRGB(255, 180, 120),
+    }
+    return colors[serviceName] or Color3.fromRGB(200, 200, 200)
+end
+
+local function addResult(resultType, path, detail, service)
+    local color = getServiceColor(service)
+    
+    local item = Instance.new("Frame")
+    item.Size = UDim2.new(1, -10, 0, 55)
+    item.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    item.BorderSizePixel = 0
+    item.Parent = resultFrame
+    
+    local itemCorner = Instance.new("UICorner")
+    itemCorner.CornerRadius = UDim.new(0, 5)
+    itemCorner.Parent = item
+    
+    -- Color stripe
+    local stripe = Instance.new("Frame")
+    stripe.Size = UDim2.new(0, 4, 1, -10)
+    stripe.Position = UDim2.new(0, 2, 0, 5)
+    stripe.BackgroundColor3 = color
+    stripe.BorderSizePixel = 0
+    stripe.Parent = item
+    
+    local stripeCorner = Instance.new("UICorner")
+    stripeCorner.CornerRadius = UDim.new(0, 2)
+    stripeCorner.Parent = stripe
+    
+    -- Tipo
+    local typeLabel = Instance.new("TextLabel")
+    typeLabel.Size = UDim2.new(0, 80, 0, 16)
+    typeLabel.Position = UDim2.new(0, 12, 0, 4)
+    typeLabel.BackgroundTransparency = 1
+    typeLabel.Text = resultType
+    typeLabel.TextColor3 = color
+    typeLabel.TextSize = 10
+    typeLabel.Font = Enum.Font.GothamBold
+    typeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    typeLabel.Parent = item
+    
+    -- Path
+    local pathLabel = Instance.new("TextLabel")
+    pathLabel.Size = UDim2.new(1, -20, 0, 16)
+    pathLabel.Position = UDim2.new(0, 12, 0, 20)
+    pathLabel.BackgroundTransparency = 1
+    pathLabel.Text = path
+    pathLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    pathLabel.TextSize = 11
+    pathLabel.Font = Enum.Font.Code
+    pathLabel.TextXAlignment = Enum.TextXAlignment.Left
+    pathLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    pathLabel.Parent = item
+    
+    -- Detalle
+    local detailLabel = Instance.new("TextLabel")
+    detailLabel.Size = UDim2.new(1, -20, 0, 14)
+    detailLabel.Position = UDim2.new(0, 12, 0, 37)
+    detailLabel.BackgroundTransparency = 1
+    detailLabel.Text = detail
+    detailLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    detailLabel.TextSize = 10
+    detailLabel.Font = Enum.Font.Gotham
+    detailLabel.TextXAlignment = Enum.TextXAlignment.Left
+    detailLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    detailLabel.Parent = item
+end
+
+local function clearResults()
+    for _, child in pairs(resultFrame:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            child:Destroy()
+        end
+    end
+    results = {}
+end
+
+local function updateCanvas()
+    resultFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+end
+
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+
+local function searchInstance(instance, query, depth)
+    if depth > 15 then return end
+    if searching == false then return end
+    
+    local found = false
+    
+    -- Buscar en nombre
+    if getName() then
+        if instance.Name:lower():find(query:lower()) then
+            local service = getServiceName(instance)
+            addResult(
+                "NOMBRE",
+                getFullPath(instance),
+                "Class: " .. instance.ClassName,
+                service
+            )
+            table.insert(results, instance)
+            found = true
+        end
+    end
+    
+    -- Buscar en propiedades de valor
+    if getProperties() and not found then
+        if instance:IsA("ValueBase") then
+            local val = tostring(instance.Value)
+            if val:lower():find(query:lower()) then
+                local service = getServiceName(instance)
+                addResult(
+                    "VALOR",
+                    getFullPath(instance),
+                    instance.ClassName .. " = " .. val,
+                    service
+                )
+                table.insert(results, instance)
+            end
+        end
+        
+        -- Buscar en propiedades específicas
+        pcall(function()
+            if instance:IsA("TextLabel") or instance:IsA("TextButton") then
+                if instance.Text:lower():find(query:lower()) then
+                    local service = getServiceName(instance)
+                    addResult(
+                        "TEXTO",
+                        getFullPath(instance),
+                        "Text: \"" .. instance.Text:sub(1, 50) .. "\"",
+                        service
+                    )
+                    table.insert(results, instance)
+                end
+            end
+        end)
+        
+        pcall(function()
+            if instance:IsA("Model") or instance:IsA("BasePart") then
+                for _, tag in pairs(instance:GetTags()) do
+                    if tag:lower():find(query:lower()) then
+                        local service = getServiceName(instance)
+                        addResult(
+                            "TAG",
+                            getFullPath(instance),
+                            "Tag: " .. tag,
+                            service
+                        )
+                        table.insert(results, instance)
+                    end
+                end
+            end
+        end)
+    end
+    
+    -- Buscar en Remotes
+    if getRemotes() then
+        if instance:IsA("RemoteEvent") or instance:IsA("RemoteFunction") or instance:IsA("BindableEvent") or instance:IsA("BindableFunction") then
+            if instance.Name:lower():find(query:lower()) then
+                local service = getServiceName(instance)
+                addResult(
+                    "REMOTE",
+                    getFullPath(instance),
+                    "Class: " .. instance.ClassName,
+                    service
+                )
+                table.insert(results, instance)
+            end
+        end
+    end
+    
+    -- Buscar en scripts (nombre y source si está disponible)
+    if getScripts() then
+        if instance:IsA("LocalScript") or instance:IsA("ModuleScript") or instance:IsA("Script") then
+            -- Buscar en nombre ya cubierto arriba
+            
+            -- Intentar buscar en Source (solo funciona con exploits que soportan decompile)
+            pcall(function()
+                local source = instance.Source or ""
+                if source:lower():find(query:lower()) then
+                    local service = getServiceName(instance)
+                    local startPos = source:lower():find(query:lower())
+                    local snippet = source:sub(math.max(1, startPos - 30), startPos + #query + 30)
+                    snippet = snippet:gsub("\n", " "):gsub("\r", ""):gsub("\t", " ")
+                    
+                    addResult(
+                        "SCRIPT",
+                        getFullPath(instance),
+                        snippet,
+                        service
+                    )
+                    table.insert(results, instance)
+                end
+            end)
+        end
+    end
+    
+    -- Buscar hijos recursivamente
+    for _, child in pairs(instance:GetChildren()) do
+        if searching then
+            searchInstance(child, query, depth + 1)
+        end
+    end
+end
+
+-- ========================
+-- EJECUTAR BÚSQUEDA
+-- ========================
+local function performSearch(query)
+    if query == "" or #query < 1 then
+        statusLabel.Text = "Escribe algo para buscar"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+        return
+    end
+    
+    searching = true
+    clearResults()
+    
+    statusLabel.Text = "Buscando: \"" .. query .. "\" ..."
+    statusLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+    searchBtn.Text = "PARAR"
+    searchBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    
+    local services = {
+        Workspace,
+        ReplicatedStorage,
+        StarterGui,
+        StarterPlayer,
+        Players,
+        game:GetService("Lighting"),
+        game:GetService("SoundService"),
+    }
+    
+    -- Intentar acceder a ServerStorage (solo con exploits)
+    pcall(function()
+        table.insert(services, ServerStorage)
+    end)
+    
+    pcall(function()
+        table.insert(services, game:GetService("ServerScriptService"))
+    end)
+    
+    -- Buscar en cada servicio
+    for _, service in pairs(services) do
+        if searching then
+            statusLabel.Text = "Buscando en: " .. service.Name .. "..."
+            searchInstance(service, query, 0)
+            task.wait(0.05) -- Evitar freeze
+        end
+    end
+    
+    -- Buscar en PlayerGui
+    if searching then
+        statusLabel.Text = "Buscando en PlayerGui..."
+        searchInstance(playerGui, query, 0)
+    end
+    
+    countLabel.Text = #results .. " resultados"
+    
+    if #results == 0 then
+        statusLabel.Text = "No se encontró: \"" .. query .. "\""
+        statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+    else
+        statusLabel.Text = "✅ Encontrados: " .. #results .. " para \"" .. query .. "\""
+        statusLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
+    end
+    
+    searching = false
+    searchBtn.Text = "BUSCAR"
+    searchBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+end
+
+-- ========================
+-- CONEXIONES
+-- ========================
+searchBtn.MouseButton1Click:Connect(function()
+    if searching then
+        searching = false
+        searchBtn.Text = "BUSCAR"
+        searchBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+        statusLabel.Text = "Búsqueda cancelada"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 150, 0)
+    else
+        performSearch(searchBox.Text)
+    end
+end)
+
+searchBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        performSearch(searchBox.Text)
+    end
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    searching = false
+    screenGui:Destroy()
+end)
+
+-- Minimizar
+local minimized = false
+local originalSize = main.Size
+
+minBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        resultFrame.Visible = false
+        searchBox.Visible = false
+        searchBtn.Visible = false
+        searchLabel.Visible = false
+        filterFrame.Visible = false
+        statusLabel.Visible = false
+        countLabel.Visible = false
+        main.Size = UDim2.new(0, 420, 0, 50)
+        minBtn.Text = "+"
+    else
+        resultFrame.Visible = true
+        searchBox.Visible = true
+        searchBtn.Visible = true
+        searchLabel.Visible = true
+        filterFrame.Visible = true
+        statusLabel.Visible = true
+        countLabel.Visible = true
+        main.Size = originalSize
+        minBtn.Text = "—"
+    end
+end)
+
+print("☽ Eclipse Finder DEX cargado correctamente")
+print("Busca cualquier string en el juego: XP, Money, Remote, etc.")
