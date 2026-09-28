@@ -1,0 +1,446 @@
+-- Fly Bypass v1 - Vuelo Libre con GUI
+-- Noclip estilo Infinite Yield Fe v6.4.2
+
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+local Humanoid = Character:WaitForChild("Humanoid")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+-- ══════════════════════════════════════════════════
+-- VARIABLES DE VUELO
+-- ══════════════════════════════════════════════════
+local flying = false
+local flySpeed = 100
+local flyConnection = nil
+local noclipConnection = nil
+local noclipEnabled = true
+
+local BodyVelocity = nil
+local BodyGyro = nil
+
+local keys = {
+W = false,
+A = false,
+S = false,
+D = false,
+Space = false,
+LeftShift = false
+}
+
+-- ══════════════════════════════════════════════════
+-- ACTUALIZAR CHARACTER AL RESPAWNEAR
+-- ══════════════════════════════════════════════════
+Player.CharacterAdded:Connect(function(char)
+Character = char
+HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
+Humanoid = char:WaitForChild("Humanoid")
+
+if flying then
+wait(0.5)
+startFly()
+end
+if noclipEnabled then
+wait(0.5)
+enableNoclip()
+end
+end)
+
+-- ══════════════════════════════════════════════════
+-- NOCLIP
+-- ══════════════════════════════════════════════════
+local function enableNoclip()
+if noclipConnection then noclipConnection:Disconnect() end
+noclipEnabled = true
+noclipConnection = RunService.Stepped:Connect(function()
+if Player.Character then
+for _, part in pairs(Player.Character:GetDescendants()) do
+if part:IsA("BasePart") then
+part.CanCollide = false
+end
+end
+end
+end)
+end
+
+local function disableNoclip()
+if noclipConnection then
+noclipConnection:Disconnect()
+noclipConnection = nil
+end
+noclipEnabled = false
+end
+
+-- ══════════════════════════════════════════════════
+-- DETECCIÓN DE TECLAS
+-- ══════════════════════════════════════════════════
+UserInputService.InputBegan:Connect(function(input, processed)
+if processed then return end
+if input.KeyCode == Enum.KeyCode.W then keys.W = true end
+if input.KeyCode == Enum.KeyCode.A then keys.A = true end
+if input.KeyCode == Enum.KeyCode.S then keys.S = true end
+if input.KeyCode == Enum.KeyCode.D then keys.D = true end
+if input.KeyCode == Enum.KeyCode.Space then keys.Space = true end
+if input.KeyCode == Enum.KeyCode.LeftShift then keys.LeftShift = true end
+end)
+
+UserInputService.InputEnded:Connect(function(input, processed)
+if input.KeyCode == Enum.KeyCode.W then keys.W = false end
+if input.KeyCode == Enum.KeyCode.A then keys.A = false end
+if input.KeyCode == Enum.KeyCode.S then keys.S = false end
+if input.KeyCode == Enum.KeyCode.D then keys.D = false end
+if input.KeyCode == Enum.KeyCode.Space then keys.Space = false end
+if input.KeyCode == Enum.KeyCode.LeftShift then keys.LeftShift = false end
+end)
+
+-- ══════════════════════════════════════════════════
+-- SISTEMA DE VUELO
+-- ══════════════════════════════════════════════════
+function startFly()
+-- Refrescar character
+Character = Player.Character or Player.CharacterAdded:Wait()
+HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+Humanoid = Character:WaitForChild("Humanoid")
+
+-- Crear BodyVelocity
+BodyVelocity = Instance.new("BodyVelocity")
+BodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+BodyVelocity.Velocity = Vector3.new(0, 0, 0)
+BodyVelocity.P = 15000
+BodyVelocity.Parent = HumanoidRootPart
+
+-- Crear BodyGyro
+BodyGyro = Instance.new("BodyGyro")
+BodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+BodyGyro.D = 200
+BodyGyro.P = 25000
+BodyGyro.Parent = HumanoidRootPart
+
+-- Activar noclip
+enableNoclip()
+
+-- Desactivar gravedad del Humanoid
+Humanoid.PlatformStand = true
+
+-- Loop de vuelo
+flyConnection = RunService.Heartbeat:Connect(function()
+if not HumanoidRootPart or not HumanoidRootPart.Parent then return end
+
+local camera = workspace.CurrentCamera
+local camCF = camera.CFrame
+
+local direction = Vector3.new(0, 0, 0)
+
+-- WASD
+if keys.W then
+direction = direction + camCF.LookVector
+end
+if keys.S then
+direction = direction - camCF.LookVector
+end
+if keys.A then
+direction = direction - camCF.RightVector
+end
+if keys.D then
+direction = direction + camCF.RightVector
+end
+
+-- Subir / Bajar
+if keys.Space then
+direction = direction + Vector3.new(0, 1, 0)
+end
+if keys.LeftShift then
+direction = direction - Vector3.new(0, 1, 0)
+end
+
+-- Aplicar velocidad
+if direction.Magnitude > 0 then
+BodyVelocity.Velocity = direction.Unit * flySpeed
+else
+BodyVelocity.Velocity = Vector3.new(0, 0, 0)
+end
+
+-- Orientar hacia donde mira la cámara
+BodyGyro.CFrame = camCF
+end)
+
+flying = true
+end
+
+local function stopFly()
+flying = false
+
+if flyConnection then
+flyConnection:Disconnect()
+flyConnection = nil
+end
+
+if BodyVelocity then
+BodyVelocity:Destroy()
+BodyVelocity = nil
+end
+
+if BodyGyro then
+BodyGyro:Destroy()
+BodyGyro = nil
+end
+
+if Humanoid then
+Humanoid.PlatformStand = false
+end
+
+disableNoclip()
+end
+
+-- ══════════════════════════════════════════════════
+-- GUI
+-- ══════════════════════════════════════════════════
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FlyBypassGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = Player:WaitForChild("PlayerGui")
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 300, 0, 350)
+MainFrame.Position = UDim2.new(0.02, 0, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+local mainStroke = Instance.new("UIStroke", MainFrame)
+mainStroke.Color = Color3.fromRGB(255, 50, 50)
+mainStroke.Thickness = 2
+
+-- Título
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+Title.Text = "FLY BYPASS v1"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 18
+Title.Font = Enum.Font.GothamBold
+Title.Parent = MainFrame
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 12)
+
+-- Estado de vuelo
+local FlyStatus = Instance.new("TextLabel")
+FlyStatus.Size = UDim2.new(0.9, 0, 0, 35)
+FlyStatus.Position = UDim2.new(0.05, 0, 0, 50)
+FlyStatus.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+FlyStatus.Text = "🔴 VUELO: OFF"
+FlyStatus.TextColor3 = Color3.fromRGB(255, 80, 80)
+FlyStatus.TextSize = 16
+FlyStatus.Font = Enum.Font.GothamBold
+FlyStatus.Parent = MainFrame
+Instance.new("UICorner", FlyStatus).CornerRadius = UDim.new(0, 8)
+
+-- Botón ON/OFF
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0.9, 0, 0, 45)
+ToggleButton.Position = UDim2.new(0.05, 0, 0, 95)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+ToggleButton.Text = "Turn On Fly"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 16
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.Parent = MainFrame
+Instance.new("UICorner", ToggleButton).CornerRadius = UDim.new(0, 8)
+
+-- Velocidad
+local SpeedFrame = Instance.new("Frame")
+SpeedFrame.Size = UDim2.new(0.9, 0, 0, 130)
+SpeedFrame.Position = UDim2.new(0.05, 0, 0, 150)
+SpeedFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+SpeedFrame.Parent = MainFrame
+Instance.new("UICorner", SpeedFrame).CornerRadius = UDim.new(0, 8)
+
+local SpeedTitle = Instance.new("TextLabel")
+SpeedTitle.Size = UDim2.new(1, 0, 0, 22)
+SpeedTitle.Position = UDim2.new(0, 0, 0, 5)
+SpeedTitle.BackgroundTransparency = 1
+SpeedTitle.Text = "Fly Speed"
+SpeedTitle.TextColor3 = Color3.fromRGB(200, 200, 220)
+SpeedTitle.TextSize = 14
+SpeedTitle.Font = Enum.Font.GothamBold
+SpeedTitle.Parent = SpeedFrame
+
+-- Slider visual (barras)
+local SpeedDisplay = Instance.new("TextLabel")
+SpeedDisplay.Size = UDim2.new(0.9, 0, 0, 28)
+SpeedDisplay.Position = UDim2.new(0.05, 0, 0, 30)
+SpeedDisplay.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+SpeedDisplay.Text = "Velocidad: 100"
+SpeedDisplay.TextColor3 = Color3.fromRGB(0, 255, 200)
+SpeedDisplay.TextSize = 14
+SpeedDisplay.Font = Enum.Font.GothamBold
+SpeedDisplay.Parent = SpeedFrame
+Instance.new("UICorner", SpeedDisplay).CornerRadius = UDim.new(0, 6)
+
+-- Botones de velocidad rápida
+local SpeedRow1 = Instance.new("Frame")
+SpeedRow1.Size = UDim2.new(0.95, 0, 0, 28)
+SpeedRow1.Position = UDim2.new(0.025, 0, 0, 65)
+SpeedRow1.BackgroundTransparency = 1
+SpeedRow1.Parent = SpeedFrame
+
+local speeds = {
+{text = "50", value = 50},
+{text = "100", value = 100},
+{text = "200", value = 200},
+{text = "500", value = 500}
+}
+
+for i, sp in ipairs(speeds) do
+local btn = Instance.new("TextButton")
+btn.Size = UDim2.new(0.23, 0, 1, 0)
+btn.Position = UDim2.new((i - 1) * 0.25, 0, 0, 0)
+btn.BackgroundColor3 = Color3.fromRGB(60, 60, 90)
+btn.Text = sp.text
+btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+btn.TextSize = 13
+btn.Font = Enum.Font.GothamBold
+btn.Parent = SpeedRow1
+Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+btn.MouseButton1Click:Connect(function()
+flySpeed = sp.value
+SpeedDisplay.Text = "Velocidad: " .. flySpeed
+end)
+end
+
+local SpeedRow2 = Instance.new("Frame")
+SpeedRow2.Size = UDim2.new(0.95, 0, 0, 28)
+SpeedRow2.Position = UDim2.new(0.025, 0, 0, 96)
+SpeedRow2.BackgroundTransparency = 1
+SpeedRow2.Parent = SpeedFrame
+
+local speeds2 = {
+{text = "1000", value = 1000},
+{text = "2500", value = 2500},
+{text = "5000", value = 5000},
+{text = "9999", value = 9999}
+}
+
+for i, sp in ipairs(speeds2) do
+local btn = Instance.new("TextButton")
+btn.Size = UDim2.new(0.23, 0, 1, 0)
+btn.Position = UDim2.new((i - 1) * 0.25, 0, 0, 0)
+btn.BackgroundColor3 = Color3.fromRGB(80, 40, 40)
+btn.Text = sp.text
+btn.TextColor3 = Color3.fromRGB(255, 200, 100)
+btn.TextSize = 13
+btn.Font = Enum.Font.GothamBold
+btn.Parent = SpeedRow2
+Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+btn.MouseButton1Click:Connect(function()
+flySpeed = sp.value
+SpeedDisplay.Text = "Velocidad: " .. flySpeed
+end)
+end
+
+-- Controles
+local ControlsFrame = Instance.new("Frame")
+ControlsFrame.Size = UDim2.new(0.9, 0, 0, 55)
+ControlsFrame.Position = UDim2.new(0.05, 0, 0, 290)
+ControlsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+ControlsFrame.Parent = MainFrame
+Instance.new("UICorner", ControlsFrame).CornerRadius = UDim.new(0, 8)
+
+local ControlsTitle = Instance.new("TextLabel")
+ControlsTitle.Size = UDim2.new(1, 0, 0, 16)
+ControlsTitle.Position = UDim2.new(0, 0, 0, 3)
+ControlsTitle.BackgroundTransparency = 1
+ControlsTitle.Text = "🎮 CONTROLES"
+ControlsTitle.TextColor3 = Color3.fromRGB(150, 150, 180)
+ControlsTitle.TextSize = 10
+ControlsTitle.Font = Enum.Font.GothamBold
+ControlsTitle.Parent = ControlsFrame
+
+local ControlsText = Instance.new("TextLabel")
+ControlsText.Size = UDim2.new(0.95, 0, 0, 32)
+ControlsText.Position = UDim2.new(0.025, 0, 0, 20)
+ControlsText.BackgroundTransparency = 1
+ControlsText.Text = "WASD = Mover | Space = Subir | Shift = Bajar"
+ControlsText.TextColor3 = Color3.fromRGB(200, 200, 220)
+ControlsText.TextSize = 11
+ControlsText.Font = Enum.Font.Gotham
+ControlsText.TextWrapped = true
+ControlsText.Parent = ControlsFrame
+
+-- Close
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(0, 28, 0, 28)
+CloseButton.Position = UDim2.new(1, -33, 0, 6)
+CloseButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+CloseButton.Text = "✕"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.TextSize = 14
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.Parent = MainFrame
+Instance.new("UICorner", CloseButton).CornerRadius = UDim.new(0, 14)
+
+-- ══════════════════════════════════════════════════
+-- CONEXIONES
+-- ══════════════════════════════════════════════════
+ToggleButton.MouseButton1Click:Connect(function()
+if not flying then
+startFly()
+ToggleButton.Text = "🛑 DESACTIVAR VUELO"
+ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 30, 30)
+FlyStatus.Text = "🟢 VUELO: ON"
+FlyStatus.TextColor3 = Color3.fromRGB(0, 255, 100)
+mainStroke.Color = Color3.fromRGB(0, 255, 100)
+else
+stopFly()
+ToggleButton.Text = "Activate Fly"
+ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+FlyStatus.Text = "🔴 VUELO: OFF"
+FlyStatus.TextColor3 = Color3.fromRGB(255, 80, 80)
+mainStroke.Color = Color3.fromRGB(255, 50, 50)
+end
+end)
+
+CloseButton.MouseButton1Click:Connect(function()
+stopFly()
+ScreenGui:Destroy()
+end)
+
+-- ══════════════════════════════════════════════════
+-- HOTKEY: Presiona F para activar/desactivar vuelo
+-- ══════════════════════════════════════════════════
+UserInputService.InputBegan:Connect(function(input, processed)
+if processed then return end
+if input.KeyCode == Enum.KeyCode.F then
+if not flying then
+startFly()
+ToggleButton.Text = "🛑 DESACTIVAR VUELO"
+ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 30, 30)
+FlyStatus.Text = "🟢 VUELO: ON"
+FlyStatus.TextColor3 = Color3.fromRGB(0, 255, 100)
+mainStroke.Color = Color3.fromRGB(0, 255, 100)
+else
+stopFly()
+ToggleButton.Text = "✈️ ACTIVAR VUELO"
+ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+FlyStatus.Text = "🔴 VUELO: OFF"
+FlyStatus.TextColor3 = Color3.fromRGB(255, 80, 80)
+mainStroke.Color = Color3.fromRGB(255, 50, 50)
+end
+end
+end)
+
+-- Info
+print("═══════════════════════════════════")
+print("FLY BYPASS v1 - CARGADO")
+print(" WASD = Mover")
+print("⬆ Space = Subir")
+print("⬇ Shift = Bajar")
+print(" F = Activar/Desactivar vuelo")
+print("Fly Speed: 100")
+print("═══════════════════════════════════")
