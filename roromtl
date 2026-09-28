@@ -1,11 +1,11 @@
 -- ══════════════════════════════════════════════════════════════
--- ECLIPSE SAB NF v11 - Auto Farm ONLY
--- MoveTo → 6s → Jump if stuck → Retry | 8 Slots
+-- ECLIPSE AUTO FARM v13
+-- Clean Layout | BG Image Asset | -/+ Slot Selector
+-- Smart Stuck Detection | Jump to unstick
 -- ══════════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
 pcall(function()
@@ -33,12 +33,17 @@ local selectedSlot = 1
 local TARGET_X = SLOTS[1].x
 local TARGET_Z = SLOTS[1].z
 
-local TRIGGER_DIST = 8
-local MOVE_TIMEOUT = 6
+local TRIGGER_DIST = 3
+local STUCK_TIME = 4
 local WALKSPEED = 22
 local farmActive = false
 local farmJumps = 0
 local farmState = "Idle"
+
+-- Forward refs
+local infoLabels = nil
+local slotDisplay = nil
+local StatusLabel = nil
 
 -- ════════════════════════════════
 --   CHARACTER HELPERS
@@ -52,7 +57,7 @@ local function getCharParts()
     return char, root, humanoid
 end
 
-local function getDistFromTarget(root)
+local function getDistXZ(root)
     local dx = root.Position.X - TARGET_X
     local dz = root.Position.Z - TARGET_Z
     return math.sqrt(dx * dx + dz * dz)
@@ -65,12 +70,23 @@ local function doJump()
     end)
 end
 
--- ══════════════════════════════════════
---   AUTO FARM LOGIC
---   MoveTo → 6s → if stuck: jump → retry
--- ══════════════════════════════════════
+local function updateSlotDisplay()
+    local slot = SLOTS[selectedSlot]
+    if slotDisplay then
+        slotDisplay.Text = tostring(selectedSlot)
+    end
+    if infoLabels and infoLabels[2] then
+        infoLabels[2].Text = string.format(
+            "Slot: %d (%.0f, %.0f) | Jumps: %d",
+            selectedSlot, slot.x, slot.z, farmJumps
+        )
+    end
+end
 
-local farmThread = nil
+-- ════════════════════════════════════════════════════════
+--   AUTO FARM LOGIC
+--   Walk → detect stuck → jump → keep going
+-- ════════════════════════════════════════════════════════
 
 local function autoFarmLoop()
     while farmActive do
@@ -82,67 +98,77 @@ local function autoFarmLoop()
             continue
         end
 
-        -- Set walkspeed
         pcall(function() humanoid.WalkSpeed = WALKSPEED end)
 
-        local dist = getDistFromTarget(root)
+        local dist = getDistXZ(root)
 
+        -- ── ARRIVED ──
         if dist < TRIGGER_DIST then
-            -- At target, wait a bit then repeat
             farmState = string.format("✅ At Slot %d | Dist: %.1f", selectedSlot, dist)
             task.wait(2)
-        else
-            -- Walk to target
-            farmState = string.format("⚠ Walking to Slot %d...", selectedSlot)
+            continue
+        end
 
-            local targetPos = Vector3.new(TARGET_X, root.Position.Y, TARGET_Z)
-            humanoid:MoveTo(targetPos)
+        -- ── WALK TO TARGET ──
+        farmState = string.format("📍 Walking to Slot %d...", selectedSlot)
 
-            -- Wait up to MOVE_TIMEOUT seconds
-            local elapsed = 0
-            local arrived = false
+        local bestDist = dist
+        local timeSinceProgress = 0
 
-            while elapsed < MOVE_TIMEOUT do
-                if not farmActive then return end
-
-                local _, r, h = getCharParts()
-                if not r or not h then break end
-
-                local d = getDistFromTarget(r)
-                farmState = string.format("Walking %.1fs | Dist: %.1f", MOVE_TIMEOUT - elapsed, d)
-
-                if d < TRIGGER_DIST then
-                    arrived = true
-                    break
-                end
-
-                -- Keep sending MoveTo (in case humanoid gets stuck)
-                if elapsed % 1 < 0.2 then
-                    pcall(function()
-                        targetPos = Vector3.new(TARGET_X, r.Position.Y, TARGET_Z)
-                        h:MoveTo(targetPos)
-                    end)
-                end
-
-                task.wait(0.2)
-                elapsed = elapsed + 0.2
+        while farmActive do
+            local _, r, h = getCharParts()
+            if not r or not h then
+                farmState = "Lost character..."
+                break
             end
 
-            if arrived then
+            local targetPos = Vector3.new(TARGET_X, r.Position.Y, TARGET_Z)
+            pcall(function() h:MoveTo(targetPos) end)
+
+            local d = getDistXZ(r)
+
+            -- Arrived
+            if d < TRIGGER_DIST then
                 farmState = string.format("✅ Reached Slot %d!", selectedSlot)
-                task.wait(1)
+                break
+            end
+
+            -- Progress tracking
+            if d < bestDist - 1 then
+                bestDist = d
+                timeSinceProgress = 0
+                farmState = string.format("🚶 Walking | Dist: %.1f", d)
             else
-                -- TIMEOUT → Jump (unstick the character)
-                farmJumps = farmJumps + 1
-                farmState = string.format("🦘 Stuck! Jump #%d", farmJumps)
+                timeSinceProgress = timeSinceProgress + 0.2
 
-                -- Jump twice to unstick
-                doJump()
-                task.wait(0.4)
-                doJump()
-                task.wait(0.6)
+                if timeSinceProgress >= STUCK_TIME then
+                    -- STUCK → Jump
+                    farmJumps = farmJumps + 1
+                    farmState = string.format("🦘 Jump #%d | Dist: %.1f", farmJumps, d)
 
-                farmState = "Retrying walk to Slot " .. selectedSlot .. "..."
+                    doJump()
+                    task.wait(0.4)
+                    doJump()
+                    task.wait(0.3)
+
+                    timeSinceProgress = 0
+                    bestDist = d
+                    farmState = string.format("🔄 Retrying | Dist: %.1f", d)
+                else
+                    local pct = math.min(timeSinceProgress / STUCK_TIME, 1) * 100
+                    farmState = string.format("🚶 Dist: %.1f | Stuck: %.0f%%", d, pct)
+                end
+            end
+
+            task.wait(0.2)
+        end
+
+        -- Landed after walking
+        if farmActive then
+            local _, r, _ = getCharParts()
+            if r and getDistXZ(r) < TRIGGER_DIST then
+                farmState = string.format("✅ At Slot %d | Waiting...", selectedSlot)
+                task.wait(2)
             end
         end
     end
@@ -153,7 +179,7 @@ end
 -- ════════════════════════════════
 
 local BASE_WIDTH = 280
-local BASE_HEIGHT = 380
+local BASE_HEIGHT = 320
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "EclipseAutoFarm"
@@ -164,6 +190,7 @@ local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, BASE_HEIGHT)
 MainFrame.Position = UDim2.new(0.5, -BASE_WIDTH / 2, 0.5, -BASE_HEIGHT / 2)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+MainFrame.BackgroundTransparency = 1
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.ClipsDescendants = true
@@ -171,92 +198,132 @@ MainFrame.Parent = ScreenGui
 
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
-local mainStrokeGui = Instance.new("UIStroke")
-mainStrokeGui.Color = Color3.fromRGB(255, 140, 0)
-mainStrokeGui.Thickness = 2
-mainStrokeGui.Parent = MainFrame
+-- ── BACKGROUND IMAGE ──
+local bgImage = Instance.new("ImageLabel")
+bgImage.Name = "BG"
+bgImage.Size = UDim2.new(1, 0, 1, 0)
+bgImage.Position = UDim2.new(0, 0, 0, 0)
+bgImage.BackgroundTransparency = 1
+bgImage.Image = "rbxassetid://112002576136361"
+bgImage.ImageTransparency = 0.35
+bgImage.ScaleType = Enum.ScaleType.Crop
+bgImage.ZIndex = 1
+bgImage.Parent = MainFrame
+
+-- ── DARK OVERLAY ──
+local overlay = Instance.new("Frame")
+overlay.Name = "Overlay"
+overlay.Size = UDim2.new(1, 0, 1, 0)
+overlay.BackgroundColor3 = Color3.fromRGB(12, 12, 14)
+overlay.BackgroundTransparency = 0.55
+overlay.BorderSizePixel = 0
+overlay.ZIndex = 2
+overlay.Parent = MainFrame
+
+-- ── BORDER STROKE ──
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(255, 140, 0)
+mainStroke.Thickness = 2
+mainStroke.Parent = MainFrame
 
 local uiScale = Instance.new("UIScale")
 uiScale.Scale = 1.0
 uiScale.Parent = MainFrame
 
--- Title Bar
+-- ════════════════════════════════
+--           TITLE BAR
+-- ════════════════════════════════
+
 local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
 TitleBar.Size = UDim2.new(1, 0, 0, 38)
 TitleBar.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+TitleBar.BackgroundTransparency = 0.05
 TitleBar.BorderSizePixel = 0
-TitleBar.ZIndex = 10
+TitleBar.ZIndex = 15
 TitleBar.Parent = MainFrame
 
 Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
 
+-- Fill the bottom gap of titlebar corners
 local TitleFix = Instance.new("Frame")
 TitleFix.Size = UDim2.new(1, 0, 0, 14)
 TitleFix.Position = UDim2.new(0, 0, 1, -14)
 TitleFix.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+TitleFix.BackgroundTransparency = 0.05
 TitleFix.BorderSizePixel = 0
-TitleFix.ZIndex = 10
+TitleFix.ZIndex = 15
 TitleFix.Parent = TitleBar
 
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, -60, 1, 0)
-TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.Size = UDim2.new(1, -64, 1, 0)
+TitleLabel.Position = UDim2.new(0, 12, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ Eclipse Auto Farm v11"
+TitleLabel.Text = "⚡ Eclipse Auto Farm"
 TitleLabel.TextColor3 = Color3.fromRGB(18, 18, 18)
-TitleLabel.TextSize = 14
+TitleLabel.TextSize = 15
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-TitleLabel.ZIndex = 11
+TitleLabel.ZIndex = 16
 TitleLabel.Parent = TitleBar
 
-local function makeTitleBtn(parent, xOffset, text, bgColor)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 26, 0, 26)
-    btn.Position = UDim2.new(1, xOffset, 0, 6)
-    btn.BackgroundColor3 = bgColor
-    btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.TextSize = 14
-    btn.Font = Enum.Font.GothamBold
-    btn.ZIndex = 12
-    btn.Parent = parent
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
-    return btn
+-- Title buttons
+local function makeTitleBtn(parent, xOff, txt, bg)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, 26, 0, 26)
+    b.Position = UDim2.new(1, xOff, 0, 6)
+    b.BackgroundColor3 = bg
+    b.Text = txt
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.TextSize = 14
+    b.Font = Enum.Font.GothamBold
+    b.ZIndex = 16
+    b.Parent = parent
+    Instance.new("UICorner", b).CornerRadius = UDim.new(1, 0)
+    return b
 end
 
-local CloseBtn = makeTitleBtn(TitleBar, -32, "−", Color3.fromRGB(180, 40, 40))
+local MinBtn = makeTitleBtn(TitleBar, -64, "−", Color3.fromRGB(180, 40, 40))
+local CloseBtn = makeTitleBtn(TitleBar, -32, "×", Color3.fromRGB(180, 40, 40))
 
--- Content
+-- ════════════════════════════════
+--    CONTENT AREA
+-- ════════════════════════════════
+
 local ContentFrame = Instance.new("Frame")
 ContentFrame.Size = UDim2.new(1, 0, 1, -38)
 ContentFrame.Position = UDim2.new(0, 0, 0, 38)
 ContentFrame.BackgroundTransparency = 1
+ContentFrame.BorderSizePixel = 0
+ContentFrame.ZIndex = 3
 ContentFrame.ClipsDescendants = true
+ContentFrame.Visible = true
 ContentFrame.Parent = MainFrame
 
 local MainPanel = Instance.new("ScrollingFrame")
 MainPanel.Size = UDim2.new(1, 0, 1, 0)
 MainPanel.BackgroundTransparency = 1
-MainPanel.ScrollBarThickness = 4
+MainPanel.BorderSizePixel = 0
+MainPanel.ScrollBarThickness = 3
 MainPanel.ScrollBarImageColor3 = Color3.fromRGB(255, 140, 0)
 MainPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
 MainPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
 MainPanel.ScrollingDirection = Enum.ScrollingDirection.Y
 MainPanel.ClipsDescendants = true
+MainPanel.ZIndex = 3
 MainPanel.Parent = ContentFrame
 
 local mainLayout = Instance.new("UIListLayout")
-mainLayout.Padding = UDim.new(0, 4)
+mainLayout.Padding = UDim.new(0, 3)
 mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
 mainLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 mainLayout.Parent = MainPanel
 
 local mainPad = Instance.new("UIPadding")
-mainPad.PaddingTop = UDim.new(0, 8)
-mainPad.PaddingLeft = UDim.new(0, 10)
-mainPad.PaddingRight = UDim.new(0, 10)
-mainPad.PaddingBottom = UDim.new(0, 10)
+mainPad.PaddingTop = UDim.new(0, 6)
+mainPad.PaddingLeft = UDim.new(0, 8)
+mainPad.PaddingRight = UDim.new(0, 8)
+mainPad.PaddingBottom = UDim.new(0, 8)
 mainPad.Parent = MainPanel
 
 -- ════════════════════════════════
@@ -269,200 +336,422 @@ local function nextOrder()
     return orderCounter
 end
 
-local function makeSection(parent, title)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 28)
-    frame.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
-    frame.BackgroundTransparency = 0.85
-    frame.BorderSizePixel = 0
-    frame.LayoutOrder = nextOrder()
-    frame.Parent = parent
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = "  " .. title
-    label.TextColor3 = Color3.fromRGB(255, 140, 0)
-    label.TextSize = 13
-    label.Font = Enum.Font.GothamBold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = frame
-    return frame
+local function makeSection(parent, text)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 26)
+    f.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+    f.BackgroundTransparency = 0.88
+    f.BorderSizePixel = 0
+    f.LayoutOrder = nextOrder()
+    f.ZIndex = 4
+    f.Parent = parent
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -8, 1, 0)
+    lbl.Position = UDim2.new(0, 4, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.TextColor3 = Color3.fromRGB(255, 140, 0)
+    lbl.TextSize = 12
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextXAlignment = Enum.TextXAlignment.Center
+    lbl.ZIndex = 5
+    lbl.Parent = f
+    return f
 end
 
-local function makeRow(parent, height)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, height or 30)
-    row.BackgroundTransparency = 1
-    row.LayoutOrder = nextOrder()
-    row.Parent = parent
-    return row
+local function makeRow(parent, h)
+    local r = Instance.new("Frame")
+    r.Size = UDim2.new(1, 0, 0, h or 30)
+    r.BackgroundTransparency = 1
+    r.BorderSizePixel = 0
+    r.LayoutOrder = nextOrder()
+    r.ZIndex = 4
+    r.Parent = parent
+    return r
 end
 
-local function makeToggle(parent, text, height)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, height or 30)
-    btn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.TextSize = 13
-    btn.Font = Enum.Font.GothamBold
-    btn.LayoutOrder = nextOrder()
-    btn.AutoButtonColor = false
-    btn.Parent = parent
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+local function makeSmallBtn(parent, sizeX, text, bg, xOff)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, sizeX, 0, 26)
+    b.Position = UDim2.new(1, xOff, 0, 4)
+    b.BackgroundColor3 = bg
+    b.Text = text
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.TextSize = 16
+    b.Font = Enum.Font.GothamBold
+    b.ZIndex = 5
+    b.AutoButtonColor = false
+    b.Parent = parent
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    return b
+end
+
+local function makeValueBtn(parent, sizeX, text, xOff)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, sizeX, 0, 26)
+    b.Position = UDim2.new(1, xOff, 0, 4)
+    b.BackgroundColor3 = Color3.fromRGB(35, 30, 40)
+    b.Text = text
+    b.TextColor3 = Color3.fromRGB(255, 140, 0)
+    b.TextSize = 14
+    b.Font = Enum.Font.GothamBold
+    b.ZIndex = 5
+    b.AutoButtonColor = false
+    b.Parent = parent
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
     local s = Instance.new("UIStroke")
-    s.Color = Color3.fromRGB(100, 30, 30)
-    s.Thickness = 1.5
-    s.Parent = btn
-    btn.MouseEnter:Connect(function() btn.BackgroundTransparency = 0.1 end)
-    btn.MouseLeave:Connect(function() btn.BackgroundTransparency = 0 end)
-    return btn, s
-end
-
-local function makeInfoBox(parent, lines)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 14 * #lines + 10)
-    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    frame.BorderSizePixel = 0
-    frame.LayoutOrder = nextOrder()
-    frame.Parent = parent
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
-    local s = Instance.new("UIStroke")
-    s.Color = Color3.fromRGB(50, 50, 50)
+    s.Color = Color3.fromRGB(60, 50, 70)
     s.Thickness = 1
-    s.Parent = frame
+    s.Parent = b
+    return b
+end
+
+-- ══════════════════════════════════════
+--   SECTION: SLOTS
+-- ══════════════════════════════════════
+
+makeSection(MainPanel, "── Slots ──")
+
+-- Auto Farm toggle
+local FarmToggle = Instance.new("TextButton")
+FarmToggle.Size = UDim2.new(1, 0, 0, 36)
+FarmToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+FarmToggle.Text = "Auto Farm                                           OFF"
+FarmToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+FarmToggle.TextSize = 12
+FarmToggle.Font = Enum.Font.GothamBold
+FarmToggle.LayoutOrder = nextOrder()
+FarmToggle.AutoButtonColor = false
+FarmToggle.ZIndex = 4
+FarmToggle.Parent = MainPanel
+Instance.new("UICorner", FarmToggle).CornerRadius = UDim.new(0, 8)
+
+local farmStroke = Instance.new("UIStroke")
+farmStroke.Color = Color3.fromRGB(100, 30, 30)
+farmStroke.Thickness = 1.5
+farmStroke.Parent = FarmToggle
+
+FarmToggle.MouseEnter:Connect(function() FarmToggle.BackgroundTransparency = 0.05 end)
+FarmToggle.MouseLeave:Connect(function() FarmToggle.BackgroundTransparency = 0 end)
+
+-- Auto Farm Slots row [-] [1] [+]
+local slotRow = Instance.new("Frame")
+slotRow.Size = UDim2.new(1, 0, 0, 34)
+slotRow.BackgroundColor3 = Color3.fromRGB(20, 18, 25)
+slotRow.BackgroundTransparency = 0.3
+slotRow.BorderSizePixel = 0
+slotRow.LayoutOrder = nextOrder()
+slotRow.ZIndex = 4
+slotRow.Parent = MainPanel
+Instance.new("UICorner", slotRow).CornerRadius = UDim.new(0, 8)
+
+local slotStroke = Instance.new("UIStroke")
+slotStroke.Color = Color3.fromRGB(50, 45, 60)
+slotStroke.Thickness = 1
+slotStroke.Parent = slotRow
+
+-- Label
+local slotLabel = Instance.new("TextLabel")
+slotLabel.Size = UDim2.new(1, -120, 1, 0)
+slotLabel.Position = UDim2.new(0, 12, 0, 0)
+slotLabel.BackgroundTransparency = 1
+slotLabel.Text = "Auto Farm Slot"
+slotLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+slotLabel.TextSize = 12
+slotLabel.Font = Enum.Font.GothamBold
+slotLabel.TextXAlignment = Enum.TextXAlignment.Left
+slotLabel.ZIndex = 5
+slotLabel.Parent = slotRow
+
+-- [-] button
+local SlotMinus = makeSmallBtn(slotRow, 30, "−", Color3.fromRGB(50, 45, 60), -90)
+
+-- [number] display
+slotDisplay = makeValueBtn(slotRow, 32, "1", -56)
+
+-- [+] button
+local SlotPlus = makeSmallBtn(slotRow, 30, "+", Color3.fromRGB(50, 45, 60), -22)
+
+-- Slot -/+ logic
+SlotMinus.MouseButton1Click:Connect(function()
+    selectedSlot = selectedSlot - 1
+    if selectedSlot < 1 then selectedSlot = 8 end
+    local slot = SLOTS[selectedSlot]
+    TARGET_X = slot.x
+    TARGET_Z = slot.z
+    updateSlotDisplay()
+end)
+
+SlotPlus.MouseButton1Click:Connect(function()
+    selectedSlot = selectedSlot + 1
+    if selectedSlot > 8 then selectedSlot = 1 end
+    local slot = SLOTS[selectedSlot]
+    TARGET_X = slot.x
+    TARGET_Z = slot.z
+    updateSlotDisplay()
+end)
+
+-- Auto Farm info
+local infoRow = makeRow(MainPanel, 16)
+local infoBox, infoLabelsCreated = (function()
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 44)
+    f.BackgroundColor3 = Color3.fromRGB(20, 18, 25)
+    f.BackgroundTransparency = 0.3
+    f.BorderSizePixel = 0
+    f.LayoutOrder = nextOrder()
+    f.ZIndex = 4
+    f.Parent = MainPanel
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+    local s = Instance.new("UIStroke")
+    s.Color = Color3.fromRGB(50, 45, 60)
+    s.Thickness = 1
+    s.Parent = f
+
     local labels = {}
+    local lines = {
+        "🌾 Walk → Stuck → Jump → Keep going",
+        "Slot: 1 (−461, 140) | Jumps: 0",
+    }
     for i, line in ipairs(lines) do
         local l = Instance.new("TextLabel")
-        l.Size = UDim2.new(1, -10, 0, 14)
-        l.Position = UDim2.new(0, 5, 0, 5 + (i - 1) * 14)
+        l.Size = UDim2.new(1, -12, 0, 16)
+        l.Position = UDim2.new(0, 6, 0, 6 + (i - 1) * 18)
         l.BackgroundTransparency = 1
         l.Text = line
         l.TextColor3 = Color3.fromRGB(255, 140, 0)
-        l.TextSize = 11
+        l.TextSize = 10
         l.Font = Enum.Font.GothamBold
         l.TextXAlignment = Enum.TextXAlignment.Left
-        l.Parent = frame
+        l.ZIndex = 5
+        l.Parent = f
         labels[i] = l
     end
-    return frame, labels
-end
+    return f, labels
+end)()
 
--- ════════════════════════════════
---   SLOT SELECTOR (2x4 grid)
--- ════════════════════════════════
+infoLabels = infoLabelsCreated
 
-makeSection(MainPanel, "── Position Slots ──")
-
-local slotInfoLabel = Instance.new("TextLabel")
-slotInfoLabel.Size = UDim2.new(1, 0, 0, 16)
-slotInfoLabel.BackgroundTransparency = 1
-slotInfoLabel.Text = "▶ Slot 1  (X: -461.3, Z: 140.1)"
-slotInfoLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
-slotInfoLabel.TextSize = 11
-slotInfoLabel.Font = Enum.Font.GothamBold
-slotInfoLabel.LayoutOrder = nextOrder()
-slotInfoLabel.Parent = MainPanel
-
-local slotButtons = {}
-
-for row = 1, 4 do
-    local rowFrame = Instance.new("Frame")
-    rowFrame.Size = UDim2.new(1, 0, 0, 26)
-    rowFrame.BackgroundTransparency = 1
-    rowFrame.LayoutOrder = nextOrder()
-    rowFrame.Parent = MainPanel
-
-    local rowLayout = Instance.new("UIListLayout")
-    rowLayout.FillDirection = Enum.FillDirection.Horizontal
-    rowLayout.Padding = UDim.new(0, 4)
-    rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    rowLayout.Parent = rowFrame
-
-    for col = 1, 2 do
-        local idx = (row - 1) * 2 + col
-        local slot = SLOTS[idx]
-
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0.48, 0, 1, 0)
-        btn.BackgroundColor3 = idx == 1 and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(40, 40, 40)
-        btn.Text = slot.name .. "  (" .. string.format("%.0f", slot.x) .. ", " .. string.format("%.0f", slot.z) .. ")"
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.TextSize = 10
-        btn.Font = Enum.Font.GothamBold
-        btn.AutoButtonColor = false
-        btn.Parent = rowFrame
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
-
-        local stroke = Instance.new("UIStroke")
-        stroke.Color = idx == 1 and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(60, 60, 60)
-        stroke.Thickness = 1
-        stroke.Parent = btn
-
-        slotButtons[idx] = {btn = btn, stroke = stroke}
-
-        btn.MouseButton1Click:Connect(function()
-            selectedSlot = idx
-            TARGET_X = slot.x
-            TARGET_Z = slot.z
-            slotInfoLabel.Text = "▶ " .. slot.name .. "  (X: " .. string.format("%.1f", slot.x) .. ", Z: " .. string.format("%.1f", slot.z) .. ")"
-
-            for i, sb in ipairs(slotButtons) do
-                if i == idx then
-                    sb.btn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
-                    sb.stroke.Color = Color3.fromRGB(255, 140, 0)
-                else
-                    sb.btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-                    sb.stroke.Color = Color3.fromRGB(60, 60, 60)
-                end
-            end
-
-            infoLabels[2].Text = string.format("Slot: %d | Jumps: %d | State: %s", selectedSlot, farmJumps, farmState)
-        end)
-    end
-end
-
--- ══════════════════════════════════════
---   AUTO FARM SECTION
--- ══════════════════════════════════════
-
-makeSection(MainPanel, "── Auto Farm ──")
-
-local infoBox, infoLabels = makeInfoBox(MainPanel, {
-    "🌾 MoveTo → 6s → Salta si atascó",
-    "Slot: 1 | Jumps: 0 | State: Idle"
-})
-
-local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, 0, 0, 18)
+-- Status line
+StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, 0, 0, 16)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Text = "Idle"
 StatusLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
-StatusLabel.TextSize = 11
+StatusLabel.TextSize = 10
 StatusLabel.Font = Enum.Font.Gotham
 StatusLabel.LayoutOrder = nextOrder()
+StatusLabel.ZIndex = 4
 StatusLabel.Parent = MainPanel
 
-local FarmToggle, farmStroke = makeToggle(MainPanel, "🌾  Auto Farm OFF", 34)
+-- ══════════════════════════════════════
+--   SECTION: SETTINGS
+-- ══════════════════════════════════════
+
+makeSection(MainPanel, "── Settings ──")
+
+-- Setting row builder
+local function makeSettingRow(parent, labelText, defaultVal)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 34)
+    row.BackgroundColor3 = Color3.fromRGB(20, 18, 25)
+    row.BackgroundTransparency = 0.3
+    row.BorderSizePixel = 0
+    row.LayoutOrder = nextOrder()
+    row.ZIndex = 4
+    row.Parent = parent
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+    local rStroke = Instance.new("UIStroke")
+    rStroke.Color = Color3.fromRGB(50, 45, 60)
+    rStroke.Thickness = 1
+    rStroke.Parent = row
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0, 100, 1, 0)
+    lbl.Position = UDim2.new(0, 10, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.TextColor3 = Color3.fromRGB(255, 140, 0)
+    lbl.TextSize = 11
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 5
+    lbl.Parent = row
+
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.new(0, 50, 0, 24)
+    input.Position = UDim2.new(1, -116, 0, 5)
+    input.BackgroundColor3 = Color3.fromRGB(35, 30, 40)
+    input.Text = tostring(defaultVal)
+    input.TextColor3 = Color3.fromRGB(255, 255, 255)
+    input.TextSize = 11
+    input.Font = Enum.Font.Gotham
+    input.ClearTextOnFocus = false
+    input.ZIndex = 5
+    input.Parent = row
+    Instance.new("UICorner", input).CornerRadius = UDim.new(0, 6)
+
+    local iStroke = Instance.new("UIStroke")
+    iStroke.Color = Color3.fromRGB(60, 55, 70)
+    iStroke.Thickness = 1
+    iStroke.Parent = input
+
+    local apply = Instance.new("TextButton")
+    apply.Size = UDim2.new(0, 40, 0, 24)
+    apply.Position = UDim2.new(1, -58, 0, 5)
+    apply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
+    apply.Text = "Set"
+    apply.TextColor3 = Color3.fromRGB(255, 255, 255)
+    apply.TextSize = 11
+    apply.Font = Enum.Font.GothamBold
+    apply.ZIndex = 5
+    apply.Parent = row
+    Instance.new("UICorner", apply).CornerRadius = UDim.new(0, 6)
+
+    return row, input, apply, iStroke
+end
+
+-- WalkSpeed
+local _, wsInput, wsApply, wsStroke = makeSettingRow(MainPanel, "WalkSpeed:", WALKSPEED)
+
+wsApply.MouseButton1Click:Connect(function()
+    local val = tonumber(wsInput.Text)
+    if val and val >= 16 and val <= 100 then
+        WALKSPEED = val
+        wsStroke.Color = Color3.fromRGB(40, 180, 40)
+        task.delay(0.8, function() wsStroke.Color = Color3.fromRGB(60, 55, 70) end)
+    else
+        wsStroke.Color = Color3.fromRGB(200, 50, 50)
+        task.delay(0.8, function() wsStroke.Color = Color3.fromRGB(60, 55, 70) end)
+    end
+end)
+
+-- Stuck Time
+local _, stInput, stApply, stStroke = makeSettingRow(MainPanel, "Stuck Time (s):", STUCK_TIME)
+
+stApply.MouseButton1Click:Connect(function()
+    local val = tonumber(stInput.Text)
+    if val and val >= 1 and val <= 15 then
+        STUCK_TIME = val
+        infoLabels[1].Text = "🌾 Walk → " .. STUCK_TIME .. "s stuck → Jump → Keep going"
+        stStroke.Color = Color3.fromRGB(40, 180, 40)
+        task.delay(0.8, function() stStroke.Color = Color3.fromRGB(60, 55, 70) end)
+    else
+        stStroke.Color = Color3.fromRGB(200, 50, 50)
+        task.delay(0.8, function() stStroke.Color = Color3.fromRGB(60, 55, 70) end)
+    end
+end)
+
+-- Trigger Dist
+local _, tdInput, tdApply, tdStroke = makeSettingRow(MainPanel, "Trigger Dist:", TRIGGER_DIST)
+
+tdApply.MouseButton1Click:Connect(function()
+    local val = tonumber(tdInput.Text)
+    if val and val >= 1 and val <= 50 then
+        TRIGGER_DIST = val
+        tdStroke.Color = Color3.fromRGB(40, 180, 40)
+        task.delay(0.8, function() tdStroke.Color = Color3.fromRGB(60, 55, 70) end)
+    else
+        tdStroke.Color = Color3.fromRGB(200, 50, 50)
+        task.delay(0.8, function() tdStroke.Color = Color3.fromRGB(60, 55, 70) end)
+    end
+end)
+
+-- UI Scale row
+local scaleRow = Instance.new("Frame")
+scaleRow.Size = UDim2.new(1, 0, 0, 34)
+scaleRow.BackgroundColor3 = Color3.fromRGB(20, 18, 25)
+scaleRow.BackgroundTransparency = 0.3
+scaleRow.BorderSizePixel = 0
+scaleRow.LayoutOrder = nextOrder()
+scaleRow.ZIndex = 4
+scaleRow.Parent = MainPanel
+Instance.new("UICorner", scaleRow).CornerRadius = UDim.new(0, 6)
+
+local scaleStroke = Instance.new("UIStroke")
+scaleStroke.Color = Color3.fromRGB(50, 45, 60)
+scaleStroke.Thickness = 1
+scaleStroke.Parent = scaleRow
+
+local scaleLbl = Instance.new("TextLabel")
+scaleLbl.Size = UDim2.new(0, 80, 1, 0)
+scaleLbl.Position = UDim2.new(0, 10, 0, 0)
+scaleLbl.BackgroundTransparency = 1
+scaleLbl.Text = "UI Scale:"
+scaleLbl.TextColor3 = Color3.fromRGB(255, 140, 0)
+scaleLbl.TextSize = 11
+scaleLbl.Font = Enum.Font.GothamBold
+scaleLbl.TextXAlignment = Enum.TextXAlignment.Left
+scaleLbl.ZIndex = 5
+scaleLbl.Parent = scaleRow
+
+local ScaleMinus = Instance.new("TextButton")
+ScaleMinus.Size = UDim2.new(0, 28, 0, 24)
+ScaleMinus.Position = UDim2.new(1, -95, 0, 5)
+ScaleMinus.BackgroundColor3 = Color3.fromRGB(50, 45, 60)
+ScaleMinus.Text = "−"
+ScaleMinus.TextColor3 = Color3.fromRGB(255, 255, 255)
+ScaleMinus.TextSize = 14
+ScaleMinus.Font = Enum.Font.GothamBold
+ScaleMinus.ZIndex = 5
+ScaleMinus.Parent = scaleRow
+Instance.new("UICorner", ScaleMinus).CornerRadius = UDim.new(0, 6)
+
+local SizeDisplay = Instance.new("TextLabel")
+SizeDisplay.Size = UDim2.new(0, 40, 0, 24)
+SizeDisplay.Position = UDim2.new(1, -63, 0, 5)
+SizeDisplay.BackgroundColor3 = Color3.fromRGB(35, 30, 40)
+SizeDisplay.Text = "100%"
+SizeDisplay.TextColor3 = Color3.fromRGB(255, 140, 0)
+SizeDisplay.TextSize = 11
+SizeDisplay.Font = Enum.Font.GothamBold
+SizeDisplay.ZIndex = 5
+SizeDisplay.Parent = scaleRow
+Instance.new("UICorner", SizeDisplay).CornerRadius = UDim.new(0, 6)
+
+local ScalePlus = Instance.new("TextButton")
+ScalePlus.Size = UDim2.new(0, 28, 0, 24)
+ScalePlus.Position = UDim2.new(1, -19, 0, 5)
+ScalePlus.BackgroundColor3 = Color3.fromRGB(50, 45, 60)
+ScalePlus.Text = "+"
+ScalePlus.TextColor3 = Color3.fromRGB(255, 255, 255)
+ScalePlus.TextSize = 14
+ScalePlus.Font = Enum.Font.GothamBold
+ScalePlus.ZIndex = 5
+ScalePlus.Parent = scaleRow
+Instance.new("UICorner", ScalePlus).CornerRadius = UDim.new(0, 6)
+
+-- Scale logic
+local currentUIScale = 1.0
+
+local function applyScale(newScale)
+    currentUIScale = math.clamp(newScale, 0.65, 1.5)
+    uiScale.Scale = currentUIScale
+    SizeDisplay.Text = math.floor(currentUIScale * 100 + 0.5) .. "%"
+end
+
+ScaleMinus.MouseButton1Click:Connect(function() applyScale(currentUIScale - 0.1) end)
+ScalePlus.MouseButton1Click:Connect(function() applyScale(currentUIScale + 0.1) end)
 
 -- ════════════════════════════════
---   AUTO FARM TOGGLE
+--   FARM TOGGLE LOGIC
 -- ════════════════════════════════
 
 FarmToggle.MouseButton1Click:Connect(function()
     farmActive = not farmActive
 
     if farmActive then
-        FarmToggle.Text = "✅  Auto Farm ON"
-        FarmToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
+        FarmToggle.Text = "Auto Farm                                           ON"
+        FarmToggle.BackgroundColor3 = Color3.fromRGB(40, 160, 40)
         farmStroke.Color = Color3.fromRGB(30, 100, 30)
         StatusLabel.Text = "Active - Slot " .. selectedSlot
         StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
         farmJumps = 0
-        farmThread = task.spawn(autoFarmLoop)
+        task.spawn(autoFarmLoop)
     else
-        FarmToggle.Text = "🌾  Auto Farm OFF"
+        FarmToggle.Text = "Auto Farm                                           OFF"
         FarmToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         farmStroke.Color = Color3.fromRGB(100, 30, 30)
         StatusLabel.Text = "Idle"
@@ -477,261 +766,18 @@ end)
 
 task.spawn(function()
     while true do
-        if farmActive then
+        if farmActive and StatusLabel then
             StatusLabel.Text = farmState
-            infoLabels[2].Text = string.format("Slot: %d | Jumps: %d | State: %s", selectedSlot, farmJumps, farmState)
+            if infoLabels and infoLabels[2] then
+                infoLabels[2].Text = string.format(
+                    "Slot: %d (%.0f, %.0f) | Jumps: %d",
+                    selectedSlot, TARGET_X, TARGET_Z, farmJumps
+                )
+            end
         end
-        task.wait(0.5)
+        task.wait(0.3)
     end
 end)
-
--- ══════════════════════════════════════
---   SETTINGS
--- ══════════════════════════════════════
-
-makeSection(MainPanel, "── Settings ──")
-
--- WalkSpeed
-local wsRow = Instance.new("Frame")
-wsRow.Size = UDim2.new(1, 0, 0, 32)
-wsRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-wsRow.BorderSizePixel = 0
-wsRow.LayoutOrder = nextOrder()
-wsRow.Parent = MainPanel
-Instance.new("UICorner", wsRow).CornerRadius = UDim.new(0, 6)
-
-local wsLbl = Instance.new("TextLabel")
-wsLbl.Size = UDim2.new(0, 100, 1, 0)
-wsLbl.Position = UDim2.new(0, 8, 0, 0)
-wsLbl.BackgroundTransparency = 1
-wsLbl.Text = "WalkSpeed:"
-wsLbl.TextColor3 = Color3.fromRGB(255, 140, 0)
-wsLbl.TextSize = 12
-wsLbl.Font = Enum.Font.GothamBold
-wsLbl.TextXAlignment = Enum.TextXAlignment.Left
-wsLbl.Parent = wsRow
-
-local wsInput = Instance.new("TextBox")
-wsInput.Size = UDim2.new(0, 55, 0, 24)
-wsInput.Position = UDim2.new(0, 112, 0, 4)
-wsInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-wsInput.Text = tostring(WALKSPEED)
-wsInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-wsInput.TextSize = 12
-wsInput.Font = Enum.Font.Gotham
-wsInput.ClearTextOnFocus = false
-wsInput.Parent = wsRow
-Instance.new("UICorner", wsInput).CornerRadius = UDim.new(0, 6)
-local wsSt = Instance.new("UIStroke")
-wsSt.Color = Color3.fromRGB(60, 60, 60)
-wsSt.Thickness = 1
-wsSt.Parent = wsInput
-
-local wsApply = Instance.new("TextButton")
-wsApply.Size = UDim2.new(0, 55, 0, 24)
-wsApply.Position = UDim2.new(0, 174, 0, 4)
-wsApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
-wsApply.Text = "Set"
-wsApply.TextColor3 = Color3.fromRGB(255, 255, 255)
-wsApply.TextSize = 12
-wsApply.Font = Enum.Font.GothamBold
-wsApply.Parent = wsRow
-Instance.new("UICorner", wsApply).CornerRadius = UDim.new(0, 6)
-
-wsApply.MouseButton1Click:Connect(function()
-    local val = tonumber(wsInput.Text)
-    if val and val >= 16 and val <= 100 then
-        WALKSPEED = val
-        wsSt.Color = Color3.fromRGB(40, 180, 40)
-        task.delay(1, function() wsSt.Color = Color3.fromRGB(60, 60, 60) end)
-    else
-        wsSt.Color = Color3.fromRGB(200, 50, 50)
-        task.delay(1, function() wsSt.Color = Color3.fromRGB(60, 60, 60) end)
-    end
-end)
-
--- Timeout
-local toRow = Instance.new("Frame")
-toRow.Size = UDim2.new(1, 0, 0, 32)
-toRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-toRow.BorderSizePixel = 0
-toRow.LayoutOrder = nextOrder()
-toRow.Parent = MainPanel
-Instance.new("UICorner", toRow).CornerRadius = UDim.new(0, 6)
-
-local toLbl = Instance.new("TextLabel")
-toLbl.Size = UDim2.new(0, 100, 1, 0)
-toLbl.Position = UDim2.new(0, 8, 0, 0)
-toLbl.BackgroundTransparency = 1
-toLbl.Text = "Timeout (s):"
-toLbl.TextColor3 = Color3.fromRGB(255, 140, 0)
-toLbl.TextSize = 12
-toLbl.Font = Enum.Font.GothamBold
-toLbl.TextXAlignment = Enum.TextXAlignment.Left
-toLbl.Parent = toRow
-
-local toInput = Instance.new("TextBox")
-toInput.Size = UDim2.new(0, 55, 0, 24)
-toInput.Position = UDim2.new(0, 112, 0, 4)
-toInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-toInput.Text = tostring(MOVE_TIMEOUT)
-toInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-toInput.TextSize = 12
-toInput.Font = Enum.Font.Gotham
-toInput.ClearTextOnFocus = false
-toInput.Parent = toRow
-Instance.new("UICorner", toInput).CornerRadius = UDim.new(0, 6)
-local toSt = Instance.new("UIStroke")
-toSt.Color = Color3.fromRGB(60, 60, 60)
-toSt.Thickness = 1
-toSt.Parent = toInput
-
-local toApply = Instance.new("TextButton")
-toApply.Size = UDim2.new(0, 55, 0, 24)
-toApply.Position = UDim2.new(0, 174, 0, 4)
-toApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
-toApply.Text = "Set"
-toApply.TextColor3 = Color3.fromRGB(255, 255, 255)
-toApply.TextSize = 12
-toApply.Font = Enum.Font.GothamBold
-toApply.Parent = toRow
-Instance.new("UICorner", toApply).CornerRadius = UDim.new(0, 6)
-
-toApply.MouseButton1Click:Connect(function()
-    local val = tonumber(toInput.Text)
-    if val and val >= 2 and val <= 30 then
-        MOVE_TIMEOUT = val
-        infoLabels[1].Text = "🌾 MoveTo → " .. MOVE_TIMEOUT .. "s → Salta si atascó"
-        toSt.Color = Color3.fromRGB(40, 180, 40)
-        task.delay(1, function() toSt.Color = Color3.fromRGB(60, 60, 60) end)
-    else
-        toSt.Color = Color3.fromRGB(200, 50, 50)
-        task.delay(1, function() toSt.Color = Color3.fromRGB(60, 60, 60) end)
-    end
-end)
-
--- Trigger Distance
-local tdRow = Instance.new("Frame")
-tdRow.Size = UDim2.new(1, 0, 0, 32)
-tdRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-tdRow.BorderSizePixel = 0
-tdRow.LayoutOrder = nextOrder()
-tdRow.Parent = MainPanel
-Instance.new("UICorner", tdRow).CornerRadius = UDim.new(0, 6)
-
-local tdLbl = Instance.new("TextLabel")
-tdLbl.Size = UDim2.new(0, 100, 1, 0)
-tdLbl.Position = UDim2.new(0, 8, 0, 0)
-tdLbl.BackgroundTransparency = 1
-tdLbl.Text = "Trigger Dist:"
-tdLbl.TextColor3 = Color3.fromRGB(255, 140, 0)
-tdLbl.TextSize = 12
-tdLbl.Font = Enum.Font.GothamBold
-tdLbl.TextXAlignment = Enum.TextXAlignment.Left
-tdLbl.Parent = tdRow
-
-local tdInput = Instance.new("TextBox")
-tdInput.Size = UDim2.new(0, 55, 0, 24)
-tdInput.Position = UDim2.new(0, 112, 0, 4)
-tdInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-tdInput.Text = tostring(TRIGGER_DIST)
-tdInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-tdInput.TextSize = 12
-tdInput.Font = Enum.Font.Gotham
-tdInput.ClearTextOnFocus = false
-tdInput.Parent = tdRow
-Instance.new("UICorner", tdInput).CornerRadius = UDim.new(0, 6)
-local tdSt = Instance.new("UIStroke")
-tdSt.Color = Color3.fromRGB(60, 60, 60)
-tdSt.Thickness = 1
-tdSt.Parent = tdInput
-
-local tdApply = Instance.new("TextButton")
-tdApply.Size = UDim2.new(0, 55, 0, 24)
-tdApply.Position = UDim2.new(0, 174, 0, 4)
-tdApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
-tdApply.Text = "Set"
-tdApply.TextColor3 = Color3.fromRGB(255, 255, 255)
-tdApply.TextSize = 12
-tdApply.Font = Enum.Font.GothamBold
-tdApply.Parent = tdRow
-Instance.new("UICorner", tdApply).CornerRadius = UDim.new(0, 6)
-
-tdApply.MouseButton1Click:Connect(function()
-    local val = tonumber(tdInput.Text)
-    if val and val >= 1 and val <= 50 then
-        TRIGGER_DIST = val
-        tdSt.Color = Color3.fromRGB(40, 180, 40)
-        task.delay(1, function() tdSt.Color = Color3.fromRGB(60, 60, 60) end)
-    else
-        tdSt.Color = Color3.fromRGB(200, 50, 50)
-        task.delay(1, function() tdSt.Color = Color3.fromRGB(60, 60, 60) end)
-    end
-end)
-
--- UI Scale
-local scaleRow = Instance.new("Frame")
-scaleRow.Size = UDim2.new(1, 0, 0, 32)
-scaleRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-scaleRow.BorderSizePixel = 0
-scaleRow.LayoutOrder = nextOrder()
-scaleRow.Parent = MainPanel
-Instance.new("UICorner", scaleRow).CornerRadius = UDim.new(0, 6)
-
-local scaleLbl = Instance.new("TextLabel")
-scaleLbl.Size = UDim2.new(0, 100, 1, 0)
-scaleLbl.Position = UDim2.new(0, 8, 0, 0)
-scaleLbl.BackgroundTransparency = 1
-scaleLbl.Text = "UI Scale:"
-scaleLbl.TextColor3 = Color3.fromRGB(255, 140, 0)
-scaleLbl.TextSize = 12
-scaleLbl.Font = Enum.Font.GothamBold
-scaleLbl.TextXAlignment = Enum.TextXAlignment.Left
-scaleLbl.Parent = scaleRow
-
-local MinusBtn = Instance.new("TextButton")
-MinusBtn.Size = UDim2.new(0, 30, 0, 24)
-MinusBtn.Position = UDim2.new(0, 112, 0, 4)
-MinusBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-MinusBtn.Text = "−"
-MinusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinusBtn.TextSize = 16
-MinusBtn.Font = Enum.Font.GothamBold
-MinusBtn.Parent = scaleRow
-Instance.new("UICorner", MinusBtn).CornerRadius = UDim.new(0, 6)
-
-local SizeDisplay = Instance.new("TextLabel")
-SizeDisplay.Size = UDim2.new(0, 45, 0, 24)
-SizeDisplay.Position = UDim2.new(0, 147, 0, 4)
-SizeDisplay.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-SizeDisplay.Text = "100%"
-SizeDisplay.TextColor3 = Color3.fromRGB(255, 255, 255)
-SizeDisplay.TextSize = 12
-SizeDisplay.Font = Enum.Font.GothamBold
-SizeDisplay.Parent = scaleRow
-Instance.new("UICorner", SizeDisplay).CornerRadius = UDim.new(0, 6)
-
-local PlusBtn = Instance.new("TextButton")
-PlusBtn.Size = UDim2.new(0, 30, 0, 24)
-PlusBtn.Position = UDim2.new(0, 197, 0, 4)
-PlusBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-PlusBtn.Text = "+"
-PlusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-PlusBtn.TextSize = 16
-PlusBtn.Font = Enum.Font.GothamBold
-PlusBtn.Parent = scaleRow
-Instance.new("UICorner", PlusBtn).CornerRadius = UDim.new(0, 6)
-
-local currentUIScale = 1.0
-
-local function applyScale(newScale)
-    currentUIScale = math.clamp(newScale, 0.65, 1.5)
-    uiScale.Scale = currentUIScale
-    SizeDisplay.Text = math.floor(currentUIScale * 100 + 0.5) .. "%"
-end
-
-MinusBtn.MouseButton1Click:Connect(function() applyScale(currentUIScale - 0.1) end)
-PlusBtn.MouseButton1Click:Connect(function() applyScale(currentUIScale + 0.1) end)
 
 -- ════════════════════════════════
 --   MINIMIZE
@@ -744,18 +790,24 @@ local function setMinimized(state)
     if isMinimized then
         ContentFrame.Visible = false
         MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, 38)
-        CloseBtn.Text = "+"
+        MinBtn.Text = "+"
     else
         ContentFrame.Visible = true
         MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, BASE_HEIGHT)
-        CloseBtn.Text = "−"
+        MinBtn.Text = "−"
     end
 end
 
-CloseBtn.MouseButton1Click:Connect(function() setMinimized(not isMinimized) end)
+MinBtn.MouseButton1Click:Connect(function() setMinimized(not isMinimized) end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    farmActive = false
+    farmState = "Closed"
+    ScreenGui:Destroy()
+end)
 
 -- ════════════════════════════════
---   PANIC [P]
+--   PANIC [P] + HIDE [RightShift]
 -- ════════════════════════════════
 
 UIS.InputBegan:Connect(function(input, processed)
@@ -764,8 +816,7 @@ UIS.InputBegan:Connect(function(input, processed)
     if input.KeyCode == Enum.KeyCode.P then
         farmActive = false
         farmState = "🔴 PANIC!"
-
-        FarmToggle.Text = "🌾  Auto Farm OFF"
+        FarmToggle.Text = "Auto Farm                                           OFF"
         FarmToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         farmStroke.Color = Color3.fromRGB(100, 30, 30)
         StatusLabel.Text = "🔴 PANIC!"
@@ -815,7 +866,7 @@ UIS.InputChanged:Connect(function(input)
 end)
 
 -- ════════════════════════════════
---   RESPAWN: set WalkSpeed
+--   RESPAWN: reapply WalkSpeed
 -- ════════════════════════════════
 
 LocalPlayer.CharacterAdded:Connect(function()
@@ -833,8 +884,8 @@ end)
 -- ════════════════════════════════
 
 print("══════════════════════════════════")
-print("  ECLIPSE AUTO FARM v11 ✅")
-print("  MoveTo → 6s → Jump if stuck")
-print("  8 Slots | Simple & Clean")
+print("  ECLIPSE AUTO FARM v13 ✅")
+print("  BG Image | Clean Layout | -/+ Slots")
+print("  Walk → Stuck → Jump → Keep going")
 print("  [P] = Panic | [RightShift] = Hide")
 print("══════════════════════════════════")
