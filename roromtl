@@ -1,14 +1,12 @@
 -- ══════════════════════════════════════════════════════════════
--- ECLIPSE SAB NF v9 - LAZY LOADING
--- UI loads first | Logic loads ONLY when ON
--- Zero metamethod hooks | BodyVelocity jumps | VirtualUser AFK
+-- ECLIPSE SAB NF v10 - LAZY LOAD + SLOT SELECTOR
+-- Fixed Auto Farm | 8 Position Slots | All features lazy loaded
 -- ══════════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
--- Clean old GUI
 pcall(function()
     for _, gui in ipairs(game:GetService("CoreGui"):GetChildren()) do
         if gui.Name == "RobloxGui_App" then gui:Destroy() end
@@ -16,12 +14,25 @@ pcall(function()
 end)
 
 -- ════════════════════════════════
---     CONFIG (no services)
+--        SLOT COORDINATES
+-- ════════════════════════════════
+
+local SLOTS = {
+    {name = "Slot 1", x = -461.32, z = 140.12},
+    {name = "Slot 2", x = -389.20, z = 151.84},
+    {name = "Slot 3", x = -330.62, z = 109.53},
+    {name = "Slot 4", x = -317.93, z = 39.50},
+    {name = "Slot 5", x = -360.97, z = -20.83},
+    {name = "Slot 6", x = -432.85, z = -31.42},
+    {name = "Slot 7", x = -490.25, z = 10.84},
+    {name = "Slot 8", x = -503.77, z = 81.59},
+}
+
+-- ════════════════════════════════
+--     CONFIGURATION
 -- ════════════════════════════════
 
 local CFG = {
-    TARGET_X = -462.5,
-    TARGET_Z = 139.7,
     RESET_RADIUS = 10,
     RESET_COOLDOWN = 15,
     STALL_TIMEOUT = 3,
@@ -32,30 +43,33 @@ local CFG = {
     BV_DURATION = 0.15,
 }
 
--- Feature states (all OFF at load)
+-- Current active target
+local currentSlot = 1
+local TARGET_X = SLOTS[1].x
+local TARGET_Z = SLOTS[1].z
+
+-- Feature states
 local state = {
     posActive = false,
     jumpsActive = false,
     afkActive = false,
-    posLoop = nil,
-    afkLoop = nil,
     jumpsConns = {},
-    afkConns = {},
     jumpCount = 0,
     jumpsValue = 0,
     afkCount = 0,
     lastReset = 0,
     isMinimized = false,
     currentPanel = "main",
+    afkIntervalMin = 30,
+    afkIntervalMax = 90,
 }
 
--- UI state
 local BASE_WIDTH = 310
-local BASE_HEIGHT = 420
+local BASE_HEIGHT = 500
 local currentScale = 1.0
 
 -- ════════════════════════════════
---        GUI CREATION
+--         GUI CREATION
 -- ════════════════════════════════
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -103,7 +117,7 @@ local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -80, 1, 0)
 TitleLabel.Position = UDim2.new(0, 10, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ Eclipse Sab Nf v9"
+TitleLabel.Text = "⚡ Eclipse Sab Nf v10"
 TitleLabel.TextColor3 = Color3.fromRGB(18, 18, 18)
 TitleLabel.TextSize = 16
 TitleLabel.Font = Enum.Font.GothamBold
@@ -273,33 +287,6 @@ local function makeToggle(parent, text, height)
     return btn, s
 end
 
-local function makeInfoBox(parent, lines)
-    local h = 14 * #lines + 12
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, h)
-    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    frame.BorderSizePixel = 0
-    frame.LayoutOrder = nextOrder()
-    frame.Parent = parent
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
-    local s = Instance.new("UIStroke") s.Color = Color3.fromRGB(50, 50, 50) s.Thickness = 1 s.Parent = frame
-    local labels = {}
-    for i, line in ipairs(lines) do
-        local l = Instance.new("TextLabel")
-        l.Size = UDim2.new(1, -10, 0, 14)
-        l.Position = UDim2.new(0, 5, 0, 4 + (i-1)*16)
-        l.BackgroundTransparency = 1
-        l.Text = line
-        l.TextColor3 = Color3.fromRGB(255, 140, 0)
-        l.TextSize = 11
-        l.Font = Enum.Font.GothamBold
-        l.TextXAlignment = Enum.TextXAlignment.Center
-        l.Parent = frame
-        labels[i] = l
-    end
-    return frame, labels
-end
-
 local function makeStatus(parent, default)
     local l = Instance.new("TextLabel")
     l.Size = UDim2.new(1, 0, 0, 20)
@@ -331,16 +318,118 @@ local JumpsBox = makeInput(jumpsCountRow, 100, 185, "Number or 'inf'")
 local JumpsToggle, jtStroke = makeToggle(MainPanel, "⛔  ExtraJumps OFF", 30)
 
 -- ══════════════════════════════════════
---    SECTION 2: AUTO FARM
+--    SECTION 2: AUTO FARM + SLOTS
 -- ══════════════════════════════════════
 
 makeSection(MainPanel, "────────── Auto Farm ──────────")
 
-local posInfoBox, posInfoLabels = makeInfoBox(MainPanel, {
-    "🔒 Position Lock [Lazy Load]",
-    "X: "..CFG.TARGET_X.."  |  Z: "..CFG.TARGET_Z,
-    "Reset: >"..CFG.RESET_RADIUS.." studs | Stuck >6s | CD: 15s"
-})
+-- Slot Selector
+local SlotLabel = Instance.new("TextLabel")
+SlotLabel.Size = UDim2.new(1, 0, 0, 22)
+SlotLabel.BackgroundTransparency = 1
+SlotLabel.Text = "📍 Select Slot:"
+SlotLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+SlotLabel.TextSize = 12
+SlotLabel.Font = Enum.Font.GothamBold
+SlotLabel.TextXAlignment = Enum.TextXAlignment.Center
+SlotLabel.LayoutOrder = nextOrder()
+SlotLabel.Parent = MainPanel
+
+-- Slot grid (2 columns x 4 rows)
+local SlotGrid = Instance.new("Frame")
+SlotGrid.Size = UDim2.new(1, 0, 0, 120)
+SlotGrid.BackgroundTransparency = 1
+SlotGrid.LayoutOrder = nextOrder()
+SlotGrid.Parent = MainPanel
+
+local gridLayout = Instance.new("UIGridLayout")
+gridLayout.CellSize = UDim2.new(0, 135, 0, 26)
+gridLayout.CellPadding = UDim2.new(0, 6, 0, 4)
+gridLayout.FillDirection = Enum.FillDirection.Horizontal
+gridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+gridLayout.Parent = SlotGrid
+
+local slotButtons = {}
+for i, slot in ipairs(SLOTS) do
+    local btn = Instance.new("TextButton")
+    btn.BackgroundColor3 = (i == 1) and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(40, 40, 40)
+    btn.Text = slot.name .. "  (" .. slot.x .. ", " .. slot.z .. ")"
+    btn.TextColor3 = (i == 1) and Color3.fromRGB(18, 18, 18) or Color3.fromRGB(180, 180, 180)
+    btn.TextSize = 10
+    btn.Font = Enum.Font.GothamBold
+    btn.LayoutOrder = i
+    btn.AutoButtonColor = false
+    btn.Parent = SlotGrid
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        if state.posActive then return end -- can't change while running
+        -- Deselect old
+        slotButtons[currentSlot].BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        slotButtons[currentSlot].TextColor3 = Color3.fromRGB(180, 180, 180)
+        -- Select new
+        currentSlot = i
+        TARGET_X = slot.x
+        TARGET_Z = slot.z
+        btn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+        btn.TextColor3 = Color3.fromRGB(18, 18, 18)
+        -- Update info
+        posInfoLabels[2].Text = "X: " .. slot.x .. "  |  Z: " .. slot.z
+        posInfoLabels[1].Text = "🔒 " .. slot.name .. " [Lazy Load]"
+    end)
+
+    slotButtons[i] = btn
+end
+
+-- Info box
+local posInfoBox
+local posInfoLabels = {}
+
+local posInfoFrame = Instance.new("Frame")
+posInfoFrame.Size = UDim2.new(1, 0, 0, 50)
+posInfoFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+posInfoFrame.BorderSizePixel = 0
+posInfoFrame.LayoutOrder = nextOrder()
+posInfoFrame.Parent = MainPanel
+Instance.new("UICorner", posInfoFrame).CornerRadius = UDim.new(0, 6)
+local infoStroke = Instance.new("UIStroke") infoStroke.Color = Color3.fromRGB(50, 50, 50) infoStroke.Thickness = 1 infoStroke.Parent = posInfoFrame
+
+local l1 = Instance.new("TextLabel")
+l1.Size = UDim2.new(1, -10, 0, 14)
+l1.Position = UDim2.new(0, 5, 0, 4)
+l1.BackgroundTransparency = 1
+l1.Text = "🔒 Slot 1 [Lazy Load]"
+l1.TextColor3 = Color3.fromRGB(255, 140, 0)
+l1.TextSize = 11
+l1.Font = Enum.Font.GothamBold
+l1.TextXAlignment = Enum.TextXAlignment.Center
+l1.Parent = posInfoFrame
+posInfoLabels[1] = l1
+
+local l2 = Instance.new("TextLabel")
+l2.Size = UDim2.new(1, -10, 0, 14)
+l2.Position = UDim2.new(0, 5, 0, 18)
+l2.BackgroundTransparency = 1
+l2.Text = "X: " .. SLOTS[1].x .. "  |  Z: " .. SLOTS[1].z
+l2.TextColor3 = Color3.fromRGB(255, 140, 0)
+l2.TextSize = 11
+l2.Font = Enum.Font.GothamBold
+l2.TextXAlignment = Enum.TextXAlignment.Center
+l2.Parent = posInfoFrame
+posInfoLabels[2] = l2
+
+local l3 = Instance.new("TextLabel")
+l3.Size = UDim2.new(1, -10, 0, 14)
+l3.Position = UDim2.new(0, 5, 0, 32)
+l3.BackgroundTransparency = 1
+l3.Text = "Reset: >" .. CFG.RESET_RADIUS .. " studs | Stuck >6s | CD: 15s"
+l3.TextColor3 = Color3.fromRGB(255, 140, 0)
+l3.TextSize = 11
+l3.Font = Enum.Font.GothamBold
+l3.TextXAlignment = Enum.TextXAlignment.Center
+l3.Parent = posInfoFrame
+posInfoLabels[3] = l3
 
 local StatusLabel = makeStatus(MainPanel, "Status: Inactive")
 local PosToggle, ptStroke = makeToggle(MainPanel, "🔓  Position Lock OFF", 32)
@@ -351,10 +440,40 @@ local PosToggle, ptStroke = makeToggle(MainPanel, "🔓  Position Lock OFF", 32)
 
 makeSection(MainPanel, "─────────── Anti AFK ───────────")
 
-local afkInfoBox, afkInfoLabels = makeInfoBox(MainPanel, {
-    "🛡️ Anti AFK [Lazy Load]",
-    "Next: -- | Actions: 0"
-})
+local afkInfoFrame = Instance.new("Frame")
+afkInfoFrame.Size = UDim2.new(1, 0, 0, 36)
+afkInfoFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+afkInfoFrame.BorderSizePixel = 0
+afkInfoFrame.LayoutOrder = nextOrder()
+afkInfoFrame.Parent = MainPanel
+Instance.new("UICorner", afkInfoFrame).CornerRadius = UDim.new(0, 6)
+local afkStroke2 = Instance.new("UIStroke") afkStroke2.Color = Color3.fromRGB(50, 50, 50) afkStroke2.Thickness = 1 afkStroke2.Parent = afkInfoFrame
+
+local afkInfoLabels = {}
+
+local al1 = Instance.new("TextLabel")
+al1.Size = UDim2.new(1, -10, 0, 14)
+al1.Position = UDim2.new(0, 5, 0, 4)
+al1.BackgroundTransparency = 1
+al1.Text = "🛡️ Anti AFK [Lazy Load]"
+al1.TextColor3 = Color3.fromRGB(255, 140, 0)
+al1.TextSize = 11
+al1.Font = Enum.Font.GothamBold
+al1.TextXAlignment = Enum.TextXAlignment.Center
+al1.Parent = afkInfoFrame
+afkInfoLabels[1] = al1
+
+local al2 = Instance.new("TextLabel")
+al2.Size = UDim2.new(1, -10, 0, 14)
+al2.Position = UDim2.new(0, 5, 0, 18)
+al2.BackgroundTransparency = 1
+al2.Text = "Next: -- | Actions: 0"
+al2.TextColor3 = Color3.fromRGB(255, 140, 0)
+al2.TextSize = 11
+al2.Font = Enum.Font.GothamBold
+al2.TextXAlignment = Enum.TextXAlignment.Center
+al2.Parent = afkInfoFrame
+afkInfoLabels[2] = al2
 
 local AfkStatus = makeStatus(MainPanel, "Idle")
 local AfkToggle, afkStroke = makeToggle(MainPanel, "💤  Anti AFK OFF", 30)
@@ -385,7 +504,7 @@ PanicLabel.ZIndex = 6
 PanicLabel.Parent = PanicBar
 
 -- ══════════════════════════════════════
---   SETTINGS PANEL CONTENT
+--   SETTINGS PANEL
 -- ══════════════════════════════════════
 
 makeSection(SettingsPanel, "──────────── Ajustes ────────────")
@@ -398,16 +517,16 @@ sizeRow.LayoutOrder = nextOrder()
 sizeRow.Parent = SettingsPanel
 Instance.new("UICorner", sizeRow).CornerRadius = UDim.new(0, 6)
 
-local SizeLabel = Instance.new("TextLabel")
-SizeLabel.Size = UDim2.new(0, 100, 0, 30)
-SizeLabel.Position = UDim2.new(0, 8, 0, 5)
-SizeLabel.BackgroundTransparency = 1
-SizeLabel.Text = "Tamaño UI:"
-SizeLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
-SizeLabel.TextSize = 13
-SizeLabel.Font = Enum.Font.GothamBold
-SizeLabel.TextXAlignment = Enum.TextXAlignment.Left
-SizeLabel.Parent = sizeRow
+local SizeLabel2 = Instance.new("TextLabel")
+SizeLabel2.Size = UDim2.new(0, 100, 0, 30)
+SizeLabel2.Position = UDim2.new(0, 8, 0, 5)
+SizeLabel2.BackgroundTransparency = 1
+SizeLabel2.Text = "Tamaño UI:"
+SizeLabel2.TextColor3 = Color3.fromRGB(255, 140, 0)
+SizeLabel2.TextSize = 13
+SizeLabel2.Font = Enum.Font.GothamBold
+SizeLabel2.TextXAlignment = Enum.TextXAlignment.Left
+SizeLabel2.Parent = sizeRow
 
 local MinusBtn = Instance.new("TextButton")
 MinusBtn.Size = UDim2.new(0, 40, 0, 30)
@@ -445,7 +564,7 @@ Instance.new("UICorner", PlusBtn).CornerRadius = UDim.new(0, 6)
 local settingsInfo = Instance.new("TextLabel")
 settingsInfo.Size = UDim2.new(1, 0, 0, 60)
 settingsInfo.BackgroundTransparency = 1
-settingsInfo.Text = "Eclipse Sab Nf v9 [Lazy Load]\nLogic loads only when ON\nZero hooks | Natural methods"
+settingsInfo.Text = "Eclipse Sab Nf v10 [Lazy Load]\n8 Slots | Logic loads when ON\nZero hooks | Natural methods"
 settingsInfo.TextColor3 = Color3.fromRGB(80, 80, 80)
 settingsInfo.TextSize = 10
 settingsInfo.Font = Enum.Font.Gotham
@@ -454,7 +573,7 @@ settingsInfo.LayoutOrder = nextOrder()
 settingsInfo.Parent = SettingsPanel
 
 -- ════════════════════════════════
---   UI CONTROLS (no game logic)
+--   UI CONTROLS
 -- ════════════════════════════════
 
 local function applyScale(newScale)
@@ -498,30 +617,29 @@ SettingsBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════
--- ██████  LAZY LOAD FUNCTIONS  ██████
--- All game logic is loaded ONLY when the user clicks ON
+-- ██  LAZY LOAD: HELPER FUNCTIONS  ██
+-- These are shared but only called when features are ON
 -- ══════════════════════════════════════════════════════════════
 
--- ── Helper: get char parts (loaded on demand) ──
 local function getCharParts()
     local char = LocalPlayer.Character
     if not char then return nil, nil, nil end
     return char, char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
 end
 
--- ──────────────────────────────────
--- LAZY LOAD: EXTRA JUMPS (BodyVelocity)
--- ──────────────────────────────────
+local function safeWalkSpeed(humanoid, speed)
+    pcall(function() humanoid.WalkSpeed = speed end)
+end
+
+-- ══════════════════════════════════════════════════════════════
+-- ██  LAZY LOAD: EXTRA JUMPS  ██
+-- ══════════════════════════════════════════════════════════════
 
 local function lazyLoadJumps()
-    -- Load services ONLY now
-    local RunService = game:GetService("RunService")
     local Debris = game:GetService("Debris")
-
     local jumpsValue = state.jumpsValue
     local jumpsUsed = 0
 
-    -- Clean old connections
     for _, c in ipairs(state.jumpsConns) do pcall(function() c:Disconnect() end) end
     state.jumpsConns = {}
 
@@ -531,13 +649,11 @@ local function lazyLoadJumps()
     local root = char:FindFirstChild("HumanoidRootPart")
     if not humanoid or not root then return end
 
-    -- Reset jump count on land
     local landConn = humanoid.StateChanged:Connect(function(_, new)
         if new == Enum.HumanoidStateType.Landed then jumpsUsed = 0 end
     end)
     table.insert(state.jumpsConns, landConn)
 
-    -- Extra jumps via BodyVelocity
     local jumpConn = UIS.JumpRequest:Connect(function()
         if not state.jumpsActive then return end
         local hState = humanoid:GetState()
@@ -557,7 +673,6 @@ end
 local function unloadJumps()
     for _, c in ipairs(state.jumpsConns) do pcall(function() c:Disconnect() end) end
     state.jumpsConns = {}
-    -- Clean BV instances
     pcall(function()
         local char = LocalPlayer.Character
         if char then
@@ -571,15 +686,12 @@ local function unloadJumps()
     end)
 end
 
--- ──────────────────────────────────
--- LAZY LOAD: POSITION LOCK
--- ──────────────────────────────────
+-- ══════════════════════════════════════════════════════════════
+-- ██  LAZY LOAD: POSITION LOCK (FIXED)  ██
+-- Uses task.spawn with proper error handling
+-- ══════════════════════════════════════════════════════════════
 
 local function lazyLoadPosLock()
-    -- Services loaded now, not before
-    local RunService = game:GetService("RunService")
-    local Debris = game:GetService("Debris")
-
     local function canReset()
         return (tick() - state.lastReset) >= CFG.RESET_COOLDOWN
     end
@@ -601,8 +713,8 @@ local function lazyLoadPosLock()
     end
 
     local function getDistFromTarget(root)
-        local dx = root.Position.X - CFG.TARGET_X
-        local dz = root.Position.Z - CFG.TARGET_Z
+        local dx = root.Position.X - TARGET_X
+        local dz = root.Position.Z - TARGET_Z
         return math.sqrt(dx * dx + dz * dz)
     end
 
@@ -613,7 +725,7 @@ local function lazyLoadPosLock()
         local adjusted = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
         local totalDist = (root.Position - adjusted).Magnitude
 
-        -- Short distance: direct walk
+        -- Short: direct
         if totalDist < 5 then
             humanoid:MoveTo(adjusted)
             local elapsed = 0
@@ -635,7 +747,7 @@ local function lazyLoadPosLock()
             return "stuck"
         end
 
-        -- Longer: intermediate waypoints
+        -- Longer: waypoints
         local numWP = math.random(2, 3)
         local waypoints = {}
         for i = 1, numWP - 1 do
@@ -674,126 +786,122 @@ local function lazyLoadPosLock()
         return "stuck"
     end
 
-    -- THE MAIN LOOP
-    state.posLoop = coroutine.create(function()
-        while state.posActive do
-            local char, root, humanoid = getCharParts()
-            if not root or not humanoid then
-                StatusLabel.Text = "Waiting for character..."
-                StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-                task.wait(1 + math.random() * 0.5)
-                -- continue only if still active
-                if not state.posActive then break end
-                continue
-            end
+    -- Main loop using task.spawn (robust)
+    task.spawn(function()
+        local ok, err = pcall(function()
+            while state.posActive do
+                local char, root, humanoid = getCharParts()
 
-            local dist = getDistFromTarget(root)
-
-            -- TOO FAR
-            if dist > CFG.RESET_RADIUS then
-                if canReset() then
-                    StatusLabel.Text = string.format("⚠ Too far (%.1f) — Resetting!", dist)
-                    StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
-                    task.wait(0.3 + math.random() * 0.3)
-                    resetChar()
-                    task.wait(3 + math.random() * 2)
+                if not root or not humanoid then
+                    StatusLabel.Text = "Waiting for character..."
+                    StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+                    task.wait(1 + math.random() * 0.5)
                 else
-                    StatusLabel.Text = string.format("⚠ Too far (%.1f) — CD...", dist)
-                    StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-                    task.wait(1)
-                end
-                if not state.posActive then break end
-                continue
-            end
+                    local dist = getDistFromTarget(root)
 
-            -- AT POSITION
-            setWalkSpeed(humanoid, CFG.WALKSPEED + math.random() * 2 - 1)
-            StatusLabel.Text = string.format("✅ At position | Dist: %.1f", dist)
-            StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-
-            -- Randomized idle wait
-            task.wait(2 + math.random() * 3)
-            if not state.posActive then break end
-
-            local _, r2, h2 = getCharParts()
-            if r2 and h2 then
-                local d2 = getDistFromTarget(r2)
-
-                if d2 > CFG.RESET_RADIUS * 0.6 then
-                    -- DRIFTING
-                    StatusLabel.Text = string.format("⚠ Drifting (%.1f) — Correcting...", d2)
-                    StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-
-                    local offset = getRandomOffset()
-                    local targetPos = Vector3.new(CFG.TARGET_X + offset.X, r2.Position.Y, CFG.TARGET_Z + offset.Z)
-
-                    local result = walkNatural(targetPos, function(d)
-                        if state.posActive then
-                            StatusLabel.Text = string.format("🔄 Moving... | %.1f", d)
-                            StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-                        end
-                    end)
-
-                    if result == "stuck" then
+                    -- TOO FAR
+                    if dist > CFG.RESET_RADIUS then
                         if canReset() then
-                            StatusLabel.Text = "⚠ Stuck — Resetting!"
+                            StatusLabel.Text = string.format("⚠ Too far (%.1f) — Reset!", dist)
                             StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
-                            task.wait(0.5 + math.random() * 0.5)
+                            task.wait(0.3 + math.random() * 0.3)
                             resetChar()
                             task.wait(3 + math.random() * 2)
                         else
-                            StatusLabel.Text = "⚠ Stuck — CD..."
+                            StatusLabel.Text = string.format("⚠ Too far (%.1f) — CD...", dist)
                             StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
                             task.wait(1)
                         end
-                    elseif result == "lost" then
-                        StatusLabel.Text = "⚠ Lost — Waiting..."
-                        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-                        task.wait(2)
                     else
-                        -- Reached
-                        local _, _, h3 = getCharParts()
-                        if h3 then setWalkSpeed(h3, CFG.WALKSPEED + math.random() * 2 - 1) end
-                    end
-                else
-                    -- Small idle jitter
-                    if math.random() < 0.15 then
-                        local small = Vector3.new(math.random() * 2 - 1, 0, math.random() * 2 - 1)
-                        humanoid:MoveTo(root.Position + small)
-                        task.wait(0.5 + math.random() * 0.5)
-                        humanoid:MoveTo(Vector3.new(CFG.TARGET_X, root.Position.Y, CFG.TARGET_Z))
+                        -- AT POSITION
+                        safeWalkSpeed(humanoid, CFG.WALKSPEED + math.random() * 2 - 1)
+                        StatusLabel.Text = string.format("✅ %s | Dist: %.1f", SLOTS[currentSlot].name, dist)
+                        StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+
+                        task.wait(2 + math.random() * 3)
+
+                        if not state.posActive then break end
+
+                        local _, r2, h2 = getCharParts()
+                        if r2 and h2 then
+                            local d2 = getDistFromTarget(r2)
+
+                            if d2 > CFG.RESET_RADIUS * 0.6 then
+                                -- DRIFTING
+                                StatusLabel.Text = string.format("⚠ Drifting (%.1f) — Fixing...", d2)
+                                StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+
+                                local offset = getRandomOffset()
+                                local targetPos = Vector3.new(TARGET_X + offset.X, r2.Position.Y, TARGET_Z + offset.Z)
+
+                                local result = walkNatural(targetPos, function(d)
+                                    if state.posActive then
+                                        StatusLabel.Text = string.format("🔄 Walking... | %.1f", d)
+                                        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+                                    end
+                                end)
+
+                                if result == "stuck" then
+                                    if canReset() then
+                                        StatusLabel.Text = "⚠ Stuck — Reset!"
+                                        StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+                                        task.wait(0.5 + math.random() * 0.5)
+                                        resetChar()
+                                        task.wait(3 + math.random() * 2)
+                                    else
+                                        StatusLabel.Text = "⚠ Stuck — CD..."
+                                        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+                                        task.wait(1)
+                                    end
+                                elseif result == "reached" then
+                                    local _, _, h3 = getCharParts()
+                                    if h3 then safeWalkSpeed(h3, CFG.WALKSPEED + math.random() * 2 - 1) end
+                                end
+                            else
+                                -- Small idle jitter
+                                if math.random() < 0.15 then
+                                    local small = Vector3.new(math.random() * 2 - 1, 0, math.random() * 2 - 1)
+                                    humanoid:MoveTo(root.Position + small)
+                                    task.wait(0.5 + math.random() * 0.5)
+                                    humanoid:MoveTo(Vector3.new(TARGET_X, root.Position.Y, TARGET_Z))
+                                end
+                            end
+                        end
                     end
                 end
-            end
 
-            if not state.posActive then break end
+                task.wait(0.5) -- Small wait between cycles
+            end
+        end)
+
+        if not ok then
+            warn("[Eclipse] PosLock error: " .. tostring(err))
+            StatusLabel.Text = "⚠ Error — Check console"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
         end
     end)
-
-    coroutine.resume(state.posLoop)
 end
 
 local function unloadPosLock()
     state.posActive = false
-    state.posLoop = nil
     StatusLabel.Text = "Status: Inactive"
     StatusLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
     pcall(function()
         local _, _, h = getCharParts()
-        if h then h.WalkSpeed = 16 end
+        if h then safeWalkSpeed(h, 16) end
     end)
 end
 
--- ──────────────────────────────────
--- LAZY LOAD: ANTI AFK (VirtualUser)
--- ──────────────────────────────────
+-- ══════════════════════════════════════════════════════════════
+-- ██  LAZY LOAD: ANTI AFK  ██
+-- ══════════════════════════════════════════════════════════════
 
 local function lazyLoadAfk()
     local VirtualUser = game:GetService("VirtualUser")
 
-    state.afkLoop = coroutine.create(function()
+    task.spawn(function()
         while state.afkActive do
-            local waitTime = math.random(30, 90)
+            local waitTime = math.random(state.afkIntervalMin, state.afkIntervalMax)
             for i = waitTime, 1, -1 do
                 if not state.afkActive then break end
                 afkInfoLabels[2].Text = string.format("Next: %ds | Actions: %d", i, state.afkCount)
@@ -801,7 +909,6 @@ local function lazyLoadAfk()
             end
             if not state.afkActive then break end
 
-            -- VirtualUser action (safe, native Roblox)
             pcall(function()
                 VirtualUser:CaptureController()
                 VirtualUser:ClickButton2(Vector2.new())
@@ -809,39 +916,34 @@ local function lazyLoadAfk()
 
             state.afkCount = state.afkCount + 1
             afkInfoLabels[2].Text = string.format("Active | Actions: %d", state.afkCount)
-            AfkStatus.Text = "🖱️ VirtualUser action"
+            AfkStatus.Text = "🖱️ VirtualUser click"
             AfkStatus.TextColor3 = Color3.fromRGB(100, 200, 255)
             task.wait(0.5 + math.random() * 0.5)
         end
     end)
-
-    coroutine.resume(state.afkLoop)
 end
 
 local function unloadAfk()
     state.afkActive = false
-    state.afkLoop = nil
     AfkStatus.Text = "Idle"
     AfkStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
     afkInfoLabels[2].Text = "Next: -- | Actions: 0"
 end
 
 -- ══════════════════════════════════════════════════════════════
--- ██████  BUTTON HANDLERS  ██████
--- Each button loads/unloads its feature on demand
+-- ██  BUTTON HANDLERS  ██
 -- ══════════════════════════════════════════════════════════════
 
--- ── JUMPS BUTTON ──
+-- JUMPS
 JumpsToggle.MouseButton1Click:Connect(function()
     if not state.jumpsActive then
-        -- TURN ON → Lazy load
         local targetName = UserBox.Text:gsub("%s+", "")
         local jumpsText = JumpsBox.Text:gsub("%s+", "")
 
         if targetName == "" then UserBox.PlaceholderText = "⚠ Enter username!" return end
 
         local jv
-        if jumpsText:lower() == "inf" or jumpsText:lower() == "infinite" or jumpsText:lower() == "infinity" then
+        if jumpsText:lower() == "inf" or jumpsText:lower() == "infinite" then
             jv = math.huge
         else
             jv = tonumber(jumpsText)
@@ -856,7 +958,7 @@ JumpsToggle.MouseButton1Click:Connect(function()
                 end
             end
         end
-        if not found then UserBox.PlaceholderText = "⚠ Player not found!" UserBox.Text = "" return end
+        if not found then UserBox.PlaceholderText = "⚠ Not found!" UserBox.Text = "" return end
         if found ~= LocalPlayer then JumpsBox.PlaceholderText = "⚠ Only yourself!" return end
 
         state.jumpsActive = true
@@ -864,11 +966,8 @@ JumpsToggle.MouseButton1Click:Connect(function()
         JumpsToggle.Text = "✅  ExtraJumps ON"
         JumpsToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
         jtStroke.Color = Color3.fromRGB(30, 100, 30)
-
-        -- LAZY LOAD: game logic starts NOW
         lazyLoadJumps()
     else
-        -- TURN OFF → Unload
         state.jumpsActive = false
         JumpsToggle.Text = "⛔  ExtraJumps OFF"
         JumpsToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
@@ -877,27 +976,33 @@ JumpsToggle.MouseButton1Click:Connect(function()
     end
 end)
 
--- ── POSITION LOCK BUTTON ──
+-- POSITION LOCK
 PosToggle.MouseButton1Click:Connect(function()
     if not state.posActive then
         state.posActive = true
         PosToggle.Text = "🔒  Position Lock ON"
         PosToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
         ptStroke.Color = Color3.fromRGB(30, 100, 30)
-        StatusLabel.Text = "Status: Loading..."
+        StatusLabel.Text = "Loading " .. SLOTS[currentSlot].name .. "..."
         StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-
-        -- LAZY LOAD: game logic starts NOW
+        -- Lock slot buttons
+        for _, btn in ipairs(slotButtons) do
+            btn.BackgroundTransparency = 0.5
+        end
         lazyLoadPosLock()
     else
         PosToggle.Text = "🔓  Position Lock OFF"
         PosToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         ptStroke.Color = Color3.fromRGB(100, 30, 30)
         unloadPosLock()
+        -- Unlock slot buttons
+        for _, btn in ipairs(slotButtons) do
+            btn.BackgroundTransparency = 0
+        end
     end
 end)
 
--- ── ANTI AFK BUTTON ──
+-- ANTI AFK
 AfkToggle.MouseButton1Click:Connect(function()
     if not state.afkActive then
         state.afkActive = true
@@ -906,8 +1011,6 @@ AfkToggle.MouseButton1Click:Connect(function()
         afkStroke.Color = Color3.fromRGB(30, 100, 30)
         AfkStatus.Text = "Loading..."
         AfkStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
-
-        -- LAZY LOAD: game logic starts NOW
         lazyLoadAfk()
     else
         AfkToggle.Text = "💤  Anti AFK OFF"
@@ -918,14 +1021,13 @@ AfkToggle.MouseButton1Click:Connect(function()
 end)
 
 -- ════════════════════════════════
---   PANIC KEY [P] — unload all
+--   PANIC [P]
 -- ════════════════════════════════
 
 UIS.InputBegan:Connect(function(input, processed)
     if processed then return end
 
     if input.KeyCode == Enum.KeyCode.P then
-        -- Unload everything
         if state.jumpsActive then
             state.jumpsActive = false
             unloadJumps()
@@ -933,16 +1035,15 @@ UIS.InputBegan:Connect(function(input, processed)
             JumpsToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
             jtStroke.Color = Color3.fromRGB(100, 30, 30)
         end
-
         if state.posActive then
             unloadPosLock()
             PosToggle.Text = "🔓  Position Lock OFF"
             PosToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
             ptStroke.Color = Color3.fromRGB(100, 30, 30)
-            StatusLabel.Text = "🔴 PANIC - All disabled!"
+            StatusLabel.Text = "🔴 PANIC"
             StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+            for _, btn in ipairs(slotButtons) do btn.BackgroundTransparency = 0 end
         end
-
         if state.afkActive then
             unloadAfk()
             AfkToggle.Text = "💤  Anti AFK OFF"
@@ -959,7 +1060,7 @@ UIS.InputBegan:Connect(function(input, processed)
 end)
 
 -- ════════════════════════════════
---        DRAGGABLE FRAME
+--        DRAGGABLE
 -- ════════════════════════════════
 
 local dragging, dragInput, dragStart, startPos
@@ -989,12 +1090,11 @@ UIS.InputChanged:Connect(function(input)
 end)
 
 -- ════════════════════════════════
---   RESPAWN: Re-load active features
+--   RESPAWN HANDLER
 -- ════════════════════════════════
 
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1.5 + math.random())
-    -- Re-load jumps if active
     if state.jumpsActive then
         unloadJumps()
         task.wait(0.5)
@@ -1007,8 +1107,8 @@ end)
 -- ════════════════════════════════
 
 print("════════════════════════════════════")
-print("  ECLIPSE SAB NF v9 [Lazy Load]")
-print("  UI loaded. Zero game logic.")
-print("  Logic loads when you click ON.")
+print("  ECLIPSE SAB NF v10 [Lazy Load]")
+print("  8 Slots | Fixed Auto Farm")
+print("  Zero hooks | Logic on-demand")
 print("  PANIC: [P] | UI: [RightShift]")
 print("════════════════════════════════════")
