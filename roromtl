@@ -1,5 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
--- ECLIPSE SAB NF v8 - Fixed Jumps + 6s Jump Retry + Working Scale
+-- ECLIPSE SAB NF v9 - Anti-Detect LTM
+-- BodyPosition physics | Gradual ExtraJumps | Undetected
 -- ══════════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
@@ -40,7 +41,12 @@ local POSITION_VARIANCE = 2.0
 local REAL_WALKSPEED = 48
 local SPOOFED_WALKSPEED = 16
 local MOVE_TIMEOUT = 6
-local MOVE_CHECK_INTERVAL = 0.1
+local MOVE_CHECK_INTERVAL = 0.15
+
+-- BodyPosition tuning (smooth physics movement)
+local BP_FORCE = 8000      -- MaxForce (how strong the push is)
+local BP_DAMPING = 20      -- How smooth the stop is
+local BP_POWER = 500       -- P value (acceleration)
 
 local posActive = false
 local jumpsActive = false
@@ -51,6 +57,12 @@ local hooksInstalled = false
 
 local afkIntervalMin = 30
 local afkIntervalMax = 90
+
+-- ExtraJumps gradual state
+local jumpTargetValue = 1
+local jumpCurrentValue = 0
+local jumpTargetPlayer = nil
+local jumpThread = nil
 
 -- ════════════════════════════════
 --   AC BYPASS HOOKS
@@ -154,11 +166,85 @@ end
 
 local function doJump()
     pcall(function()
-        local _, root, humanoid = getCharParts()
-        if root and humanoid then
-            humanoid.Jump = true
-        end
+        local _, _, humanoid = getCharParts()
+        if humanoid then humanoid.Jump = true end
     end)
+end
+
+-- ══════════════════════════════════════
+--   BODYPOSITION MOVEMENT (PHYSICS)
+--   Anti-cheat sees: physical force, not teleport
+-- ══════════════════════════════════════
+
+local activeBodyPos = nil
+
+local function createBodyPosition(root)
+    -- Clean any existing one
+    if activeBodyPos then
+        pcall(function() activeBodyPos:Destroy() end)
+        activeBodyPos = nil
+    end
+
+    local bp = Instance.new("BodyPosition")
+    bp.MaxForce = Vector3.new(BP_FORCE, 0, BP_FORCE)  -- No Y force (gravity stays)
+    bp.P = BP_POWER
+    bp.D = BP_DAMPING
+    bp.Parent = root
+    activeBodyPos = bp
+    return bp
+end
+
+local function removeBodyPosition()
+    if activeBodyPos then
+        pcall(function() activeBodyPos:Destroy() end)
+        activeBodyPos = nil
+    end
+end
+
+local function walkToWithBodyPosition(targetX, targetZ, timeoutSec, statusCb)
+    local char, root, humanoid = getCharParts()
+    if not root or not humanoid then return false end
+
+    -- Add small random offset for natural look
+    local offset = getRandomOffset()
+    local finalX = targetX + offset.X
+    local finalZ = targetZ + offset.Z
+    local finalPos = Vector3.new(finalX, root.Position.Y, finalZ)
+
+    -- Create BodyPosition (physics-based movement)
+    local bp = createBodyPosition(root)
+    bp.Position = finalPos
+
+    -- Wait until arrival or timeout
+    local elapsed = 0
+    local timeout = timeoutSec or MOVE_TIMEOUT
+    local arrived = false
+
+    while elapsed < timeout do
+        local _, r, h = getCharParts()
+        if not r or not h then
+            removeBodyPosition()
+            return false
+        end
+
+        local dist = (r.Position - finalPos).Magnitude
+
+        if statusCb then statusCb(dist, timeout - elapsed) end
+
+        if dist < 3 then
+            arrived = true
+            break
+        end
+
+        -- Keep updating position (in case character got pushed)
+        bp.Position = finalPos
+
+        task.wait(MOVE_CHECK_INTERVAL)
+        elapsed = elapsed + MOVE_CHECK_INTERVAL
+    end
+
+    removeBodyPosition()
+    return arrived
 end
 
 -- ════════════════════════════════
@@ -166,14 +252,13 @@ end
 -- ════════════════════════════════
 
 local BASE_WIDTH = 310
-local BASE_HEIGHT = 430
+local BASE_HEIGHT = 440
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "RobloxGui_App"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = game:GetService("CoreGui")
 
--- Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainPanel"
 MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, BASE_HEIGHT)
@@ -191,7 +276,6 @@ mainStroke.Color = Color3.fromRGB(255, 140, 0)
 mainStroke.Thickness = 2
 mainStroke.Parent = MainFrame
 
--- UIScale (this actually scales everything)
 local uiScale = Instance.new("UIScale")
 uiScale.Scale = 1.0
 uiScale.Parent = MainFrame
@@ -219,7 +303,7 @@ local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -80, 1, 0)
 TitleLabel.Position = UDim2.new(0, 10, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ Eclipse Sab Nf v8"
+TitleLabel.Text = "⚡ Eclipse Sab Nf v9"
 TitleLabel.TextColor3 = Color3.fromRGB(18, 18, 18)
 TitleLabel.TextSize = 16
 TitleLabel.Font = Enum.Font.GothamBold
@@ -227,7 +311,6 @@ TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.ZIndex = 11
 TitleLabel.Parent = TitleBar
 
--- Title Buttons
 local function makeTitleBtn(parent, xOffset, text, bgColor)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, 26, 0, 26)
@@ -450,7 +533,7 @@ local function makeStatus(parent, default)
     return l
 end
 
-local function makeSettingRow(parent, labelText, defaultVal, placeholder)
+local function makeSettingRow(parent, labelText, defaultVal)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 32)
     row.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
@@ -569,14 +652,14 @@ for row = 1, 4 do
                 end
             end
 
-            -- Update info boxes if active
             posInfoLabels[2].Text = "X: " .. TARGET_X .. "  |  Z: " .. TARGET_Z .. "  |  Slot: " .. selectedSlot
         end)
     end
 end
 
 -- ══════════════════════════════════════
---   EXTRA JUMPS (SetAttribute - the working method)
+--   EXTRA JUMPS (GRADUAL - UNDETECTED)
+--   Goes 1 → 2 → 3 → ... → target slowly
 -- ══════════════════════════════════════
 
 makeSection(MainPanel, "── ExtraJumps ──")
@@ -587,19 +670,29 @@ local UserBox = makeInput(jumpsUserRow, 88, 195, "Your username...")
 
 local jumpsCountRow = makeRow(MainPanel, 30)
 makeLabel(jumpsCountRow, "Jumps >", 0, 85)
-local JumpsBox = makeInput(jumpsCountRow, 88, 100, "Number or 'inf'")
+local JumpsBox = makeInput(jumpsCountRow, 88, 100, "1 to ∞")
+
+local jumpStatusRow = makeRow(MainPanel, 20)
+local JumpStatusLabel = Instance.new("TextLabel")
+JumpStatusLabel.Size = UDim2.new(1, 0, 1, 0)
+JumpStatusLabel.BackgroundTransparency = 1
+JumpStatusLabel.Text = "Status: OFF | Current: 0 | Target: --"
+JumpStatusLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
+JumpStatusLabel.TextSize = 10
+JumpStatusLabel.Font = Enum.Font.Gotham
+JumpStatusLabel.Parent = jumpStatusRow
 
 local JumpsToggle, jtStroke = makeToggle(MainPanel, "⛔  ExtraJumps OFF", 30)
 
 -- ══════════════════════════════════════
---   AUTO FARM (6s timeout + 2 jumps retry)
+--   AUTO FARM (BodyPosition + 6s + jump x2)
 -- ══════════════════════════════════════
 
 makeSection(MainPanel, "── Auto Farm ──")
 
 local farmInfoBox, farmInfoLabels = makeInfoBox(MainPanel, {
-    "🌾 Walk → 6s → Jump x2 → Retry",
-    "Slot: 1 | Resets: 0 | State: Idle"
+    "🌾 BodyPos → 6s → Jump x2 → Retry",
+    "Slot: 1 | Retries: 0 | State: Idle"
 })
 
 local FarmStatus = makeStatus(MainPanel, "Idle")
@@ -613,7 +706,7 @@ local FarmToggle, ftStroke = makeToggle(MainPanel, "🌾  Auto Farm OFF", 32)
 makeSection(MainPanel, "── Position Lock ──")
 
 local posInfoBox, posInfoLabels = makeInfoBox(MainPanel, {
-    "🔒 Lock at selected slot",
+    "🔒 BodyPos lock at selected slot",
     "X: " .. TARGET_X .. "  |  Z: " .. TARGET_Z .. "  |  Slot: 1"
 })
 
@@ -653,7 +746,7 @@ PanicLabel.Parent = panicRow
 
 makeSection(SettingsPanel, "── Ajustes ──")
 
--- UI Scale (using UIScale!)
+-- UI Scale
 local scaleRow = Instance.new("Frame")
 scaleRow.Size = UDim2.new(1, 0, 0, 32)
 scaleRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
@@ -706,14 +799,61 @@ PlusBtn.Font = Enum.Font.GothamBold
 PlusBtn.Parent = scaleRow
 Instance.new("UICorner", PlusBtn).CornerRadius = UDim.new(0, 6)
 
--- WalkSpeed
+-- Other settings
 local _, speedInput, speedApply, speedStroke = makeSettingRow(SettingsPanel, "WalkSpeed:", REAL_WALKSPEED)
-
--- Move Timeout
 local _, timeoutInput, timeoutApply, timeoutStroke = makeSettingRow(SettingsPanel, "Move Timeout:", MOVE_TIMEOUT)
-
--- Trigger Dist
 local _, trigInput, trigApply, trigStroke = makeSettingRow(SettingsPanel, "Trigger Dist:", TRIGGER_DIST)
+
+-- Jump speed (how fast jumps increment)
+local jumpSpeedRow = Instance.new("Frame")
+jumpSpeedRow.Size = UDim2.new(1, 0, 0, 32)
+jumpSpeedRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+jumpSpeedRow.BorderSizePixel = 0
+jumpSpeedRow.LayoutOrder = nextOrder()
+jumpSpeedRow.Parent = SettingsPanel
+Instance.new("UICorner", jumpSpeedRow).CornerRadius = UDim.new(0, 6)
+
+local jsLbl = Instance.new("TextLabel")
+jsLbl.Size = UDim2.new(0, 115, 1, 0)
+jsLbl.Position = UDim2.new(0, 8, 0, 0)
+jsLbl.BackgroundTransparency = 1
+jsLbl.Text = "Jump Speed:"
+jsLbl.TextColor3 = Color3.fromRGB(255, 140, 0)
+jsLbl.TextSize = 12
+jsLbl.Font = Enum.Font.GothamBold
+jsLbl.TextXAlignment = Enum.TextXAlignment.Left
+jsLbl.Parent = jumpSpeedRow
+
+local jsInput = Instance.new("TextBox")
+jsInput.Size = UDim2.new(0, 55, 0, 24)
+jsInput.Position = UDim2.new(0, 128, 0, 4)
+jsInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+jsInput.Text = "2"
+jsInput.PlaceholderText = "sec"
+jsInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+jsInput.TextSize = 12
+jsInput.Font = Enum.Font.Gotham
+jsInput.ClearTextOnFocus = false
+jsInput.Parent = jumpSpeedRow
+Instance.new("UICorner", jsInput).CornerRadius = UDim.new(0, 6)
+local jsSt = Instance.new("UIStroke")
+jsSt.Color = Color3.fromRGB(60, 60, 60)
+jsSt.Thickness = 1
+jsSt.Parent = jsInput
+
+local jsApply = Instance.new("TextButton")
+jsApply.Size = UDim2.new(0, 60, 0, 24)
+jsApply.Position = UDim2.new(0, 190, 0, 4)
+jsApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
+jsApply.Text = "Set"
+jsApply.TextColor3 = Color3.fromRGB(255, 255, 255)
+jsApply.TextSize = 12
+jsApply.Font = Enum.Font.GothamBold
+jsApply.Parent = jumpSpeedRow
+Instance.new("UICorner", jsApply).CornerRadius = UDim.new(0, 6)
+
+-- Jump speed state
+local jumpIncrementDelay = 2 -- seconds between each +1
 
 -- AFK Interval
 local afkRow = Instance.new("Frame")
@@ -765,7 +905,7 @@ Instance.new("UICorner", afkApply).CornerRadius = UDim.new(0, 6)
 local settingsInfo = Instance.new("TextLabel")
 settingsInfo.Size = UDim2.new(1, 0, 0, 30)
 settingsInfo.BackgroundTransparency = 1
-settingsInfo.Text = "Eclipse Sab Nf v8\nUndetected Jumps + 6s Jump Retry + 8 Slots"
+settingsInfo.Text = "Eclipse Sab Nf v9\nBodyPosition Physics + Gradual Jumps"
 settingsInfo.TextColor3 = Color3.fromRGB(80, 80, 80)
 settingsInfo.TextSize = 10
 settingsInfo.Font = Enum.Font.Gotham
@@ -777,6 +917,8 @@ settingsInfo.Parent = SettingsPanel
 -- ════════════════════════════════
 
 local currentUIScale = 1.0
+local isMinimized = false
+local currentPanel = "main"
 
 local function applyScale(newScale)
     currentUIScale = math.clamp(newScale, 0.65, 1.5)
@@ -830,7 +972,7 @@ timeoutApply.MouseButton1Click:Connect(function()
     local val = tonumber(timeoutInput.Text)
     if val and val >= 2 and val <= 30 then
         MOVE_TIMEOUT = val
-        farmInfoLabels[1].Text = "🌾 Walk → " .. MOVE_TIMEOUT .. "s → Jump x2 → Retry"
+        farmInfoLabels[1].Text = "🌾 BodyPos → " .. MOVE_TIMEOUT .. "s → Jump x2 → Retry"
         timeoutStroke.Color = Color3.fromRGB(40, 180, 40)
         task.delay(1, function() timeoutStroke.Color = Color3.fromRGB(60, 60, 60) end)
     else
@@ -848,6 +990,19 @@ trigApply.MouseButton1Click:Connect(function()
     else
         trigStroke.Color = Color3.fromRGB(200, 50, 50)
         task.delay(1, function() trigStroke.Color = Color3.fromRGB(60, 60, 60) end)
+    end
+end)
+
+jsApply.MouseButton1Click:Connect(function()
+    local val = tonumber(jsInput.Text)
+    if val and val >= 1 and val <= 30 then
+        jumpIncrementDelay = val
+        jsInput.Text = tostring(val)
+        jsSt.Color = Color3.fromRGB(40, 180, 40)
+        task.delay(1, function() jsSt.Color = Color3.fromRGB(60, 60, 60) end)
+    else
+        jsSt.Color = Color3.fromRGB(200, 50, 50)
+        task.delay(1, function() jsSt.Color = Color3.fromRGB(60, 60, 60) end)
     end
 end)
 
@@ -879,7 +1034,9 @@ SettingsBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ════════════════════════════════
---   EXTRA JUMPS (SetAttribute method - WORKING)
+--   EXTRA JUMPS (GRADUAL - UNDETECTED)
+--   1 → 2 → 3 → ... → target
+--   Random delay between each increment
 -- ════════════════════════════════
 
 local function getJumpsValue(text)
@@ -891,21 +1048,85 @@ local function getJumpsValue(text)
     return nil
 end
 
-local function applyExtraJumps(targetName, jumpsValue)
-    local targetPlayer = Players:FindFirstChild(targetName)
-    if targetPlayer then
-        local character = targetPlayer.Character
+local function setJumpAttribute(playerName, value)
+    pcall(function()
+        local player = Players:FindFirstChild(playerName)
+        if not player then return end
+
+        local character = player.Character
         if character then
-            character:SetAttribute("ExtraJumps", jumpsValue)
+            character:SetAttribute("ExtraJumps", value)
             local humanoid = character:FindFirstChildOfClass("Humanoid")
             if humanoid then
-                humanoid:SetAttribute("ExtraJumps", jumpsValue)
+                humanoid:SetAttribute("ExtraJumps", value)
             end
         end
-        targetPlayer:SetAttribute("ExtraJumps", jumpsValue)
-        return true
+        player:SetAttribute("ExtraJumps", value)
+    end)
+end
+
+local function gradualJumpLoop()
+    local targetVal = jumpTargetValue
+    local playerName = jumpTargetPlayer
+
+    if not playerName then return end
+
+    -- Get current value
+    local currentVal = 0
+    pcall(function()
+        local player = Players:FindFirstChild(playerName)
+        if player then
+            local char = player.Character
+            if char then
+                currentVal = char:GetAttribute("ExtraJumps") or 0
+            end
+        end
+    end)
+
+    jumpCurrentValue = currentVal
+
+    -- If already at target, just maintain
+    if currentVal >= targetVal and targetVal ~= math.huge then
+        -- Already done, just keep it set
+        while jumpsActive do
+            setJumpAttribute(playerName, targetVal)
+            JumpStatusLabel.Text = string.format("Status: ✓ Maintained | Current: %s | Target: %s",
+                tostring(currentVal), tostring(targetVal))
+            task.wait(math.random(10, 20)) -- Check every 10-20 seconds
+        end
+        return
     end
-    return false
+
+    -- Gradually increase: +1 every few seconds
+    while jumpsActive do
+        if currentVal < targetVal then
+            currentVal = currentVal + 1
+            jumpCurrentValue = currentVal
+
+            setJumpAttribute(playerName, currentVal)
+
+            JumpStatusLabel.Text = string.format("Status: ↑ Setting... | Current: %s | Target: %s",
+                tostring(currentVal), tostring(targetVal))
+            JumpStatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+
+            -- Random delay between increments (looks natural)
+            local delay = jumpIncrementDelay + math.random() * 2 - 0.5
+            if delay < 0.5 then delay = 0.5 end
+            task.wait(delay)
+        else
+            -- Reached target! Now just maintain
+            JumpStatusLabel.Text = string.format("Status: ✓ Reached! | Current: %s | Target: %s",
+                tostring(currentVal), tostring(targetVal))
+            JumpStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+
+            -- Maintain: re-set every 10-20 seconds (not every frame!)
+            while jumpsActive do
+                setJumpAttribute(playerName, targetVal)
+                task.wait(math.random(10, 20))
+            end
+            return
+        end
+    end
 end
 
 JumpsToggle.MouseButton1Click:Connect(function()
@@ -951,22 +1172,29 @@ JumpsToggle.MouseButton1Click:Connect(function()
         JumpsToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
         jtStroke.Color = Color3.fromRGB(30, 100, 30)
 
-        applyExtraJumps(targetName, jumpsValue)
+        -- Start gradual increase
+        jumpTargetValue = jumpsValue
+        jumpTargetPlayer = targetName
+        jumpCurrentValue = 0
 
-        local conn = RunService.Heartbeat:Connect(function()
-            if not jumpsActive then return end
-            applyExtraJumps(targetName, jumpsValue)
-        end)
-        table.insert(allConnections, conn)
+        JumpStatusLabel.Text = "Status: Starting gradual..."
+        JumpStatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+
+        jumpThread = task.spawn(gradualJumpLoop)
     else
         JumpsToggle.Text = "⛔  ExtraJumps OFF"
         JumpsToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         jtStroke.Color = Color3.fromRGB(100, 30, 30)
+
+        JumpStatusLabel.Text = "Status: OFF | Current: " .. jumpCurrentValue .. " | Target: --"
+        JumpStatusLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
+
+        jumpTargetPlayer = nil
     end
 end)
 
 -- ════════════════════════════════
---   AUTO FARM (6s timeout + jump x2 retry)
+--   AUTO FARM (BodyPosition + 6s + Jump x2)
 -- ════════════════════════════════
 
 local farmResets = 0
@@ -989,54 +1217,33 @@ local function autoFarmLoop()
             FarmStatus.Text = string.format("✅ At Slot %d | Dist: %.1f", selectedSlot, dist)
             FarmStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
             farmInfoLabels[2].Text = string.format("Slot: %d | Retries: %d | State: Idle", selectedSlot, farmResets)
-            setWS(humanoid, SPOOFED_WALKSPEED)
+            removeBodyPosition()
             task.wait(0.5)
         else
-            -- Walk to target
-            local offset = getRandomOffset()
-            local targetPos = Vector3.new(TARGET_X + offset.X, root.Position.Y, TARGET_Z + offset.Z)
-
+            -- Walk using BodyPosition (physics!)
             FarmStatus.Text = string.format("⚠ Walking to Slot %d...", selectedSlot)
             FarmStatus.TextColor3 = Color3.fromRGB(255, 140, 0)
             farmInfoLabels[2].Text = string.format("Slot: %d | Retries: %d | State: Walking", selectedSlot, farmResets)
 
-            setWS(humanoid, REAL_WALKSPEED)
-            humanoid:MoveTo(targetPos)
-
-            -- 6 second timeout
-            local elapsed = 0
-            local arrived = false
-
-            while elapsed < MOVE_TIMEOUT do
-                local _, r, h = getCharParts()
-                if not r or not h then break end
-
-                local d = (r.Position - targetPos).Magnitude
-                FarmStatus.Text = string.format("%.1fs | Dist: %.1f", MOVE_TIMEOUT - elapsed, d)
-
-                if d < 3 then
-                    arrived = true
-                    break
+            local arrived = walkToWithBodyPosition(TARGET_X, TARGET_Z, MOVE_TIMEOUT, function(d, remaining)
+                if autoFarmActive then
+                    FarmStatus.Text = string.format("BodyPos %.1fs | Dist: %.1f", remaining, d)
                 end
-
-                h:MoveTo(targetPos)
-                task.wait(MOVE_CHECK_INTERVAL)
-                elapsed = elapsed + MOVE_CHECK_INTERVAL
-            end
+            end)
 
             if arrived then
                 FarmStatus.Text = string.format("✅ Reached Slot %d!", selectedSlot)
                 FarmStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
                 farmInfoLabels[2].Text = string.format("Slot: %d | Retries: %d | State: Arrived", selectedSlot, farmResets)
-                local _, _, h = getCharParts()
-                if h then setWS(h, SPOOFED_WALKSPEED) end
                 task.wait(0.5)
             else
-                -- TIMEOUT → Jump twice instead of reset
+                -- TIMEOUT → Jump twice
                 farmResets = farmResets + 1
                 FarmStatus.Text = string.format("🦘 Timeout! Jumping x2... (#%d)", farmResets)
                 FarmStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
                 farmInfoLabels[2].Text = string.format("Slot: %d | Retries: %d | State: Jumping", selectedSlot, farmResets)
+
+                removeBodyPosition()
 
                 -- Jump 1
                 doJump()
@@ -1063,7 +1270,7 @@ FarmToggle.MouseButton1Click:Connect(function()
         ftStroke.Color = Color3.fromRGB(30, 100, 30)
         FarmStatus.Text = "Active - Slot " .. selectedSlot
         FarmStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
-        farmInfoLabels[1].Text = "🌾 Walk → " .. MOVE_TIMEOUT .. "s → Jump x2 → Retry"
+        farmInfoLabels[1].Text = "🌾 BodyPos → " .. MOVE_TIMEOUT .. "s → Jump x2 → Retry"
         task.spawn(autoFarmLoop)
     else
         FarmToggle.Text = "🌾  Auto Farm OFF"
@@ -1072,13 +1279,12 @@ FarmToggle.MouseButton1Click:Connect(function()
         FarmStatus.Text = "Idle"
         FarmStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
         farmInfoLabels[2].Text = string.format("Slot: %d | Retries: %d | State: Off", selectedSlot, farmResets)
-        local _, _, h = getCharParts()
-        if h then setWS(h, SPOOFED_WALKSPEED) end
+        removeBodyPosition()
     end
 end)
 
 -- ════════════════════════════════
---   POSITION LOCK LOGIC
+--   POSITION LOCK (BodyPosition)
 -- ════════════════════════════════
 
 local function positionLockLoop()
@@ -1088,6 +1294,7 @@ local function positionLockLoop()
         if not root or not humanoid then
             StatusLabel.Text = "Waiting for character..."
             StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+            removeBodyPosition()
             task.wait(1)
             continue
         end
@@ -1097,7 +1304,7 @@ local function positionLockLoop()
         if dist < TRIGGER_DIST then
             StatusLabel.Text = string.format("✅ At Slot %d | Dist: %.1f", selectedSlot, dist)
             StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-            setWS(humanoid, SPOOFED_WALKSPEED)
+            removeBodyPosition()
             task.wait(0.5)
         else
             StatusLabel.Text = string.format("⚠ Returning to Slot %d...", selectedSlot)
@@ -1106,47 +1313,25 @@ local function positionLockLoop()
             task.wait(math.random() * 0.3 + 0.1)
             if not posActive then break end
 
-            local offset = getRandomOffset()
-            local targetPos = Vector3.new(TARGET_X + offset.X, root.Position.Y, TARGET_Z + offset.Z)
-
-            setWS(humanoid, REAL_WALKSPEED)
-            humanoid:MoveTo(targetPos)
-
-            local elapsed = 0
-            local arrived = false
-
-            while elapsed < MOVE_TIMEOUT do
-                local _, r, h = getCharParts()
-                if not r or not h then break end
-
-                local d = (r.Position - targetPos).Magnitude
-                StatusLabel.Text = string.format("Walking... %.1fs | Dist: %.1f", MOVE_TIMEOUT - elapsed, d)
-
-                if d < 3 then
-                    arrived = true
-                    break
+            local arrived = walkToWithBodyPosition(TARGET_X, TARGET_Z, MOVE_TIMEOUT, function(d, remaining)
+                if posActive then
+                    StatusLabel.Text = string.format("BodyPos %.1fs | Dist: %.1f", remaining, d)
                 end
-
-                h:MoveTo(targetPos)
-                task.wait(MOVE_CHECK_INTERVAL)
-                elapsed = elapsed + MOVE_CHECK_INTERVAL
-            end
+            end)
 
             if arrived then
                 StatusLabel.Text = string.format("✅ At Slot %d!", selectedSlot)
                 StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
             else
-                -- Timeout → jump twice
                 StatusLabel.Text = "🦘 Timeout! Jumping x2..."
                 StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+                removeBodyPosition()
                 doJump()
                 task.wait(0.6)
                 doJump()
                 task.wait(0.4)
             end
 
-            local _, _, h = getCharParts()
-            if h then setWS(h, SPOOFED_WALKSPEED) end
             task.wait(0.5)
         end
     end
@@ -1169,8 +1354,7 @@ PosToggle.MouseButton1Click:Connect(function()
         ptStroke.Color = Color3.fromRGB(100, 30, 30)
         StatusLabel.Text = "Inactive"
         StatusLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
-        local _, _, h = getCharParts()
-        if h then setWS(h, SPOOFED_WALKSPEED) end
+        removeBodyPosition()
     end
 end)
 
@@ -1270,8 +1454,7 @@ UIS.InputBegan:Connect(function(input, processed)
         end
         allConnections = {}
 
-        local _, _, h = getCharParts()
-        if h then setWS(h, SPOOFED_WALKSPEED) end
+        removeBodyPosition()
 
         PosToggle.Text = "🔓  Position Lock OFF"
         PosToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
@@ -1282,6 +1465,8 @@ UIS.InputBegan:Connect(function(input, processed)
         JumpsToggle.Text = "⛔  ExtraJumps OFF"
         JumpsToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         jtStroke.Color = Color3.fromRGB(100, 30, 30)
+        JumpStatusLabel.Text = "Status: PANIC | Current: " .. jumpCurrentValue .. " | Target: --"
+        JumpStatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
 
         FarmToggle.Text = "🌾  Auto Farm OFF"
         FarmToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
@@ -1345,7 +1530,15 @@ end)
 
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
+    removeBodyPosition()
     if not hooksInstalled then installHooks() end
+
+    -- Re-apply jumps on respawn (if active, continue gradually)
+    if jumpsActive and jumpTargetPlayer then
+        task.wait(2)
+        jumpCurrentValue = 0
+        jumpThread = task.spawn(gradualJumpLoop)
+    end
 end)
 
 -- ════════════════════════════════
@@ -1353,9 +1546,10 @@ end)
 -- ════════════════════════════════
 
 print("══════════════════════════════════")
-print("  ECLIPSE SAB NF v8 - Loaded ✅")
-print("  ExtraJumps: SetAttribute (working)")
-print("  Auto Farm: 6s timeout → Jump x2")
+print("  ECLIPSE SAB NF v9 - Loaded ✅")
+print("  Movement: BodyPosition (physics)")
+print("  ExtraJumps: Gradual +1 every " .. jumpIncrementDelay .. "s")
+print("  Auto Farm: BodyPos → 6s → Jump x2")
 print("  8 Slots with selector")
 print("  UI Scale: UIScale (proper)")
 print("  PANIC: [P] | UI: [RightShift]")
