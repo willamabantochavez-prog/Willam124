@@ -1,16 +1,14 @@
 -- ══════════════════════════════════════════════════════════════
--- ECLIPSE SAB NF v8 - ANTI-DETECTION
--- ZERO metamethod hooks | VirtualUser AFK | BodyVelocity Jumps
--- Natural movement with waypoints | Reset cooldown 15s
+-- ECLIPSE SAB NF v9 - LAZY LOADING
+-- UI loads first | Logic loads ONLY when ON
+-- Zero metamethod hooks | BodyVelocity jumps | VirtualUser AFK
 -- ══════════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local Debris = game:GetService("Debris")
-local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
+-- Clean old GUI
 pcall(function()
     for _, gui in ipairs(game:GetService("CoreGui"):GetChildren()) do
         if gui.Name == "RobloxGui_App" then gui:Destroy() end
@@ -18,162 +16,46 @@ pcall(function()
 end)
 
 -- ════════════════════════════════
---        CONFIGURATION
+--     CONFIG (no services)
 -- ════════════════════════════════
 
-local TARGET_X = -462.5
-local TARGET_Z = 139.7
-local RESET_RADIUS = 10
-local RESET_COOLDOWN = 15
-local STALL_TIMEOUT = 3
-local POSITION_VARIANCE = 2.0
-local BASE_WALKSPEED = 22
-local MOVE_CHECK_INTERVAL = 0.1
+local CFG = {
+    TARGET_X = -462.5,
+    TARGET_Z = 139.7,
+    RESET_RADIUS = 10,
+    RESET_COOLDOWN = 15,
+    STALL_TIMEOUT = 3,
+    STUCK_TIMEOUT = 6,
+    VARIANCE = 2.0,
+    WALKSPEED = 22,
+    JUMP_POWER_MULT = 1.1,
+    BV_DURATION = 0.15,
+}
 
-local posActive = false
-local jumpsActive = false
-local afkActive = false
-local allConnections = {}
-local currentJumpsValue = 0
-local jumpsUsed = 0
-local jumpConnections = {}
-local lastResetTime = 0
+-- Feature states (all OFF at load)
+local state = {
+    posActive = false,
+    jumpsActive = false,
+    afkActive = false,
+    posLoop = nil,
+    afkLoop = nil,
+    jumpsConns = {},
+    afkConns = {},
+    jumpCount = 0,
+    jumpsValue = 0,
+    afkCount = 0,
+    lastReset = 0,
+    isMinimized = false,
+    currentPanel = "main",
+}
 
-local afkIntervalMin = 30
-local afkIntervalMax = 90
-local afkCount = 0
-
+-- UI state
 local BASE_WIDTH = 310
 local BASE_HEIGHT = 420
 local currentScale = 1.0
-local minScale = 0.65
-local maxScale = 1.5
-local scaleStep = 0.1
-local isMinimized = false
-local currentPanel = "main"
 
 -- ════════════════════════════════
---   HELPER FUNCTIONS (NO HOOKS)
--- ════════════════════════════════
-
-local function getCharParts()
-    local char = LocalPlayer.Character
-    if not char then return nil, nil, nil end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    return char, root, humanoid
-end
-
-local function getRandomOffset()
-    return Vector3.new(
-        math.random() * POSITION_VARIANCE * 2 - POSITION_VARIANCE,
-        0,
-        math.random() * POSITION_VARIANCE * 2 - POSITION_VARIANCE
-    )
-end
-
-local function getDistanceFromTarget(root)
-    local dx = root.Position.X - TARGET_X
-    local dz = root.Position.Z - TARGET_Z
-    return math.sqrt(dx * dx + dz * dz)
-end
-
-local function setWalkSpeed(humanoid, speed)
-    pcall(function() humanoid.WalkSpeed = speed end)
-end
-
-local function canReset()
-    return (tick() - lastResetTime) >= RESET_COOLDOWN
-end
-
-local function resetPlayer()
-    if not canReset() then return false end
-    lastResetTime = tick()
-    local char = LocalPlayer.Character
-    if char then char:BreakJoints() end
-    return true
-end
-
--- Natural movement with intermediate waypoints
-local function walkToPositionNatural(targetPos, statusCallback)
-    local char, root, humanoid = getCharParts()
-    if not root or not humanoid then return "lost" end
-
-    local startPos = root.Position
-    local adjustedTarget = Vector3.new(targetPos.X, startPos.Y, targetPos.Z)
-    local totalDist = (startPos - adjustedTarget).Magnitude
-
-    -- Short distance: direct
-    if totalDist < 5 then
-        humanoid:MoveTo(adjustedTarget)
-        local elapsed = 0
-        while elapsed < 3 do
-            local _, r, h = getCharParts()
-            if not r or not h then return "lost" end
-            local dist = (r.Position - adjustedTarget).Magnitude
-            if statusCallback then statusCallback(dist) end
-            if dist < 3 then return "reached" end
-            h:MoveTo(adjustedTarget)
-            task.wait(0.1 + math.random() * 0.05)
-            elapsed = elapsed + 0.1
-        end
-        return "stuck"
-    end
-
-    -- Longer: intermediate waypoints with random offsets
-    local numWP = math.random(2, 3)
-    local waypoints = {}
-    for i = 1, numWP - 1 do
-        local t = i / numWP
-        local mid = startPos:Lerp(adjustedTarget, t)
-        mid = mid + Vector3.new(math.random() * 6 - 3, 0, math.random() * 6 - 3)
-        table.insert(waypoints, mid)
-    end
-    table.insert(waypoints, adjustedTarget)
-
-    for idx, point in ipairs(waypoints) do
-        local _, r, h = getCharParts()
-        if not r or not h then return "lost" end
-        h:MoveTo(point)
-
-        local elapsed = 0
-        local lastDist = math.huge
-        local stallTimer = 0
-
-        while elapsed < 4 do
-            local _, r2, h2 = getCharParts()
-            if not r2 or not h2 then return "lost" end
-            local dist = (r2.Position - point).Magnitude
-            if statusCallback then statusCallback(dist) end
-            if dist < 3 then break end
-
-            if math.abs(dist - lastDist) < 0.3 then
-                stallTimer = stallTimer + 0.1
-            else
-                stallTimer = 0
-            end
-            lastDist = dist
-            if stallTimer >= STALL_TIMEOUT then return "stuck" end
-
-            h2:MoveTo(point)
-            task.wait(0.1 + math.random() * 0.05)
-            elapsed = elapsed + 0.1
-        end
-
-        if idx < #waypoints then
-            task.wait(0.3 + math.random() * 0.5)
-        end
-    end
-
-    local _, r3, _ = getCharParts()
-    if r3 and (r3.Position - adjustedTarget).Magnitude < 5 then
-        return "reached"
-    end
-    return "stuck"
-end
-
--- ════════════════════════════════
---         GUI CREATION
+--        GUI CREATION
 -- ════════════════════════════════
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -221,7 +103,7 @@ local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -80, 1, 0)
 TitleLabel.Position = UDim2.new(0, 10, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ Eclipse Sab Nf v8"
+TitleLabel.Text = "⚡ Eclipse Sab Nf v9"
 TitleLabel.TextColor3 = Color3.fromRGB(18, 18, 18)
 TitleLabel.TextSize = 16
 TitleLabel.Font = Enum.Font.GothamBold
@@ -305,7 +187,7 @@ settingsPadding.PaddingRight = UDim.new(0, 12)
 settingsPadding.Parent = SettingsPanel
 
 -- ════════════════════════════════
---     UI BUILDER FUNCTIONS
+--     UI BUILDER HELPERS
 -- ════════════════════════════════
 
 local orderCounter = 0
@@ -455,9 +337,9 @@ local JumpsToggle, jtStroke = makeToggle(MainPanel, "⛔  ExtraJumps OFF", 30)
 makeSection(MainPanel, "────────── Auto Farm ──────────")
 
 local posInfoBox, posInfoLabels = makeInfoBox(MainPanel, {
-    "🔒 Position Lock [Anti-Detect]",
-    "X: "..TARGET_X.."  |  Z: "..TARGET_Z,
-    "Reset: >"..RESET_RADIUS.." studs | Stuck >6s | CD: "..RESET_COOLDOWN.."s"
+    "🔒 Position Lock [Lazy Load]",
+    "X: "..CFG.TARGET_X.."  |  Z: "..CFG.TARGET_Z,
+    "Reset: >"..CFG.RESET_RADIUS.." studs | Stuck >6s | CD: 15s"
 })
 
 local StatusLabel = makeStatus(MainPanel, "Status: Inactive")
@@ -470,7 +352,7 @@ local PosToggle, ptStroke = makeToggle(MainPanel, "🔓  Position Lock OFF", 32)
 makeSection(MainPanel, "─────────── Anti AFK ───────────")
 
 local afkInfoBox, afkInfoLabels = makeInfoBox(MainPanel, {
-    "🛡️ Anti AFK [VirtualUser]",
+    "🛡️ Anti AFK [Lazy Load]",
     "Next: -- | Actions: 0"
 })
 
@@ -503,7 +385,7 @@ PanicLabel.ZIndex = 6
 PanicLabel.Parent = PanicBar
 
 -- ══════════════════════════════════════
---   SETTINGS PANEL
+--   SETTINGS PANEL CONTENT
 -- ══════════════════════════════════════
 
 makeSection(SettingsPanel, "──────────── Ajustes ────────────")
@@ -563,7 +445,7 @@ Instance.new("UICorner", PlusBtn).CornerRadius = UDim.new(0, 6)
 local settingsInfo = Instance.new("TextLabel")
 settingsInfo.Size = UDim2.new(1, 0, 0, 60)
 settingsInfo.BackgroundTransparency = 1
-settingsInfo.Text = "Eclipse Sab Nf v8 [Anti-Detect]\nZero metamethod hooks\nVirtualUser AFK | Natural movement"
+settingsInfo.Text = "Eclipse Sab Nf v9 [Lazy Load]\nLogic loads only when ON\nZero hooks | Natural methods"
 settingsInfo.TextColor3 = Color3.fromRGB(80, 80, 80)
 settingsInfo.TextSize = 10
 settingsInfo.Font = Enum.Font.Gotham
@@ -572,11 +454,11 @@ settingsInfo.LayoutOrder = nextOrder()
 settingsInfo.Parent = SettingsPanel
 
 -- ════════════════════════════════
---   PANEL SWITCHING / SCALING
+--   UI CONTROLS (no game logic)
 -- ════════════════════════════════
 
 local function applyScale(newScale)
-    currentScale = math.clamp(newScale, minScale, maxScale)
+    currentScale = math.clamp(newScale, 0.65, 1.5)
     MainScale.Scale = currentScale
     SizeDisplay.Text = math.floor(currentScale * 100 + 0.5) .. "%"
 end
@@ -585,19 +467,19 @@ local function showPanel(panel)
     if panel == "main" then
         MainPanel.Visible = true
         SettingsPanel.Visible = false
-        currentPanel = "main"
+        state.currentPanel = "main"
         SettingsBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     else
         MainPanel.Visible = false
         SettingsPanel.Visible = true
-        currentPanel = "settings"
+        state.currentPanel = "settings"
         SettingsBtn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
     end
 end
 
-local function setMinimized(state)
-    isMinimized = state
-    if isMinimized then
+local function setMinimized(min)
+    state.isMinimized = min
+    if min then
         ContentFrame.Visible = false
         MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, 38)
         CloseBtn.Text = "+"
@@ -608,30 +490,40 @@ local function setMinimized(state)
     end
 end
 
-MinusBtn.MouseButton1Click:Connect(function() applyScale(currentScale - scaleStep) end)
-PlusBtn.MouseButton1Click:Connect(function() applyScale(currentScale + scaleStep) end)
-CloseBtn.MouseButton1Click:Connect(function() setMinimized(not isMinimized) end)
+MinusBtn.MouseButton1Click:Connect(function() applyScale(currentScale - 0.1) end)
+PlusBtn.MouseButton1Click:Connect(function() applyScale(currentScale + 0.1) end)
+CloseBtn.MouseButton1Click:Connect(function() setMinimized(not state.isMinimized) end)
 SettingsBtn.MouseButton1Click:Connect(function()
-    if currentPanel == "main" then showPanel("settings") else showPanel("main") end
+    if state.currentPanel == "main" then showPanel("settings") else showPanel("main") end
 end)
 
--- ════════════════════════════════
---   EXTRA JUMPS (BodyVelocity)
--- ════════════════════════════════
+-- ══════════════════════════════════════════════════════════════
+-- ██████  LAZY LOAD FUNCTIONS  ██████
+-- All game logic is loaded ONLY when the user clicks ON
+-- ══════════════════════════════════════════════════════════════
 
-local function getJumpsValue(text)
-    if text:lower() == "inf" or text:lower() == "infinite" or text:lower() == "infinity" then
-        return math.huge
-    end
-    local num = tonumber(text)
-    if num and num >= 1 then return num end
-    return nil
+-- ── Helper: get char parts (loaded on demand) ──
+local function getCharParts()
+    local char = LocalPlayer.Character
+    if not char then return nil, nil, nil end
+    return char, char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
 end
 
-local function setupExtraJumps(count)
-    for _, conn in ipairs(jumpConnections) do pcall(function() conn:Disconnect() end) end
-    jumpConnections = {}
-    jumpsUsed = 0
+-- ──────────────────────────────────
+-- LAZY LOAD: EXTRA JUMPS (BodyVelocity)
+-- ──────────────────────────────────
+
+local function lazyLoadJumps()
+    -- Load services ONLY now
+    local RunService = game:GetService("RunService")
+    local Debris = game:GetService("Debris")
+
+    local jumpsValue = state.jumpsValue
+    local jumpsUsed = 0
+
+    -- Clean old connections
+    for _, c in ipairs(state.jumpsConns) do pcall(function() c:Disconnect() end) end
+    state.jumpsConns = {}
 
     local char = LocalPlayer.Character
     if not char then return end
@@ -639,52 +531,322 @@ local function setupExtraJumps(count)
     local root = char:FindFirstChild("HumanoidRootPart")
     if not humanoid or not root then return end
 
-    -- Reset on landing
-    local stateConn = humanoid.StateChanged:Connect(function(_, new)
+    -- Reset jump count on land
+    local landConn = humanoid.StateChanged:Connect(function(_, new)
         if new == Enum.HumanoidStateType.Landed then jumpsUsed = 0 end
     end)
-    table.insert(jumpConnections, stateConn)
+    table.insert(state.jumpsConns, landConn)
 
     -- Extra jumps via BodyVelocity
     local jumpConn = UIS.JumpRequest:Connect(function()
-        if not jumpsActive then return end
-        local state = humanoid:GetState()
-        if state == Enum.HumanoidStateType.Freefall and jumpsUsed < count then
+        if not state.jumpsActive then return end
+        local hState = humanoid:GetState()
+        if hState == Enum.HumanoidStateType.Freefall and jumpsUsed < jumpsValue then
             jumpsUsed = jumpsUsed + 1
             local bv = Instance.new("BodyVelocity")
             bv.Name = "BV_" .. math.random(10000, 99999)
-            bv.Velocity = Vector3.new(0, humanoid.JumpPower * 1.1, 0)
+            bv.Velocity = Vector3.new(0, humanoid.JumpPower * CFG.JUMP_POWER_MULT, 0)
             bv.MaxForce = Vector3.new(0, math.huge, 0)
             bv.Parent = root
-            Debris:AddItem(bv, 0.15)
+            Debris:AddItem(bv, CFG.BV_DURATION)
         end
     end)
-    table.insert(jumpConnections, jumpConn)
+    table.insert(state.jumpsConns, jumpConn)
 end
 
-local function cleanupExtraJumps()
-    for _, conn in ipairs(jumpConnections) do pcall(function() conn:Disconnect() end) end
-    jumpConnections = {}
-    jumpsUsed = 0
-    local char = LocalPlayer.Character
-    if char then
-        local root = char:FindFirstChild("HumanoidRootPart")
-        if root then
-            for _, child in ipairs(root:GetChildren()) do
-                if child:IsA("BodyVelocity") and child.Name:match("^BV_") then child:Destroy() end
+local function unloadJumps()
+    for _, c in ipairs(state.jumpsConns) do pcall(function() c:Disconnect() end) end
+    state.jumpsConns = {}
+    -- Clean BV instances
+    pcall(function()
+        local char = LocalPlayer.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                for _, child in ipairs(root:GetChildren()) do
+                    if child:IsA("BodyVelocity") and child.Name:match("^BV_") then child:Destroy() end
+                end
             end
         end
-    end
+    end)
 end
 
+-- ──────────────────────────────────
+-- LAZY LOAD: POSITION LOCK
+-- ──────────────────────────────────
+
+local function lazyLoadPosLock()
+    -- Services loaded now, not before
+    local RunService = game:GetService("RunService")
+    local Debris = game:GetService("Debris")
+
+    local function canReset()
+        return (tick() - state.lastReset) >= CFG.RESET_COOLDOWN
+    end
+
+    local function resetChar()
+        if not canReset() then return false end
+        state.lastReset = tick()
+        local char = LocalPlayer.Character
+        if char then char:BreakJoints() end
+        return true
+    end
+
+    local function getRandomOffset()
+        return Vector3.new(
+            math.random() * CFG.VARIANCE * 2 - CFG.VARIANCE,
+            0,
+            math.random() * CFG.VARIANCE * 2 - CFG.VARIANCE
+        )
+    end
+
+    local function getDistFromTarget(root)
+        local dx = root.Position.X - CFG.TARGET_X
+        local dz = root.Position.Z - CFG.TARGET_Z
+        return math.sqrt(dx * dx + dz * dz)
+    end
+
+    local function walkNatural(targetPos, statusCb)
+        local char, root, humanoid = getCharParts()
+        if not root or not humanoid then return "lost" end
+
+        local adjusted = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
+        local totalDist = (root.Position - adjusted).Magnitude
+
+        -- Short distance: direct walk
+        if totalDist < 5 then
+            humanoid:MoveTo(adjusted)
+            local elapsed = 0
+            local lastD = math.huge
+            local stall = 0
+            while elapsed < CFG.STUCK_TIMEOUT do
+                local _, r, h = getCharParts()
+                if not r or not h then return "lost" end
+                local d = (r.Position - adjusted).Magnitude
+                if statusCb then statusCb(d) end
+                if d < 3 then return "reached" end
+                if math.abs(d - lastD) < 0.3 then stall = stall + 0.1 else stall = 0 end
+                lastD = d
+                if stall >= CFG.STALL_TIMEOUT then return "stuck" end
+                h:MoveTo(adjusted)
+                task.wait(0.1 + math.random() * 0.05)
+                elapsed = elapsed + 0.1
+            end
+            return "stuck"
+        end
+
+        -- Longer: intermediate waypoints
+        local numWP = math.random(2, 3)
+        local waypoints = {}
+        for i = 1, numWP - 1 do
+            local t = i / numWP
+            local mid = root.Position:Lerp(adjusted, t)
+            mid = mid + Vector3.new(math.random() * 6 - 3, 0, math.random() * 6 - 3)
+            table.insert(waypoints, mid)
+        end
+        table.insert(waypoints, adjusted)
+
+        for idx, point in ipairs(waypoints) do
+            local _, r, h = getCharParts()
+            if not r or not h then return "lost" end
+            h:MoveTo(point)
+            local elapsed = 0
+            local lastD = math.huge
+            local stall = 0
+            while elapsed < 4 do
+                local _, r2, h2 = getCharParts()
+                if not r2 or not h2 then return "lost" end
+                local d = (r2.Position - point).Magnitude
+                if statusCb then statusCb(d) end
+                if d < 3 then break end
+                if math.abs(d - lastD) < 0.3 then stall = stall + 0.1 else stall = 0 end
+                lastD = d
+                if stall >= CFG.STALL_TIMEOUT then return "stuck" end
+                h2:MoveTo(point)
+                task.wait(0.1 + math.random() * 0.05)
+                elapsed = elapsed + 0.1
+            end
+            if idx < #waypoints then task.wait(0.3 + math.random() * 0.5) end
+        end
+
+        local _, r3, _ = getCharParts()
+        if r3 and (r3.Position - adjusted).Magnitude < 5 then return "reached" end
+        return "stuck"
+    end
+
+    -- THE MAIN LOOP
+    state.posLoop = coroutine.create(function()
+        while state.posActive do
+            local char, root, humanoid = getCharParts()
+            if not root or not humanoid then
+                StatusLabel.Text = "Waiting for character..."
+                StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+                task.wait(1 + math.random() * 0.5)
+                -- continue only if still active
+                if not state.posActive then break end
+                continue
+            end
+
+            local dist = getDistFromTarget(root)
+
+            -- TOO FAR
+            if dist > CFG.RESET_RADIUS then
+                if canReset() then
+                    StatusLabel.Text = string.format("⚠ Too far (%.1f) — Resetting!", dist)
+                    StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+                    task.wait(0.3 + math.random() * 0.3)
+                    resetChar()
+                    task.wait(3 + math.random() * 2)
+                else
+                    StatusLabel.Text = string.format("⚠ Too far (%.1f) — CD...", dist)
+                    StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+                    task.wait(1)
+                end
+                if not state.posActive then break end
+                continue
+            end
+
+            -- AT POSITION
+            setWalkSpeed(humanoid, CFG.WALKSPEED + math.random() * 2 - 1)
+            StatusLabel.Text = string.format("✅ At position | Dist: %.1f", dist)
+            StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+
+            -- Randomized idle wait
+            task.wait(2 + math.random() * 3)
+            if not state.posActive then break end
+
+            local _, r2, h2 = getCharParts()
+            if r2 and h2 then
+                local d2 = getDistFromTarget(r2)
+
+                if d2 > CFG.RESET_RADIUS * 0.6 then
+                    -- DRIFTING
+                    StatusLabel.Text = string.format("⚠ Drifting (%.1f) — Correcting...", d2)
+                    StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+
+                    local offset = getRandomOffset()
+                    local targetPos = Vector3.new(CFG.TARGET_X + offset.X, r2.Position.Y, CFG.TARGET_Z + offset.Z)
+
+                    local result = walkNatural(targetPos, function(d)
+                        if state.posActive then
+                            StatusLabel.Text = string.format("🔄 Moving... | %.1f", d)
+                            StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+                        end
+                    end)
+
+                    if result == "stuck" then
+                        if canReset() then
+                            StatusLabel.Text = "⚠ Stuck — Resetting!"
+                            StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+                            task.wait(0.5 + math.random() * 0.5)
+                            resetChar()
+                            task.wait(3 + math.random() * 2)
+                        else
+                            StatusLabel.Text = "⚠ Stuck — CD..."
+                            StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+                            task.wait(1)
+                        end
+                    elseif result == "lost" then
+                        StatusLabel.Text = "⚠ Lost — Waiting..."
+                        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+                        task.wait(2)
+                    else
+                        -- Reached
+                        local _, _, h3 = getCharParts()
+                        if h3 then setWalkSpeed(h3, CFG.WALKSPEED + math.random() * 2 - 1) end
+                    end
+                else
+                    -- Small idle jitter
+                    if math.random() < 0.15 then
+                        local small = Vector3.new(math.random() * 2 - 1, 0, math.random() * 2 - 1)
+                        humanoid:MoveTo(root.Position + small)
+                        task.wait(0.5 + math.random() * 0.5)
+                        humanoid:MoveTo(Vector3.new(CFG.TARGET_X, root.Position.Y, CFG.TARGET_Z))
+                    end
+                end
+            end
+
+            if not state.posActive then break end
+        end
+    end)
+
+    coroutine.resume(state.posLoop)
+end
+
+local function unloadPosLock()
+    state.posActive = false
+    state.posLoop = nil
+    StatusLabel.Text = "Status: Inactive"
+    StatusLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
+    pcall(function()
+        local _, _, h = getCharParts()
+        if h then h.WalkSpeed = 16 end
+    end)
+end
+
+-- ──────────────────────────────────
+-- LAZY LOAD: ANTI AFK (VirtualUser)
+-- ──────────────────────────────────
+
+local function lazyLoadAfk()
+    local VirtualUser = game:GetService("VirtualUser")
+
+    state.afkLoop = coroutine.create(function()
+        while state.afkActive do
+            local waitTime = math.random(30, 90)
+            for i = waitTime, 1, -1 do
+                if not state.afkActive then break end
+                afkInfoLabels[2].Text = string.format("Next: %ds | Actions: %d", i, state.afkCount)
+                task.wait(1)
+            end
+            if not state.afkActive then break end
+
+            -- VirtualUser action (safe, native Roblox)
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+
+            state.afkCount = state.afkCount + 1
+            afkInfoLabels[2].Text = string.format("Active | Actions: %d", state.afkCount)
+            AfkStatus.Text = "🖱️ VirtualUser action"
+            AfkStatus.TextColor3 = Color3.fromRGB(100, 200, 255)
+            task.wait(0.5 + math.random() * 0.5)
+        end
+    end)
+
+    coroutine.resume(state.afkLoop)
+end
+
+local function unloadAfk()
+    state.afkActive = false
+    state.afkLoop = nil
+    AfkStatus.Text = "Idle"
+    AfkStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
+    afkInfoLabels[2].Text = "Next: -- | Actions: 0"
+end
+
+-- ══════════════════════════════════════════════════════════════
+-- ██████  BUTTON HANDLERS  ██████
+-- Each button loads/unloads its feature on demand
+-- ══════════════════════════════════════════════════════════════
+
+-- ── JUMPS BUTTON ──
 JumpsToggle.MouseButton1Click:Connect(function()
-    jumpsActive = not jumpsActive
-    if jumpsActive then
+    if not state.jumpsActive then
+        -- TURN ON → Lazy load
         local targetName = UserBox.Text:gsub("%s+", "")
         local jumpsText = JumpsBox.Text:gsub("%s+", "")
-        if targetName == "" then UserBox.PlaceholderText = "⚠ Enter username!" jumpsActive = false return end
-        currentJumpsValue = getJumpsValue(jumpsText)
-        if not currentJumpsValue then JumpsBox.PlaceholderText = "⚠ Enter 1-∞ or 'inf'!" jumpsActive = false return end
+
+        if targetName == "" then UserBox.PlaceholderText = "⚠ Enter username!" return end
+
+        local jv
+        if jumpsText:lower() == "inf" or jumpsText:lower() == "infinite" or jumpsText:lower() == "infinity" then
+            jv = math.huge
+        else
+            jv = tonumber(jumpsText)
+        end
+        if not jv or jv < 1 then JumpsBox.PlaceholderText = "⚠ Enter 1-∞ or 'inf'!" return end
 
         local found = Players:FindFirstChild(targetName)
         if not found then
@@ -694,214 +856,106 @@ JumpsToggle.MouseButton1Click:Connect(function()
                 end
             end
         end
-        if not found then UserBox.PlaceholderText = "⚠ Player not found!" UserBox.Text = "" jumpsActive = false return end
-        if found ~= LocalPlayer then JumpsBox.PlaceholderText = "⚠ Only works on yourself!" jumpsActive = false return end
+        if not found then UserBox.PlaceholderText = "⚠ Player not found!" UserBox.Text = "" return end
+        if found ~= LocalPlayer then JumpsBox.PlaceholderText = "⚠ Only yourself!" return end
 
+        state.jumpsActive = true
+        state.jumpsValue = jv
         JumpsToggle.Text = "✅  ExtraJumps ON"
         JumpsToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
         jtStroke.Color = Color3.fromRGB(30, 100, 30)
-        setupExtraJumps(currentJumpsValue)
+
+        -- LAZY LOAD: game logic starts NOW
+        lazyLoadJumps()
     else
+        -- TURN OFF → Unload
+        state.jumpsActive = false
         JumpsToggle.Text = "⛔  ExtraJumps OFF"
         JumpsToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         jtStroke.Color = Color3.fromRGB(100, 30, 30)
-        cleanupExtraJumps()
+        unloadJumps()
     end
 end)
 
--- ════════════════════════════════
---   POSITION LOCK (Natural)
--- ════════════════════════════════
-
-local function positionLockLoop()
-    while posActive do
-        local char, root, humanoid = getCharParts()
-        if not root or not humanoid then
-            StatusLabel.Text = "Status: Waiting for character..."
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-            task.wait(1 + math.random() * 0.5)
-            continue
-        end
-
-        local dist = getDistanceFromTarget(root)
-
-        -- TOO FAR
-        if dist > RESET_RADIUS then
-            if canReset() then
-                StatusLabel.Text = string.format("⚠ Too far (%.1f) — Resetting!", dist)
-                StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
-                task.wait(0.3 + math.random() * 0.3)
-                resetPlayer()
-                task.wait(3 + math.random() * 2)
-            else
-                StatusLabel.Text = string.format("⚠ Too far (%.1f) — Cooldown...", dist)
-                StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-                task.wait(1)
-            end
-            continue
-        end
-
-        -- AT POSITION
-        local targetSpeed = BASE_WALKSPEED + math.random() * 2 - 1
-        setWalkSpeed(humanoid, targetSpeed)
-        StatusLabel.Text = string.format("✅ At position | Dist: %.1f", dist)
-        StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-
-        task.wait(2 + math.random() * 3)
-        if not posActive then break end
-
-        local _, r2, h2 = getCharParts()
-        if r2 and h2 then
-            local d2 = getDistanceFromTarget(r2)
-
-            if d2 > RESET_RADIUS * 0.6 then
-                -- DRIFTING → walk back
-                StatusLabel.Text = string.format("⚠ Drifting (%.1f) — Correcting...", d2)
-                StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-
-                local offset = getRandomOffset()
-                local targetPos = Vector3.new(TARGET_X + offset.X, r2.Position.Y, TARGET_Z + offset.Z)
-
-                local result = walkToPositionNatural(targetPos, function(d)
-                    if posActive then
-                        StatusLabel.Text = string.format("🔄 Moving... | Dist: %.1f", d)
-                        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-                    end
-                end)
-
-                if result == "stuck" then
-                    if canReset() then
-                        StatusLabel.Text = "⚠ Stuck — Resetting!"
-                        StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
-                        task.wait(0.5 + math.random() * 0.5)
-                        resetPlayer()
-                        task.wait(3 + math.random() * 2)
-                    else
-                        StatusLabel.Text = "⚠ Stuck — Cooldown..."
-                        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-                        task.wait(1)
-                    end
-                    continue
-                elseif result == "lost" then
-                    StatusLabel.Text = "⚠ Character lost — Waiting..."
-                    StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
-                    task.wait(2)
-                    continue
-                end
-
-                local _, _, h3 = getCharParts()
-                if h3 then setWalkSpeed(h3, BASE_WALKSPEED + math.random() * 2 - 1) end
-            else
-                -- Small random idle movement
-                if math.random() < 0.15 then
-                    local small = Vector3.new(math.random() * 2 - 1, 0, math.random() * 2 - 1)
-                    humanoid:MoveTo(root.Position + small)
-                    task.wait(0.5 + math.random() * 0.5)
-                    humanoid:MoveTo(Vector3.new(TARGET_X, root.Position.Y, TARGET_Z))
-                end
-            end
-        end
-    end
-end
-
+-- ── POSITION LOCK BUTTON ──
 PosToggle.MouseButton1Click:Connect(function()
-    posActive = not posActive
-    if posActive then
+    if not state.posActive then
+        state.posActive = true
         PosToggle.Text = "🔒  Position Lock ON"
         PosToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
         ptStroke.Color = Color3.fromRGB(30, 100, 30)
-        StatusLabel.Text = "Status: Active..."
-        StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-        task.spawn(positionLockLoop)
+        StatusLabel.Text = "Status: Loading..."
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+
+        -- LAZY LOAD: game logic starts NOW
+        lazyLoadPosLock()
     else
         PosToggle.Text = "🔓  Position Lock OFF"
         PosToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         ptStroke.Color = Color3.fromRGB(100, 30, 30)
-        StatusLabel.Text = "Status: Inactive"
-        StatusLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
-        local _, _, h = getCharParts()
-        if h then setWalkSpeed(h, BASE_WALKSPEED) end
+        unloadPosLock()
     end
 end)
 
--- ════════════════════════════════
---   ANTI AFK (VirtualUser)
--- ════════════════════════════════
-
-local function simulateAfkAction()
-    local success = pcall(function()
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-    end)
-    if success then
-        AfkStatus.Text = "🖱️ VirtualUser click"
-    else
-        pcall(function()
-            local _, _, humanoid = getCharParts()
-            if humanoid then humanoid.Jump = true end
-        end)
-        AfkStatus.Text = "🦘 Jump (fallback)"
-    end
-    afkCount = afkCount + 1
-end
-
-local function antiAfkLoop()
-    while afkActive do
-        local waitTime = math.random(afkIntervalMin, afkIntervalMax)
-        for i = waitTime, 1, -1 do
-            if not afkActive then break end
-            afkInfoLabels[2].Text = string.format("Next: %ds | Actions: %d", i, afkCount)
-            task.wait(1)
-        end
-        if not afkActive then break end
-        simulateAfkAction()
-        afkInfoLabels[2].Text = string.format("Active | Actions: %d", afkCount)
-        AfkStatus.TextColor3 = Color3.fromRGB(100, 200, 255)
-        task.wait(0.5 + math.random() * 0.5)
-    end
-end
-
+-- ── ANTI AFK BUTTON ──
 AfkToggle.MouseButton1Click:Connect(function()
-    afkActive = not afkActive
-    if afkActive then
+    if not state.afkActive then
+        state.afkActive = true
         AfkToggle.Text = "✅  Anti AFK ON"
         AfkToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
         afkStroke.Color = Color3.fromRGB(30, 100, 30)
-        AfkStatus.Text = "Active..."
-        AfkStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
-        task.spawn(antiAfkLoop)
+        AfkStatus.Text = "Loading..."
+        AfkStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
+
+        -- LAZY LOAD: game logic starts NOW
+        lazyLoadAfk()
     else
         AfkToggle.Text = "💤  Anti AFK OFF"
         AfkToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         afkStroke.Color = Color3.fromRGB(100, 30, 30)
-        AfkStatus.Text = "Idle"
-        AfkStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
-        afkInfoLabels[2].Text = "Next: -- | Actions: 0"
+        unloadAfk()
     end
 end)
 
 -- ════════════════════════════════
---   PANIC KEY [P]
+--   PANIC KEY [P] — unload all
 -- ════════════════════════════════
 
 UIS.InputBegan:Connect(function(input, processed)
     if processed then return end
+
     if input.KeyCode == Enum.KeyCode.P then
-        posActive = false
-        jumpsActive = false
-        afkActive = false
-        for _, conn in ipairs(allConnections) do pcall(function() conn:Disconnect() end) end
-        allConnections = {}
-        cleanupExtraJumps()
-        local _, _, h = getCharParts()
-        if h then setWalkSpeed(h, BASE_WALKSPEED) end
-        PosToggle.Text = "🔓  Position Lock OFF" PosToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40) ptStroke.Color = Color3.fromRGB(100, 30, 30)
-        StatusLabel.Text = "🔴 PANIC - All disabled!" StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
-        JumpsToggle.Text = "⛔  ExtraJumps OFF" JumpsToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40) jtStroke.Color = Color3.fromRGB(100, 30, 30)
-        AfkToggle.Text = "💤  Anti AFK OFF" AfkToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40) afkStroke.Color = Color3.fromRGB(100, 30, 30)
-        AfkStatus.Text = "🔴 PANIC" AfkStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
+        -- Unload everything
+        if state.jumpsActive then
+            state.jumpsActive = false
+            unloadJumps()
+            JumpsToggle.Text = "⛔  ExtraJumps OFF"
+            JumpsToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+            jtStroke.Color = Color3.fromRGB(100, 30, 30)
+        end
+
+        if state.posActive then
+            unloadPosLock()
+            PosToggle.Text = "🔓  Position Lock OFF"
+            PosToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+            ptStroke.Color = Color3.fromRGB(100, 30, 30)
+            StatusLabel.Text = "🔴 PANIC - All disabled!"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+        end
+
+        if state.afkActive then
+            unloadAfk()
+            AfkToggle.Text = "💤  Anti AFK OFF"
+            AfkToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+            afkStroke.Color = Color3.fromRGB(100, 30, 30)
+            AfkStatus.Text = "🔴 PANIC"
+            AfkStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
+        end
     end
-    if input.KeyCode == Enum.KeyCode.RightShift then ScreenGui.Enabled = not ScreenGui.Enabled end
+
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        ScreenGui.Enabled = not ScreenGui.Enabled
+    end
 end)
 
 -- ════════════════════════════════
@@ -935,13 +989,16 @@ UIS.InputChanged:Connect(function(input)
 end)
 
 -- ════════════════════════════════
---   RESPAWN HANDLER
+--   RESPAWN: Re-load active features
 -- ════════════════════════════════
 
 LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1 + math.random())
-    if jumpsActive and currentJumpsValue > 0 then
-        setupExtraJumps(currentJumpsValue)
+    task.wait(1.5 + math.random())
+    -- Re-load jumps if active
+    if state.jumpsActive then
+        unloadJumps()
+        task.wait(0.5)
+        lazyLoadJumps()
     end
 end)
 
@@ -950,9 +1007,8 @@ end)
 -- ════════════════════════════════
 
 print("════════════════════════════════════")
-print("  ECLIPSE SAB NF v8 [Anti-Detect]")
-print("  ZERO metamethod hooks")
-print("  VirtualUser AFK | BodyVelocity Jumps")
-print("  WalkSpeed: "..BASE_WALKSPEED.." | CD: "..RESET_COOLDOWN.."s")
+print("  ECLIPSE SAB NF v9 [Lazy Load]")
+print("  UI loaded. Zero game logic.")
+print("  Logic loads when you click ON.")
 print("  PANIC: [P] | UI: [RightShift]")
 print("════════════════════════════════════")
