@@ -1,6 +1,5 @@
 -- ══════════════════════════════════════════════════════════════
--- ECLIPSE SAB NF v7 - FULL REWRITE
--- Jumps Bypass + Auto Farm + Anti-AFK + Settings
+-- ECLIPSE SAB NF v7 - Slots + 6s Reset + Undetected Jumps
 -- ══════════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
@@ -22,27 +21,37 @@ end)
 --        CONFIGURATION
 -- ════════════════════════════════
 
-local TARGET_X = -462.5
-local TARGET_Z = 139.7
-local RESET_RADIUS = 10
+-- 8 Position Slots
+local SLOTS = {
+    {name = "Slot 1", x = -461.32, z = 140.12},
+    {name = "Slot 2", x = -389.20, z = 151.84},
+    {name = "Slot 3", x = -330.62, z = 109.53},
+    {name = "Slot 4", x = -317.93, z = 39.50},
+    {name = "Slot 5", x = -360.97, z = -20.83},
+    {name = "Slot 6", x = -432.85, z = -31.42},
+    {name = "Slot 7", x = -490.25, z = 10.84},
+    {name = "Slot 8", x = -503.77, z = 81.59},
+}
+
+local selectedSlot = 1
+local TARGET_X = SLOTS[1].x
+local TARGET_Z = SLOTS[1].z
+
+local TRIGGER_DIST = 8
 local POSITION_VARIANCE = 2.0
 local REAL_WALKSPEED = 48
 local SPOOFED_WALKSPEED = 16
 local MOVE_CHECK_INTERVAL = 0.1
+local MOVE_TIMEOUT = 6 -- 6 seconds before reset
 
 local posActive = false
 local jumpsActive = false
 local afkActive = false
+local autoFarmActive = false
 local allConnections = {}
 local hooksInstalled = false
 
--- AFK intervals
-local afkIntervalMin = 30
-local afkIntervalMax = 90
-
 -- UI State
-local BASE_WIDTH = 310
-local BASE_HEIGHT = 420
 local currentScale = 1.0
 local minScale = 0.65
 local maxScale = 1.5
@@ -154,16 +163,7 @@ local function setWalkSpeed(humanoid, speed)
     pcall(function() humanoid.WalkSpeed = speed end)
 end
 
-local function resetPlayer()
-    local char, root, humanoid = getCharParts()
-    if humanoid then
-        humanoid.Health = 0
-    elseif char then
-        char:BreakJoints()
-    end
-end
-
-local function walkToPosition(targetPos, statusCallback)
+local function walkToPosition(targetPos, statusCallback, timeoutSec)
     local char, root, humanoid = getCharParts()
     if not root or not humanoid then return false end
 
@@ -172,7 +172,7 @@ local function walkToPosition(targetPos, statusCallback)
     local adjustedTarget = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
     humanoid:MoveTo(adjustedTarget)
 
-    local maxWait = 25
+    local maxWait = timeoutSec or MOVE_TIMEOUT
     local elapsed = 0
 
     while elapsed < maxWait do
@@ -190,16 +190,109 @@ local function walkToPosition(targetPos, statusCallback)
     return false
 end
 
+local function resetCharacter()
+    pcall(function()
+        local char = LocalPlayer.Character
+        if char then char:BreakJoints() end
+    end)
+end
+
+-- ════════════════════════════════
+--   UNDETECTED EXTRA JUMPS
+--   (BodyVelocity method, no SetAttribute)
+-- ════════════════════════════════
+
+local jumpConn = nil
+local jumpCount = 0
+local maxJumps = 3
+local jumpForce = 55
+
+local function setupUndetectedJumps()
+    -- Clean previous
+    if jumpConn then jumpConn:Disconnect() jumpConn = nil end
+
+    jumpConn = RunService.Heartbeat:Connect(function()
+        if not jumpsActive then return end
+
+        local char, root, humanoid = getCharParts()
+        if not char or not root or not humanoid then return end
+
+        -- Detect if on ground using raycast
+        local rayParams = RaycastParams.new()
+        rayParams.FilterDescendantsInstances = {char}
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+        local rayResult = workspace:Raycast(
+            root.Position,
+            Vector3.new(0, -3.5, 0),
+            rayParams
+        )
+
+        local onGround = rayResult ~= nil
+
+        if onGround then
+            jumpCount = 0
+        end
+
+        -- Check if player pressed jump while in air
+        if humanoid:GetState() == Enum.HumanoidStateType.Freefall
+        or humanoid:GetState() == Enum.HumanoidStateType.Jumping then
+            -- Player is in air, listen for jump input
+        end
+    end)
+
+    table.insert(allConnections, jumpConn)
+
+    -- Use UserInputService for jump detection (only for local player, undetected)
+    local inputConn = UIS.JumpRequest:Connect(function()
+        if not jumpsActive then return end
+
+        local char, root, humanoid = getCharParts()
+        if not char or not root or not humanoid then return end
+
+        -- Check if in air
+        local rayParams = RaycastParams.new()
+        rayParams.FilterDescendantsInstances = {char}
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+        local rayResult = workspace:Raycast(
+            root.Position,
+            Vector3.new(0, -3.5, 0),
+            rayParams
+        )
+
+        local onGround = rayResult ~= nil
+
+        if not onGround and jumpCount < maxJumps then
+            jumpCount = jumpCount + 1
+            -- Apply upward velocity via BodyVelocity (undetected)
+            local bv = Instance.new("BodyVelocity")
+            bv.Velocity = Vector3.new(0, jumpForce, 0)
+            bv.MaxForce = Vector3.new(0, math.huge, 0)
+            bv.P = 1000
+            bv.Parent = root
+            task.delay(0.15, function()
+                pcall(function() bv:Destroy() end)
+            end)
+        end
+    end)
+
+    table.insert(allConnections, inputConn)
+end
+
 -- ════════════════════════════════
 --         GUI CREATION
 -- ════════════════════════════════
+
+local BASE_WIDTH = 310
+local BASE_HEIGHT = 440
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "RobloxGui_App"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = game:GetService("CoreGui")
 
--- ── Main Frame ──
+-- ── Main Frame (ClipDescendants ON) ──
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainPanel"
 MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, BASE_HEIGHT)
@@ -216,11 +309,6 @@ local mainStroke = Instance.new("UIStroke")
 mainStroke.Color = Color3.fromRGB(255, 140, 0)
 mainStroke.Thickness = 2
 mainStroke.Parent = MainFrame
-
--- UIScale for the entire frame
-local MainScale = Instance.new("UIScale")
-MainScale.Scale = 1.0
-MainScale.Parent = MainFrame
 
 -- ── Title Bar ──
 local TitleBar = Instance.new("Frame")
@@ -282,18 +370,19 @@ ContentFrame.ClipsDescendants = true
 ContentFrame.Parent = MainFrame
 
 -- ════════════════════════════════
---  MAIN PANEL (ScrollingFrame)
+--   MAIN PANEL (SCROLLABLE!)
 -- ════════════════════════════════
 
 local MainPanel = Instance.new("ScrollingFrame")
-MainPanel.Name = "MainScroll"
+MainPanel.Name = "MainPanelContent"
 MainPanel.Size = UDim2.new(1, 0, 1, 0)
 MainPanel.BackgroundTransparency = 1
 MainPanel.ScrollBarThickness = 4
 MainPanel.ScrollBarImageColor3 = Color3.fromRGB(255, 140, 0)
 MainPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
 MainPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
-MainPanel.BorderSizePixel = 0
+MainPanel.ScrollingDirection = Enum.ScrollingDirection.Y
+MainPanel.ClipsDescendants = true
 MainPanel.Visible = true
 MainPanel.Parent = ContentFrame
 
@@ -305,24 +394,25 @@ mainLayout.Parent = MainPanel
 
 local mainPadding = Instance.new("UIPadding")
 mainPadding.PaddingTop = UDim.new(0, 8)
-mainPadding.PaddingBottom = UDim.new(0, 8)
 mainPadding.PaddingLeft = UDim.new(0, 12)
 mainPadding.PaddingRight = UDim.new(0, 12)
+mainPadding.PaddingBottom = UDim.new(0, 12)
 mainPadding.Parent = MainPanel
 
 -- ════════════════════════════════
---  SETTINGS PANEL (ScrollingFrame)
+--     SETTINGS PANEL
 -- ════════════════════════════════
 
 local SettingsPanel = Instance.new("ScrollingFrame")
-SettingsPanel.Name = "SettingsScroll"
+SettingsPanel.Name = "SettingsPanelContent"
 SettingsPanel.Size = UDim2.new(1, 0, 1, 0)
 SettingsPanel.BackgroundTransparency = 1
 SettingsPanel.ScrollBarThickness = 4
 SettingsPanel.ScrollBarImageColor3 = Color3.fromRGB(255, 140, 0)
 SettingsPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
 SettingsPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
-SettingsPanel.BorderSizePixel = 0
+SettingsPanel.ScrollingDirection = Enum.ScrollingDirection.Y
+SettingsPanel.ClipsDescendants = true
 SettingsPanel.Visible = false
 SettingsPanel.Parent = ContentFrame
 
@@ -334,9 +424,9 @@ settingsLayout.Parent = SettingsPanel
 
 local settingsPadding = Instance.new("UIPadding")
 settingsPadding.PaddingTop = UDim.new(0, 12)
-settingsPadding.PaddingBottom = UDim.new(0, 12)
 settingsPadding.PaddingLeft = UDim.new(0, 12)
 settingsPadding.PaddingRight = UDim.new(0, 12)
+settingsPadding.PaddingBottom = UDim.new(0, 12)
 settingsPadding.Parent = SettingsPanel
 
 -- ════════════════════════════════
@@ -364,11 +454,11 @@ local function makeSection(parent, title)
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
-    label.Text = title
+    label.Text = "  " .. title
     label.TextColor3 = Color3.fromRGB(255, 140, 0)
     label.TextSize = 13
     label.Font = Enum.Font.GothamBold
-    label.TextXAlignment = Enum.TextXAlignment.Center
+    label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = frame
 
     return frame
@@ -429,24 +519,32 @@ local function makeToggle(parent, text, height)
     btn.LayoutOrder = nextOrder()
     btn.AutoButtonColor = false
     btn.Parent = parent
+
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+
     local s = Instance.new("UIStroke")
     s.Color = Color3.fromRGB(100, 30, 30)
     s.Thickness = 1.5
     s.Parent = btn
-    btn.MouseEnter:Connect(function() btn.BackgroundTransparency = 0.1 end)
-    btn.MouseLeave:Connect(function() btn.BackgroundTransparency = 0 end)
+
+    btn.MouseEnter:Connect(function()
+        btn.BackgroundTransparency = 0.1
+    end)
+    btn.MouseLeave:Connect(function()
+        btn.BackgroundTransparency = 0
+    end)
+
     return btn, s
 end
 
 local function makeInfoBox(parent, lines)
-    local h = 14 * #lines + 12
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, h)
+    frame.Size = UDim2.new(1, 0, 0, 14 * #lines + 10)
     frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     frame.BorderSizePixel = 0
     frame.LayoutOrder = nextOrder()
     frame.Parent = parent
+
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
     local s = Instance.new("UIStroke")
     s.Color = Color3.fromRGB(50, 50, 50)
@@ -457,16 +555,17 @@ local function makeInfoBox(parent, lines)
     for i, line in ipairs(lines) do
         local l = Instance.new("TextLabel")
         l.Size = UDim2.new(1, -10, 0, 14)
-        l.Position = UDim2.new(0, 5, 0, 4 + (i - 1) * 16)
+        l.Position = UDim2.new(0, 5, 0, 5 + (i - 1) * 14)
         l.BackgroundTransparency = 1
         l.Text = line
-        l.TextColor3 = Color3.fromRGB(255, 140, 0)
+        l.TextColor3 = line:sub(1, 4) == "Stat" and Color3.fromRGB(200, 200, 200) or Color3.fromRGB(255, 140, 0)
         l.TextSize = 11
-        l.Font = Enum.Font.GothamBold
-        l.TextXAlignment = Enum.TextXAlignment.Center
+        l.Font = line:sub(1, 4) == "Stat" and Enum.Font.Gotham or Enum.Font.GothamBold
+        l.TextXAlignment = Enum.TextXAlignment.Left
         l.Parent = frame
         labels[i] = l
     end
+
     return frame, labels
 end
 
@@ -479,37 +578,126 @@ local function makeStatus(parent, default)
     l.TextSize = 11
     l.Font = Enum.Font.Gotham
     l.LayoutOrder = nextOrder()
-    l.TextXAlignment = Enum.TextXAlignment.Center
     l.Parent = parent
     return l
 end
 
+-- ════════════════════════════════
+--   SLOT SELECTOR (2x4 grid)
+-- ════════════════════════════════
+
+makeSection(MainPanel, "── Position Slots ──")
+
+local slotInfoLabel = Instance.new("TextLabel")
+slotInfoLabel.Size = UDim2.new(1, 0, 0, 18)
+slotInfoLabel.BackgroundTransparency = 1
+slotInfoLabel.Text = "Selected: Slot 1 | X: " .. SLOTS[1].x .. " Z: " .. SLOTS[1].z
+slotInfoLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+slotInfoLabel.TextSize = 11
+slotInfoLabel.Font = Enum.Font.GothamBold
+slotInfoLabel.LayoutOrder = nextOrder()
+slotInfoLabel.Parent = MainPanel
+
+-- Grid: 2 columns x 4 rows
+local slotButtons = {}
+
+for row = 1, 4 do
+    local rowFrame = Instance.new("Frame")
+    rowFrame.Size = UDim2.new(1, 0, 0, 28)
+    rowFrame.BackgroundTransparency = 1
+    rowFrame.LayoutOrder = nextOrder()
+    rowFrame.Parent = MainPanel
+
+    for col = 1, 2 do
+        local idx = (row - 1) * 2 + col
+        local slot = SLOTS[idx]
+
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0.48, 0, 1, 0)
+        btn.Position = UDim2.new((col - 1) * 0.52, 0, 0, 0)
+        btn.BackgroundColor3 = idx == 1 and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(40, 40, 40)
+        btn.Text = slot.name .. " (" .. math.floor(slot.x) .. ", " .. math.floor(slot.z) .. ")"
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.TextSize = 10
+        btn.Font = Enum.Font.GothamBold
+        btn.AutoButtonColor = false
+        btn.Parent = rowFrame
+
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = idx == 1 and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(60, 60, 60)
+        stroke.Thickness = 1
+        stroke.Parent = btn
+
+        slotButtons[idx] = {btn = btn, stroke = stroke}
+
+        btn.MouseButton1Click:Connect(function()
+            selectedSlot = idx
+            TARGET_X = slot.x
+            TARGET_Z = slot.z
+            slotInfoLabel.Text = "Selected: " .. slot.name .. " | X: " .. slot.x .. " Z: " .. slot.z
+
+            -- Update button visuals
+            for i, sb in ipairs(slotButtons) do
+                if i == idx then
+                    sb.btn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+                    sb.stroke.Color = Color3.fromRGB(255, 140, 0)
+                else
+                    sb.btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                    sb.stroke.Color = Color3.fromRGB(60, 60, 60)
+                end
+            end
+        end)
+    end
+end
+
 -- ══════════════════════════════════════
---    SECTION 1: JUMPS BYPASS (MAIN)
+--   SECTION 1: EXTRA JUMPS (UNDETECTED)
 -- ══════════════════════════════════════
 
-makeSection(MainPanel, "───────── Jumps Bypass ─────────")
-
-local jumpsUserRow = makeRow(MainPanel, 30)
-makeLabel(jumpsUserRow, "Ur User >", 5, 90)
-local UserBox = makeInput(jumpsUserRow, 100, 185, "Username...")
+makeSection(MainPanel, "── ExtraJumps (Undetected) ──")
 
 local jumpsCountRow = makeRow(MainPanel, 30)
-makeLabel(jumpsCountRow, "Your Jumps >", 5, 90)
-local JumpsBox = makeInput(jumpsCountRow, 100, 185, "Number or 'inf'")
+makeLabel(jumpsCountRow, "Max Jumps >", 0, 95)
+local JumpsBox = makeInput(jumpsCountRow, 95, 80, "3")
+JumpsBox.Text = "3"
+
+makeLabel(jumpsCountRow, "Force >", 180, 50)
+local JumpForceBox = makeInput(jumpsCountRow, 230, 50, "55")
+JumpForceBox.Text = "55"
+
+local JumpInfoBox, jumpInfoLabels = makeInfoBox(MainPanel, {
+    "🦘 BodyVelocity method",
+    "Status: Inactive | Jumps: 0"
+})
 
 local JumpsToggle, jtStroke = makeToggle(MainPanel, "⛔  ExtraJumps OFF", 30)
 
 -- ══════════════════════════════════════
---    SECTION 2: AUTO FARM (MAIN)
+--     SECTION 2: AUTO FARM (6s Reset)
 -- ══════════════════════════════════════
 
-makeSection(MainPanel, "────────── Auto Farm ──────────")
+makeSection(MainPanel, "── Auto Farm (6s Reset) ──")
+
+local farmInfoBox, farmInfoLabels = makeInfoBox(MainPanel, {
+    "🌾 Walk → 6s timeout → Reset",
+    "Status: Inactive | Resets: 0"
+})
+
+local FarmStatus = makeStatus(MainPanel, "Idle")
+
+local FarmToggle, ftStroke = makeToggle(MainPanel, "🌾  Auto Farm OFF", 32)
+
+-- ══════════════════════════════════════
+--       SECTION 3: POSITION LOCK
+-- ══════════════════════════════════════
+
+makeSection(MainPanel, "── Position Lock ──")
 
 local posInfoBox, posInfoLabels = makeInfoBox(MainPanel, {
-    "🔒 Position Lock",
-    "X: " .. TARGET_X .. "  |  Z: " .. TARGET_Z,
-    "Reset if > " .. RESET_RADIUS .. " studs from target"
+    "🔒 Lock at selected slot",
+    "X: " .. TARGET_X .. "  |  Z: " .. TARGET_Z
 })
 
 local StatusLabel = makeStatus(MainPanel, "Status: Inactive")
@@ -517,62 +705,43 @@ local StatusLabel = makeStatus(MainPanel, "Status: Inactive")
 local PosToggle, ptStroke = makeToggle(MainPanel, "🔓  Position Lock OFF", 32)
 
 -- ══════════════════════════════════════
---       SECTION 3: ANTI AFK (MAIN)
+--       SECTION 4: ANTI AFK
 -- ══════════════════════════════════════
 
-makeSection(MainPanel, "─────────── Anti AFK ───────────")
+makeSection(MainPanel, "── Anti AFK ──")
 
 local afkInfoBox, afkInfoLabels = makeInfoBox(MainPanel, {
     "🛡️ Prevents AFK kick",
-    "Next: -- | Clicks: 0"
+    "Status: Inactive | Clicks: 0"
 })
 
 local AfkStatus = makeStatus(MainPanel, "Idle")
 
 local AfkToggle, afkStroke = makeToggle(MainPanel, "💤  Anti AFK OFF", 30)
 
--- Spacer so the AFK button has room to scroll into view
-local bottomSpacer = Instance.new("Frame")
-bottomSpacer.Size = UDim2.new(1, 0, 0, 50)
-bottomSpacer.BackgroundTransparency = 1
-bottomSpacer.LayoutOrder = nextOrder()
-bottomSpacer.Parent = MainPanel
-
 -- ══════════════════════════════════════
---  PANIC INFO (separate from scrolling)
+--         PANIC INFO
 -- ══════════════════════════════════════
 
-local PanicBar = Instance.new("Frame")
-PanicBar.Size = UDim2.new(1, 0, 0, 22)
-PanicBar.Position = UDim2.new(0, 0, 1, -22)
-PanicBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-PanicBar.BorderSizePixel = 0
-PanicBar.ZIndex = 5
-PanicBar.Parent = ContentFrame
-
+local panicRow = makeRow(MainPanel, 22)
 local PanicLabel = Instance.new("TextLabel")
 PanicLabel.Size = UDim2.new(1, 0, 1, 0)
 PanicLabel.BackgroundTransparency = 1
-PanicLabel.Text = "⚠ [P] Panic  |  [RightShift] Hide"
+PanicLabel.Text = "⚠ [P] Panic  |  [RightShift] Hide UI"
 PanicLabel.TextColor3 = Color3.fromRGB(200, 80, 80)
-PanicLabel.TextSize = 10
+PanicLabel.TextSize = 11
 PanicLabel.Font = Enum.Font.Gotham
-PanicLabel.ZIndex = 6
-PanicLabel.Parent = PanicBar
-
--- Adjust main scroll to leave room for panic bar
-MainPanel.Size = UDim2.new(1, 0, 1, -22)
-SettingsPanel.Size = UDim2.new(1, 0, 1, -22)
+PanicLabel.Parent = panicRow
 
 -- ══════════════════════════════════════
---   SETTINGS PANEL CONTENT (Size Only)
+--   SETTINGS PANEL CONTENT
 -- ══════════════════════════════════════
 
-makeSection(SettingsPanel, "──────────── Ajustes ────────────")
+makeSection(SettingsPanel, "── Ajustes ──")
 
 -- UI Size control
 local sizeRow = Instance.new("Frame")
-sizeRow.Size = UDim2.new(1, 0, 0, 40)
+sizeRow.Size = UDim2.new(1, 0, 0, 35)
 sizeRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 sizeRow.BorderSizePixel = 0
 sizeRow.LayoutOrder = nextOrder()
@@ -580,8 +749,8 @@ sizeRow.Parent = SettingsPanel
 Instance.new("UICorner", sizeRow).CornerRadius = UDim.new(0, 6)
 
 local SizeLabel = Instance.new("TextLabel")
-SizeLabel.Size = UDim2.new(0, 100, 0, 30)
-SizeLabel.Position = UDim2.new(0, 8, 0, 5)
+SizeLabel.Size = UDim2.new(0, 120, 0, 28)
+SizeLabel.Position = UDim2.new(0, 8, 0, 3.5)
 SizeLabel.BackgroundTransparency = 1
 SizeLabel.Text = "Tamaño UI:"
 SizeLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
@@ -591,19 +760,19 @@ SizeLabel.TextXAlignment = Enum.TextXAlignment.Left
 SizeLabel.Parent = sizeRow
 
 local MinusBtn = Instance.new("TextButton")
-MinusBtn.Size = UDim2.new(0, 40, 0, 30)
-MinusBtn.Position = UDim2.new(0, 115, 0, 5)
+MinusBtn.Size = UDim2.new(0, 35, 0, 28)
+MinusBtn.Position = UDim2.new(0, 128, 0, 3.5)
 MinusBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 MinusBtn.Text = "−"
 MinusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinusBtn.TextSize = 18
+MinusBtn.TextSize = 16
 MinusBtn.Font = Enum.Font.GothamBold
 MinusBtn.Parent = sizeRow
 Instance.new("UICorner", MinusBtn).CornerRadius = UDim.new(0, 6)
 
 local SizeDisplay = Instance.new("TextLabel")
-SizeDisplay.Size = UDim2.new(0, 55, 0, 30)
-SizeDisplay.Position = UDim2.new(0, 160, 0, 5)
+SizeDisplay.Size = UDim2.new(0, 50, 0, 28)
+SizeDisplay.Position = UDim2.new(0, 168, 0, 3.5)
 SizeDisplay.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 SizeDisplay.Text = "100%"
 SizeDisplay.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -613,36 +782,244 @@ SizeDisplay.Parent = sizeRow
 Instance.new("UICorner", SizeDisplay).CornerRadius = UDim.new(0, 6)
 
 local PlusBtn = Instance.new("TextButton")
-PlusBtn.Size = UDim2.new(0, 40, 0, 30)
-PlusBtn.Position = UDim2.new(0, 220, 0, 5)
+PlusBtn.Size = UDim2.new(0, 35, 0, 28)
+PlusBtn.Position = UDim2.new(0, 223, 0, 3.5)
 PlusBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 PlusBtn.Text = "+"
 PlusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-PlusBtn.TextSize = 18
+PlusBtn.TextSize = 16
 PlusBtn.Font = Enum.Font.GothamBold
 PlusBtn.Parent = sizeRow
 Instance.new("UICorner", PlusBtn).CornerRadius = UDim.new(0, 6)
 
--- Version info
+-- WalkSpeed setting
+local speedRow = Instance.new("Frame")
+speedRow.Size = UDim2.new(1, 0, 0, 35)
+speedRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+speedRow.BorderSizePixel = 0
+speedRow.LayoutOrder = nextOrder()
+speedRow.Parent = SettingsPanel
+Instance.new("UICorner", speedRow).CornerRadius = UDim.new(0, 6)
+
+local SpeedLabel = Instance.new("TextLabel")
+SpeedLabel.Size = UDim2.new(0, 120, 0, 28)
+SpeedLabel.Position = UDim2.new(0, 8, 0, 3.5)
+SpeedLabel.BackgroundTransparency = 1
+SpeedLabel.Text = "WalkSpeed:"
+SpeedLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+SpeedLabel.TextSize = 13
+SpeedLabel.Font = Enum.Font.GothamBold
+SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpeedLabel.Parent = speedRow
+
+local SpeedInput = Instance.new("TextBox")
+SpeedInput.Size = UDim2.new(0, 50, 0, 28)
+SpeedInput.Position = UDim2.new(0, 128, 0, 3.5)
+SpeedInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+SpeedInput.Text = tostring(REAL_WALKSPEED)
+SpeedInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedInput.TextSize = 13
+SpeedInput.Font = Enum.Font.Gotham
+SpeedInput.ClearTextOnFocus = false
+SpeedInput.Parent = speedRow
+Instance.new("UICorner", SpeedInput).CornerRadius = UDim.new(0, 6)
+local siStroke = Instance.new("UIStroke")
+siStroke.Color = Color3.fromRGB(60, 60, 60)
+siStroke.Thickness = 1
+siStroke.Parent = SpeedInput
+
+local SpeedApply = Instance.new("TextButton")
+SpeedApply.Size = UDim2.new(0, 80, 0, 28)
+SpeedApply.Position = UDim2.new(0, 185, 0, 3.5)
+SpeedApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
+SpeedApply.Text = "Apply"
+SpeedApply.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedApply.TextSize = 13
+SpeedApply.Font = Enum.Font.GothamBold
+SpeedApply.Parent = speedRow
+Instance.new("UICorner", SpeedApply).CornerRadius = UDim.new(0, 6)
+
+-- Move Timeout setting
+local timeoutRow = Instance.new("Frame")
+timeoutRow.Size = UDim2.new(1, 0, 0, 35)
+timeoutRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+timeoutRow.BorderSizePixel = 0
+timeoutRow.LayoutOrder = nextOrder()
+timeoutRow.Parent = SettingsPanel
+Instance.new("UICorner", timeoutRow).CornerRadius = UDim.new(0, 6)
+
+local TimeoutLabel = Instance.new("TextLabel")
+TimeoutLabel.Size = UDim2.new(0, 120, 0, 28)
+TimeoutLabel.Position = UDim2.new(0, 8, 0, 3.5)
+TimeoutLabel.BackgroundTransparency = 1
+TimeoutLabel.Text = "Move Timeout:"
+TimeoutLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+TimeoutLabel.TextSize = 13
+TimeoutLabel.Font = Enum.Font.GothamBold
+TimeoutLabel.TextXAlignment = Enum.TextXAlignment.Left
+TimeoutLabel.Parent = timeoutRow
+
+local TimeoutInput = Instance.new("TextBox")
+TimeoutInput.Size = UDim2.new(0, 50, 0, 28)
+TimeoutInput.Position = UDim2.new(0, 128, 0, 3.5)
+TimeoutInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+TimeoutInput.Text = tostring(MOVE_TIMEOUT)
+TimeoutInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+TimeoutInput.TextSize = 13
+TimeoutInput.Font = Enum.Font.Gotham
+TimeoutInput.ClearTextOnFocus = false
+TimeoutInput.Parent = timeoutRow
+Instance.new("UICorner", TimeoutInput).CornerRadius = UDim.new(0, 6)
+local toStroke = Instance.new("UIStroke")
+toStroke.Color = Color3.fromRGB(60, 60, 60)
+toStroke.Thickness = 1
+toStroke.Parent = TimeoutInput
+
+local TimeoutApply = Instance.new("TextButton")
+TimeoutApply.Size = UDim2.new(0, 80, 0, 28)
+TimeoutApply.Position = UDim2.new(0, 185, 0, 3.5)
+TimeoutApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
+TimeoutApply.Text = "Apply"
+TimeoutApply.TextColor3 = Color3.fromRGB(255, 255, 255)
+TimeoutApply.TextSize = 13
+TimeoutApply.Font = Enum.Font.GothamBold
+TimeoutApply.Parent = timeoutRow
+Instance.new("UICorner", TimeoutApply).CornerRadius = UDim.new(0, 6)
+
+-- Trigger distance setting
+local trigRow = Instance.new("Frame")
+trigRow.Size = UDim2.new(1, 0, 0, 35)
+trigRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+trigRow.BorderSizePixel = 0
+trigRow.LayoutOrder = nextOrder()
+trigRow.Parent = SettingsPanel
+Instance.new("UICorner", trigRow).CornerRadius = UDim.new(0, 6)
+
+local TrigLabel = Instance.new("TextLabel")
+TrigLabel.Size = UDim2.new(0, 120, 0, 28)
+TrigLabel.Position = UDim2.new(0, 8, 0, 3.5)
+TrigLabel.BackgroundTransparency = 1
+TrigLabel.Text = "Trigger Dist:"
+TrigLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+TrigLabel.TextSize = 13
+TrigLabel.Font = Enum.Font.GothamBold
+TrigLabel.TextXAlignment = Enum.TextXAlignment.Left
+TrigLabel.Parent = trigRow
+
+local TrigInput = Instance.new("TextBox")
+TrigInput.Size = UDim2.new(0, 50, 0, 28)
+TrigInput.Position = UDim2.new(0, 128, 0, 3.5)
+TrigInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+TrigInput.Text = tostring(TRIGGER_DIST)
+TrigInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+TrigInput.TextSize = 13
+TrigInput.Font = Enum.Font.Gotham
+TrigInput.ClearTextOnFocus = false
+TrigInput.Parent = trigRow
+Instance.new("UICorner", TrigInput).CornerRadius = UDim.new(0, 6)
+local tiStroke = Instance.new("UIStroke")
+tiStroke.Color = Color3.fromRGB(60, 60, 60)
+tiStroke.Thickness = 1
+tiStroke.Parent = TrigInput
+
+local TrigApply = Instance.new("TextButton")
+TrigApply.Size = UDim2.new(0, 80, 0, 28)
+TrigApply.Position = UDim2.new(0, 185, 0, 3.5)
+TrigApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
+TrigApply.Text = "Apply"
+TrigApply.TextColor3 = Color3.fromRGB(255, 255, 255)
+TrigApply.TextSize = 13
+TrigApply.Font = Enum.Font.GothamBold
+TrigApply.Parent = trigRow
+Instance.new("UICorner", TrigApply).CornerRadius = UDim.new(0, 6)
+
+-- AFK Interval setting
+local afkIntRow = Instance.new("Frame")
+afkIntRow.Size = UDim2.new(1, 0, 0, 35)
+afkIntRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+afkIntRow.BorderSizePixel = 0
+afkIntRow.LayoutOrder = nextOrder()
+afkIntRow.Parent = SettingsPanel
+Instance.new("UICorner", afkIntRow).CornerRadius = UDim.new(0, 6)
+
+local AfkIntLabel = Instance.new("TextLabel")
+AfkIntLabel.Size = UDim2.new(0, 120, 0, 28)
+AfkIntLabel.Position = UDim2.new(0, 8, 0, 3.5)
+AfkIntLabel.BackgroundTransparency = 1
+AfkIntLabel.Text = "AFK Interval:"
+AfkIntLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+AfkIntLabel.TextSize = 13
+AfkIntLabel.Font = Enum.Font.GothamBold
+AfkIntLabel.TextXAlignment = Enum.TextXAlignment.Left
+AfkIntLabel.Parent = afkIntRow
+
+local afkIntervalMin = 30
+local afkIntervalMax = 90
+
+local AfkIntInput = Instance.new("TextBox")
+AfkIntInput.Size = UDim2.new(0, 80, 0, 28)
+AfkIntInput.Position = UDim2.new(0, 128, 0, 3.5)
+AfkIntInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+AfkIntInput.Text = afkIntervalMin .. "-" .. afkIntervalMax .. "s"
+AfkIntInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+AfkIntInput.TextSize = 13
+AfkIntInput.Font = Enum.Font.Gotham
+AfkIntInput.ClearTextOnFocus = false
+AfkIntInput.Parent = afkIntRow
+Instance.new("UICorner", AfkIntInput).CornerRadius = UDim.new(0, 6)
+local aiStroke = Instance.new("UIStroke")
+aiStroke.Color = Color3.fromRGB(60, 60, 60)
+aiStroke.Thickness = 1
+aiStroke.Parent = AfkIntInput
+
+local AfkIntApply = Instance.new("TextButton")
+AfkIntApply.Size = UDim2.new(0, 80, 0, 28)
+AfkIntApply.Position = UDim2.new(0, 215, 0, 3.5)
+AfkIntApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
+AfkIntApply.Text = "Apply"
+AfkIntApply.TextColor3 = Color3.fromRGB(255, 255, 255)
+AfkIntApply.TextSize = 13
+AfkIntApply.Font = Enum.Font.GothamBold
+AfkIntApply.Parent = afkIntRow
+Instance.new("UICorner", AfkIntApply).CornerRadius = UDim.new(0, 6)
+
 local settingsInfo = Instance.new("TextLabel")
-settingsInfo.Size = UDim2.new(1, 0, 0, 50)
+settingsInfo.Size = UDim2.new(1, 0, 0, 40)
 settingsInfo.BackgroundTransparency = 1
-settingsInfo.Text = "Eclipse Sab Nf v7\nOnly UI size adjustable"
+settingsInfo.Text = "Eclipse Sab Nf v7\nUndetected Jumps + 6s Reset + Slots"
 settingsInfo.TextColor3 = Color3.fromRGB(80, 80, 80)
 settingsInfo.TextSize = 10
 settingsInfo.Font = Enum.Font.Gotham
-settingsInfo.TextXAlignment = Enum.TextXAlignment.Center
 settingsInfo.LayoutOrder = nextOrder()
 settingsInfo.Parent = SettingsPanel
 
 -- ════════════════════════════════
---   SETTINGS LOGIC (Scale)
+--   SETTINGS LOGIC
 -- ════════════════════════════════
 
 local function applyScale(newScale)
     currentScale = math.clamp(newScale, minScale, maxScale)
-    MainScale.Scale = currentScale
+    local w = math.floor(BASE_WIDTH * currentScale + 0.5)
+    local h = math.floor(BASE_HEIGHT * currentScale + 0.5)
+
+    MainFrame.Size = UDim2.new(0, w, 0, h)
+    MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
+
     SizeDisplay.Text = math.floor(currentScale * 100 + 0.5) .. "%"
+end
+
+local allTextElements = {}
+
+local function recolorTextForScale()
+    for _, desc in ipairs(MainFrame:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
+            if not allTextElements[desc] then
+                allTextElements[desc] = desc.TextSize
+            end
+            local base = allTextElements[desc]
+            desc.TextSize = math.max(8, math.floor(base * currentScale + 0.5))
+        end
+    end
 end
 
 local function showPanel(panel)
@@ -663,21 +1040,89 @@ local function setMinimized(state)
     isMinimized = state
     if isMinimized then
         ContentFrame.Visible = false
-        MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, 38)
+        local w = math.floor(BASE_WIDTH * currentScale + 0.5)
+        MainFrame.Size = UDim2.new(0, w, 0, 38)
+        MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -19)
         CloseBtn.Text = "+"
     else
+        applyScale(currentScale)
         ContentFrame.Visible = true
-        MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, BASE_HEIGHT)
         CloseBtn.Text = "−"
     end
 end
 
 MinusBtn.MouseButton1Click:Connect(function()
     applyScale(currentScale - scaleStep)
+    recolorTextForScale()
 end)
 
 PlusBtn.MouseButton1Click:Connect(function()
     applyScale(currentScale + scaleStep)
+    recolorTextForScale()
+end)
+
+SpeedApply.MouseButton1Click:Connect(function()
+    local val = tonumber(SpeedInput.Text)
+    if val and val >= 16 and val <= 200 then
+        REAL_WALKSPEED = val
+        SpeedInput.Text = tostring(val)
+        siStroke.Color = Color3.fromRGB(40, 180, 40)
+        task.delay(1, function() siStroke.Color = Color3.fromRGB(60, 60, 60) end)
+    else
+        siStroke.Color = Color3.fromRGB(200, 50, 50)
+        task.delay(1, function() siStroke.Color = Color3.fromRGB(60, 60, 60) end)
+    end
+end)
+
+TimeoutApply.MouseButton1Click:Connect(function()
+    local val = tonumber(TimeoutInput.Text)
+    if val and val >= 2 and val <= 30 then
+        MOVE_TIMEOUT = val
+        TimeoutInput.Text = tostring(val)
+        toStroke.Color = Color3.fromRGB(40, 180, 40)
+        task.delay(1, function() toStroke.Color = Color3.fromRGB(60, 60, 60) end)
+    else
+        toStroke.Color = Color3.fromRGB(200, 50, 50)
+        task.delay(1, function() toStroke.Color = Color3.fromRGB(60, 60, 60) end)
+    end
+end)
+
+TrigApply.MouseButton1Click:Connect(function()
+    local val = tonumber(TrigInput.Text)
+    if val and val >= 1 and val <= 50 then
+        TRIGGER_DIST = val
+        TrigInput.Text = tostring(val)
+        posInfoLabels[2].Text = "X: " .. TARGET_X .. "  |  Z: " .. TARGET_Z .. "  |  Trigger: " .. TRIGGER_DIST .. " studs"
+        tiStroke.Color = Color3.fromRGB(40, 180, 40)
+        task.delay(1, function() tiStroke.Color = Color3.fromRGB(60, 60, 60) end)
+    else
+        tiStroke.Color = Color3.fromRGB(200, 50, 50)
+        task.delay(1, function() tiStroke.Color = Color3.fromRGB(60, 60, 60) end)
+    end
+end)
+
+AfkIntApply.MouseButton1Click:Connect(function()
+    local text = AfkIntInput.Text:gsub("%s+", ""):gsub("s$", "")
+    local parts = {}
+    for num in text:gmatch("%d+") do
+        table.insert(parts, tonumber(num))
+    end
+    if #parts == 2 and parts[1] >= 5 and parts[2] >= parts[1] and parts[2] <= 300 then
+        afkIntervalMin = parts[1]
+        afkIntervalMax = parts[2]
+        AfkIntInput.Text = afkIntervalMin .. "-" .. afkIntervalMax .. "s"
+        aiStroke.Color = Color3.fromRGB(40, 180, 40)
+        task.delay(1, function() aiStroke.Color = Color3.fromRGB(60, 60, 60) end)
+    elseif #parts == 1 and parts[1] >= 5 and parts[1] <= 300 then
+        afkIntervalMin = parts[1]
+        afkIntervalMax = parts[1]
+        AfkIntInput.Text = afkIntervalMin .. "s"
+        aiStroke.Color = Color3.fromRGB(40, 180, 40)
+        task.delay(1, function() aiStroke.Color = Color3.fromRGB(60, 60, 60) end)
+    else
+        aiStroke.Color = Color3.fromRGB(200, 50, 50)
+        task.delay(1, function() aiStroke.Color = Color3.fromRGB(60, 60, 60) end)
+    end
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
@@ -693,95 +1138,166 @@ SettingsBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ════════════════════════════════
---   EXTRA JUMPS LOGIC
+--   EXTRA JUMPS LOGIC (UNDETECTED)
+--   Uses BodyVelocity, NOT SetAttribute
 -- ════════════════════════════════
-
-local function getJumpsValue(text)
-    if text:lower() == "inf" or text:lower() == "infinite" or text:lower() == "infinity" then
-        return math.huge
-    end
-    local num = tonumber(text)
-    if num and num >= 1 then return num end
-    return nil
-end
-
-local function applyExtraJumps(targetName, jumpsValue)
-    local targetPlayer = Players:FindFirstChild(targetName)
-    if targetPlayer then
-        local character = targetPlayer.Character
-        if character then
-            character:SetAttribute("ExtraJumps", jumpsValue)
-            local humanoid = character:FindFirstChildOfClass("Humanoid")
-            if humanoid then
-                humanoid:SetAttribute("ExtraJumps", jumpsValue)
-            end
-        end
-        targetPlayer:SetAttribute("ExtraJumps", jumpsValue)
-        return true
-    end
-    return false
-end
 
 JumpsToggle.MouseButton1Click:Connect(function()
     jumpsActive = not jumpsActive
 
     if jumpsActive then
-        local targetName = UserBox.Text:gsub("%s+", "")
-        local jumpsText = JumpsBox.Text:gsub("%s+", "")
+        local jText = JumpsBox.Text:gsub("%s+", "")
+        local jVal = tonumber(jText)
 
-        if targetName == "" then
-            UserBox.PlaceholderText = "⚠ Enter username!"
-            jumpsActive = false
-            return
-        end
-
-        local jumpsValue = getJumpsValue(jumpsText)
-        if not jumpsValue then
-            JumpsBox.PlaceholderText = "⚠ Enter 1-∞ or 'inf'!"
-            jumpsActive = false
-            return
-        end
-
-        local found = Players:FindFirstChild(targetName)
-        if not found then
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p.Name:lower():sub(1, #targetName) == targetName:lower() then
-                    targetName = p.Name
-                    UserBox.Text = p.Name
-                    found = p
-                    break
-                end
+        if not jVal or jVal < 1 then
+            if jText:lower() == "inf" or jText:lower() == "infinite" then
+                jVal = 999
+            else
+                JumpsBox.PlaceholderText = "⚠ Enter 1-∞ or 'inf'!"
+                jumpsActive = false
+                return
             end
         end
 
-        if not found then
-            UserBox.PlaceholderText = "⚠ Player not found!"
-            UserBox.Text = ""
-            jumpsActive = false
-            return
-        end
+        local fText = JumpForceBox.Text:gsub("%s+", "")
+        local fVal = tonumber(fText) or 55
+
+        maxJumps = jVal
+        jumpForce = fVal
+        jumpCount = 0
 
         JumpsToggle.Text = "✅  ExtraJumps ON"
         JumpsToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
         jtStroke.Color = Color3.fromRGB(30, 100, 30)
+        jumpInfoLabels[1].Text = "🦘 BodyVelocity method (ACTIVE)"
 
-        applyExtraJumps(targetName, jumpsValue)
-
-        local conn = RunService.Heartbeat:Connect(function()
-            if not jumpsActive then return end
-            applyExtraJumps(targetName, jumpsValue)
-        end)
-        table.insert(allConnections, conn)
+        setupUndetectedJumps()
     else
         JumpsToggle.Text = "⛔  ExtraJumps OFF"
         JumpsToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         jtStroke.Color = Color3.fromRGB(100, 30, 30)
+        jumpInfoLabels[1].Text = "🦘 BodyVelocity method (INACTIVE)"
+
+        if jumpConn then
+            jumpConn:Disconnect()
+            jumpConn = nil
+        end
     end
 end)
 
 -- ════════════════════════════════
---   AUTO FARM / POSITION LOCK
---   Resets player if > 10 studs
+--   AUTO FARM LOGIC (6s RESET)
+--   MoveTo → 6s timeout → Distance check → BreakJoints if not there
+-- ════════════════════════════════
+
+local farmResets = 0
+
+local function autoFarmLoop()
+    while autoFarmActive do
+        local char, root, humanoid = getCharParts()
+
+        if not root or not humanoid then
+            FarmStatus.Text = "Waiting for character..."
+            FarmStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
+            task.wait(1)
+            continue
+        end
+
+        local dist = getDistanceFromTarget(root)
+
+        if dist < TRIGGER_DIST then
+            -- Already at target
+            FarmStatus.Text = string.format("✅ At slot %d | Dist: %.1f", selectedSlot, dist)
+            FarmStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+            farmInfoLabels[2].Text = string.format("Status: Idle | Resets: %d", farmResets)
+            setWalkSpeed(humanoid, SPOOFED_WALKSPEED)
+            task.wait(0.5)
+        else
+            -- Walk to target
+            local offset = getRandomOffset()
+            local targetPos = Vector3.new(TARGET_X + offset.X, root.Position.Y, TARGET_Z + offset.Z)
+
+            FarmStatus.Text = string.format("⚠ Walking to Slot %d...", selectedSlot)
+            FarmStatus.TextColor3 = Color3.fromRGB(255, 140, 0)
+
+            setWalkSpeed(humanoid, REAL_WALKSPEED)
+            humanoid:MoveTo(targetPos)
+
+            -- 6 second timeout
+            local elapsed = 0
+            local arrived = false
+
+            while elapsed < MOVE_TIMEOUT do
+                local _, r, h = getCharParts()
+                if not r or not h then break end
+
+                local d = (r.Position - targetPos).Magnitude
+                FarmStatus.Text = string.format("Walking... %.1fs | Dist: %.1f", MOVE_TIMEOUT - elapsed, d)
+
+                if d < 3 then
+                    arrived = true
+                    break
+                end
+
+                h:MoveTo(targetPos)
+                task.wait(MOVE_CHECK_INTERVAL)
+                elapsed = elapsed + MOVE_CHECK_INTERVAL
+            end
+
+            if arrived then
+                FarmStatus.Text = string.format("✅ Reached Slot %d!", selectedSlot)
+                FarmStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+                local _, _, h = getCharParts()
+                if h then setWalkSpeed(h, SPOOFED_WALKSPEED) end
+                task.wait(0.5)
+            else
+                -- TIMEOUT → RESET
+                farmResets = farmResets + 1
+                farmInfoLabels[2].Text = string.format("Status: Reset #%d...", farmResets)
+                FarmStatus.Text = string.format("🔄 Timeout! Reset #%d", farmResets)
+                FarmStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+
+                resetCharacter()
+
+                -- Wait for respawn
+                task.wait(3)
+                local _, _, h = getCharParts()
+                if h then
+                    FarmStatus.Text = "Respawned, walking again..."
+                    FarmStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
+                end
+                task.wait(1)
+            end
+        end
+    end
+end
+
+FarmToggle.MouseButton1Click:Connect(function()
+    autoFarmActive = not autoFarmActive
+
+    if autoFarmActive then
+        FarmToggle.Text = "✅  Auto Farm ON"
+        FarmToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
+        ftStroke.Color = Color3.fromRGB(30, 100, 30)
+        FarmStatus.Text = "Active - Walking to Slot " .. selectedSlot
+        FarmStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+        farmInfoLabels[1].Text = "🌾 Walk → " .. MOVE_TIMEOUT .. "s timeout → Reset"
+        task.spawn(autoFarmLoop)
+    else
+        FarmToggle.Text = "🌾  Auto Farm OFF"
+        FarmToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        ftStroke.Color = Color3.fromRGB(100, 30, 30)
+        FarmStatus.Text = "Idle"
+        FarmStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
+        farmInfoLabels[1].Text = "🌾 Walk → " .. MOVE_TIMEOUT .. "s timeout → Reset"
+        farmInfoLabels[2].Text = string.format("Status: Inactive | Resets: %d", farmResets)
+        local _, _, h = getCharParts()
+        if h then setWalkSpeed(h, SPOOFED_WALKSPEED) end
+    end
+end)
+
+-- ════════════════════════════════
+--   POSITION LOCK LOGIC
 -- ════════════════════════════════
 
 local function positionLockLoop()
@@ -797,43 +1313,44 @@ local function positionLockLoop()
 
         local dist = getDistanceFromTarget(root)
 
-        -- RESET if too far from target
-        if dist > RESET_RADIUS then
-            StatusLabel.Text = string.format("⚠ Too far (%.1f) — Resetting!", dist)
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
-            task.wait(0.3)
-            resetPlayer()
-            task.wait(3)
-            continue
-        end
+        if dist < TRIGGER_DIST then
+            StatusLabel.Text = string.format("✅ At Slot %d | Dist: %.1f", selectedSlot, dist)
+            StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+            setWalkSpeed(humanoid, SPOOFED_WALKSPEED)
+            task.wait(0.5)
+        else
+            StatusLabel.Text = string.format("⚠ Returning to Slot %d... | Dist: %.1f", selectedSlot, dist)
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
 
-        -- CLOSE ENOUGH — stay put
-        StatusLabel.Text = string.format("✅ At position | Dist: %.1f", dist)
-        StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-        setWalkSpeed(humanoid, SPOOFED_WALKSPEED)
+            task.wait(math.random() * 0.3 + 0.1)
+            if not posActive then break end
 
-        -- Periodically nudge to stay within radius
-        task.wait(1)
+            local offset = getRandomOffset()
+            local targetPos = Vector3.new(TARGET_X + offset.X, root.Position.Y, TARGET_Z + offset.Z)
 
-        if not posActive then break end
+            local reached = walkToPosition(targetPos, function(d)
+                if posActive then
+                    StatusLabel.Text = string.format("⚠ Walking... | Dist: %.1f", d)
+                end
+            end, MOVE_TIMEOUT)
 
-        local _, r2, h2 = getCharParts()
-        if r2 and h2 then
-            local d2 = getDistanceFromTarget(r2)
-            if d2 > RESET_RADIUS * 0.8 then
-                -- Walk back to center if drifting
-                local offset = getRandomOffset()
-                local targetPos = Vector3.new(TARGET_X + offset.X, r2.Position.Y, TARGET_Z + offset.Z)
-                walkToPosition(targetPos, function(d)
-                    if posActive then
-                        StatusLabel.Text = string.format("⚠ Correcting... | Dist: %.1f", d)
-                    end
-                end)
-                local _, _, h3 = getCharParts()
-                if h3 then setWalkSpeed(h3, SPOOFED_WALKSPEED) end
+            if reached then
+                StatusLabel.Text = string.format("✅ At Slot %d!", selectedSlot)
+                StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+            else
+                StatusLabel.Text = "⚠ Timed out, retrying..."
+                StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
             end
+
+            local _, _, h = getCharParts()
+            if h then setWalkSpeed(h, SPOOFED_WALKSPEED) end
+            task.wait(0.5)
         end
     end
+end
+
+local function updateSlotInfo()
+    posInfoLabels[2].Text = "X: " .. TARGET_X .. "  |  Z: " .. TARGET_Z .. "  |  Trigger: " .. TRIGGER_DIST .. " studs"
 end
 
 PosToggle.MouseButton1Click:Connect(function()
@@ -843,8 +1360,9 @@ PosToggle.MouseButton1Click:Connect(function()
         PosToggle.Text = "🔒  Position Lock ON"
         PosToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
         ptStroke.Color = Color3.fromRGB(30, 100, 30)
-        StatusLabel.Text = "Status: Active..."
+        StatusLabel.Text = "Active - Slot " .. selectedSlot
         StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        updateSlotInfo()
         task.spawn(positionLockLoop)
     else
         PosToggle.Text = "🔓  Position Lock OFF"
@@ -869,7 +1387,7 @@ local function antiAfkLoop()
 
         for i = waitTime, 1, -1 do
             if not afkActive then break end
-            afkInfoLabels[2].Text = string.format("Next: %ds | Clicks: %d", i, afkCount)
+            afkInfoLabels[2].Text = string.format("Next: %ds | Total: %d", i, afkCount)
             task.wait(1)
         end
 
@@ -909,7 +1427,7 @@ local function antiAfkLoop()
         end
 
         afkCount = afkCount + 1
-        afkInfoLabels[2].Text = string.format("Active | Clicks: %d", afkCount)
+        afkInfoLabels[2].Text = string.format("Status: Active | Total: %d", afkCount)
         AfkStatus.TextColor3 = Color3.fromRGB(100, 200, 255)
         task.wait(0.5)
     end
@@ -922,7 +1440,7 @@ AfkToggle.MouseButton1Click:Connect(function()
         AfkToggle.Text = "✅  Anti AFK ON"
         AfkToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
         afkStroke.Color = Color3.fromRGB(30, 100, 30)
-        AfkStatus.Text = "Active..."
+        AfkStatus.Text = "Status: Active..."
         AfkStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
         task.spawn(antiAfkLoop)
     else
@@ -931,7 +1449,7 @@ AfkToggle.MouseButton1Click:Connect(function()
         afkStroke.Color = Color3.fromRGB(100, 30, 30)
         AfkStatus.Text = "Idle"
         AfkStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
-        afkInfoLabels[2].Text = "Next: -- | Clicks: 0"
+        afkInfoLabels[2].Text = "Status: Inactive | Clicks: 0"
     end
 end)
 
@@ -946,11 +1464,14 @@ UIS.InputBegan:Connect(function(input, processed)
         posActive = false
         jumpsActive = false
         afkActive = false
+        autoFarmActive = false
 
         for _, conn in ipairs(allConnections) do
             pcall(function() conn:Disconnect() end)
         end
         allConnections = {}
+
+        if jumpConn then pcall(function() jumpConn:Disconnect() end) jumpConn = nil end
 
         local _, _, h = getCharParts()
         if h then setWalkSpeed(h, SPOOFED_WALKSPEED) end
@@ -964,13 +1485,20 @@ UIS.InputBegan:Connect(function(input, processed)
         JumpsToggle.Text = "⛔  ExtraJumps OFF"
         JumpsToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         jtStroke.Color = Color3.fromRGB(100, 30, 30)
+        jumpInfoLabels[1].Text = "🦘 BodyVelocity method (INACTIVE)"
+
+        FarmToggle.Text = "🌾  Auto Farm OFF"
+        FarmToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        ftStroke.Color = Color3.fromRGB(100, 30, 30)
+        FarmStatus.Text = "🔴 PANIC"
+        FarmStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
 
         AfkToggle.Text = "💤  Anti AFK OFF"
         AfkToggle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
         afkStroke.Color = Color3.fromRGB(100, 30, 30)
         AfkStatus.Text = "🔴 PANIC"
         AfkStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
-        afkInfoLabels[2].Text = "PANIC | Clicks: 0"
+        afkInfoLabels[2].Text = "Status: PANIC | Clicks: 0"
     end
 
     if input.KeyCode == Enum.KeyCode.RightShift then
@@ -1021,6 +1549,7 @@ end)
 
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
+    jumpCount = 0
     if not hooksInstalled then installHooks() end
 end)
 
@@ -1030,8 +1559,9 @@ end)
 
 print("══════════════════════════════════")
 print("  ECLIPSE SAB NF v7 - Loaded ✅")
-print("  Jumps Bypass + Auto Farm")
-print("  Reset if > " .. RESET_RADIUS .. " studs from target")
-print("  Settings: UI size only")
+print("  ExtraJumps: BodyVelocity (undetected)")
+print("  Auto Farm: 6s timeout + reset")
+print("  8 Position Slots with selector")
+print("  UI: ScrollingFrame (see everything)")
 print("  PANIC: [P] | UI: [RightShift]")
 print("══════════════════════════════════")
