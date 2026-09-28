@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
--- ECLIPSE SAB NF v6 - FULL UI FIX
--- ExtraJumps + Position Lock + Anti-AFK + Settings Panel
+-- ECLIPSE SAB NF v7 - FULL REWRITE
+-- Jumps Bypass + Auto Farm + Anti-AFK + Settings
 -- ══════════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
@@ -24,7 +24,7 @@ end)
 
 local TARGET_X = -462.5
 local TARGET_Z = 139.7
-local TRIGGER_DIST = 8
+local RESET_RADIUS = 10
 local POSITION_VARIANCE = 2.0
 local REAL_WALKSPEED = 48
 local SPOOFED_WALKSPEED = 16
@@ -36,13 +36,19 @@ local afkActive = false
 local allConnections = {}
 local hooksInstalled = false
 
+-- AFK intervals
+local afkIntervalMin = 30
+local afkIntervalMax = 90
+
 -- UI State
+local BASE_WIDTH = 310
+local BASE_HEIGHT = 420
 local currentScale = 1.0
 local minScale = 0.65
 local maxScale = 1.5
 local scaleStep = 0.1
 local isMinimized = false
-local currentPanel = "main" -- "main" or "settings"
+local currentPanel = "main"
 
 -- ════════════════════════════════
 --   AC BYPASS HOOKS
@@ -148,6 +154,15 @@ local function setWalkSpeed(humanoid, speed)
     pcall(function() humanoid.WalkSpeed = speed end)
 end
 
+local function resetPlayer()
+    local char, root, humanoid = getCharParts()
+    if humanoid then
+        humanoid.Health = 0
+    elseif char then
+        char:BreakJoints()
+    end
+end
+
 local function walkToPosition(targetPos, statusCallback)
     local char, root, humanoid = getCharParts()
     if not root or not humanoid then return false end
@@ -179,15 +194,12 @@ end
 --         GUI CREATION
 -- ════════════════════════════════
 
-local BASE_WIDTH = 310
-local BASE_HEIGHT = 400
-
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "RobloxGui_App"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = game:GetService("CoreGui")
 
--- ── Main Frame (ClipDescendants ON) ──
+-- ── Main Frame ──
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainPanel"
 MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, BASE_HEIGHT)
@@ -204,6 +216,11 @@ local mainStroke = Instance.new("UIStroke")
 mainStroke.Color = Color3.fromRGB(255, 140, 0)
 mainStroke.Thickness = 2
 mainStroke.Parent = MainFrame
+
+-- UIScale for the entire frame
+local MainScale = Instance.new("UIScale")
+MainScale.Scale = 1.0
+MainScale.Parent = MainFrame
 
 -- ── Title Bar ──
 local TitleBar = Instance.new("Frame")
@@ -228,7 +245,7 @@ local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -80, 1, 0)
 TitleLabel.Position = UDim2.new(0, 10, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "⚡ Eclipse Sab Nf v6"
+TitleLabel.Text = "⚡ Eclipse Sab Nf v7"
 TitleLabel.TextColor3 = Color3.fromRGB(18, 18, 18)
 TitleLabel.TextSize = 16
 TitleLabel.Font = Enum.Font.GothamBold
@@ -255,7 +272,7 @@ end
 local SettingsBtn = makeTitleBtn(TitleBar, -64, "⚙", Color3.fromRGB(60, 60, 60))
 local CloseBtn = makeTitleBtn(TitleBar, -32, "−", Color3.fromRGB(180, 40, 40))
 
--- ── Content Frame (holds both panels) ──
+-- ── Content Frame ──
 local ContentFrame = Instance.new("Frame")
 ContentFrame.Name = "Content"
 ContentFrame.Size = UDim2.new(1, 0, 1, -38)
@@ -265,18 +282,21 @@ ContentFrame.ClipsDescendants = true
 ContentFrame.Parent = MainFrame
 
 -- ════════════════════════════════
---     MAIN PANEL (features)
+--  MAIN PANEL (ScrollingFrame)
 -- ════════════════════════════════
 
-local MainPanel = Instance.new("Frame")
-MainPanel.Name = "MainPanelContent"
+local MainPanel = Instance.new("ScrollingFrame")
+MainPanel.Name = "MainScroll"
 MainPanel.Size = UDim2.new(1, 0, 1, 0)
 MainPanel.BackgroundTransparency = 1
-MainPanel.ClipsDescendants = true
+MainPanel.ScrollBarThickness = 4
+MainPanel.ScrollBarImageColor3 = Color3.fromRGB(255, 140, 0)
+MainPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
+MainPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
+MainPanel.BorderSizePixel = 0
 MainPanel.Visible = true
 MainPanel.Parent = ContentFrame
 
--- UIListLayout for auto-spacing
 local mainLayout = Instance.new("UIListLayout")
 mainLayout.Padding = UDim.new(0, 4)
 mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -285,19 +305,24 @@ mainLayout.Parent = MainPanel
 
 local mainPadding = Instance.new("UIPadding")
 mainPadding.PaddingTop = UDim.new(0, 8)
+mainPadding.PaddingBottom = UDim.new(0, 8)
 mainPadding.PaddingLeft = UDim.new(0, 12)
 mainPadding.PaddingRight = UDim.new(0, 12)
 mainPadding.Parent = MainPanel
 
 -- ════════════════════════════════
---     SETTINGS PANEL
+--  SETTINGS PANEL (ScrollingFrame)
 -- ════════════════════════════════
 
-local SettingsPanel = Instance.new("Frame")
-SettingsPanel.Name = "SettingsPanelContent"
+local SettingsPanel = Instance.new("ScrollingFrame")
+SettingsPanel.Name = "SettingsScroll"
 SettingsPanel.Size = UDim2.new(1, 0, 1, 0)
 SettingsPanel.BackgroundTransparency = 1
-SettingsPanel.ClipsDescendants = true
+SettingsPanel.ScrollBarThickness = 4
+SettingsPanel.ScrollBarImageColor3 = Color3.fromRGB(255, 140, 0)
+SettingsPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
+SettingsPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
+SettingsPanel.BorderSizePixel = 0
 SettingsPanel.Visible = false
 SettingsPanel.Parent = ContentFrame
 
@@ -309,6 +334,7 @@ settingsLayout.Parent = SettingsPanel
 
 local settingsPadding = Instance.new("UIPadding")
 settingsPadding.PaddingTop = UDim.new(0, 12)
+settingsPadding.PaddingBottom = UDim.new(0, 12)
 settingsPadding.PaddingLeft = UDim.new(0, 12)
 settingsPadding.PaddingRight = UDim.new(0, 12)
 settingsPadding.Parent = SettingsPanel
@@ -338,11 +364,11 @@ local function makeSection(parent, title)
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
-    label.Text = "  " .. title
+    label.Text = title
     label.TextColor3 = Color3.fromRGB(255, 140, 0)
     label.TextSize = 13
     label.Font = Enum.Font.GothamBold
-    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextXAlignment = Enum.TextXAlignment.Center
     label.Parent = frame
 
     return frame
@@ -403,33 +429,24 @@ local function makeToggle(parent, text, height)
     btn.LayoutOrder = nextOrder()
     btn.AutoButtonColor = false
     btn.Parent = parent
-
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
-
     local s = Instance.new("UIStroke")
     s.Color = Color3.fromRGB(100, 30, 30)
     s.Thickness = 1.5
     s.Parent = btn
-
-    -- Hover effect
-    btn.MouseEnter:Connect(function()
-        btn.BackgroundTransparency = 0.1
-    end)
-    btn.MouseLeave:Connect(function()
-        btn.BackgroundTransparency = 0
-    end)
-
+    btn.MouseEnter:Connect(function() btn.BackgroundTransparency = 0.1 end)
+    btn.MouseLeave:Connect(function() btn.BackgroundTransparency = 0 end)
     return btn, s
 end
 
 local function makeInfoBox(parent, lines)
+    local h = 14 * #lines + 12
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 14 * #lines + 10)
+    frame.Size = UDim2.new(1, 0, 0, h)
     frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     frame.BorderSizePixel = 0
     frame.LayoutOrder = nextOrder()
     frame.Parent = parent
-
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
     local s = Instance.new("UIStroke")
     s.Color = Color3.fromRGB(50, 50, 50)
@@ -440,17 +457,16 @@ local function makeInfoBox(parent, lines)
     for i, line in ipairs(lines) do
         local l = Instance.new("TextLabel")
         l.Size = UDim2.new(1, -10, 0, 14)
-        l.Position = UDim2.new(0, 5, 0, 5 + (i - 1) * 14)
+        l.Position = UDim2.new(0, 5, 0, 4 + (i - 1) * 16)
         l.BackgroundTransparency = 1
         l.Text = line
-        l.TextColor3 = line:sub(1, 4) == "Stat" and Color3.fromRGB(200, 200, 200) or Color3.fromRGB(255, 140, 0)
+        l.TextColor3 = Color3.fromRGB(255, 140, 0)
         l.TextSize = 11
-        l.Font = line:sub(1, 4) == "Stat" and Enum.Font.Gotham or Enum.Font.GothamBold
-        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.Font = Enum.Font.GothamBold
+        l.TextXAlignment = Enum.TextXAlignment.Center
         l.Parent = frame
         labels[i] = l
     end
-
     return frame, labels
 end
 
@@ -463,36 +479,37 @@ local function makeStatus(parent, default)
     l.TextSize = 11
     l.Font = Enum.Font.Gotham
     l.LayoutOrder = nextOrder()
+    l.TextXAlignment = Enum.TextXAlignment.Center
     l.Parent = parent
     return l
 end
 
 -- ══════════════════════════════════════
---     SECTION 1: EXTRA JUMPS (MAIN)
+--    SECTION 1: JUMPS BYPASS (MAIN)
 -- ══════════════════════════════════════
 
-makeSection(MainPanel, "── ExtraJumps ──")
+makeSection(MainPanel, "───────── Jumps Bypass ─────────")
 
 local jumpsUserRow = makeRow(MainPanel, 30)
-makeLabel(jumpsUserRow, "Ur User >", 0, 95)
-local UserBox = makeInput(jumpsUserRow, 95, 190, "Username...")
+makeLabel(jumpsUserRow, "Ur User >", 5, 90)
+local UserBox = makeInput(jumpsUserRow, 100, 185, "Username...")
 
 local jumpsCountRow = makeRow(MainPanel, 30)
-makeLabel(jumpsCountRow, "Your Jumps >", 0, 95)
-local JumpsBox = makeInput(jumpsCountRow, 95, 190, "Number or 'inf'")
+makeLabel(jumpsCountRow, "Your Jumps >", 5, 90)
+local JumpsBox = makeInput(jumpsCountRow, 100, 185, "Number or 'inf'")
 
 local JumpsToggle, jtStroke = makeToggle(MainPanel, "⛔  ExtraJumps OFF", 30)
 
 -- ══════════════════════════════════════
---     SECTION 2: POSITION LOCK (MAIN)
+--    SECTION 2: AUTO FARM (MAIN)
 -- ══════════════════════════════════════
 
-makeSection(MainPanel, "── Position Lock ──")
+makeSection(MainPanel, "────────── Auto Farm ──────────")
 
 local posInfoBox, posInfoLabels = makeInfoBox(MainPanel, {
-    "🔒 Lock Position",
-    "X: " .. TARGET_X .. "  |  Z: " .. TARGET_Z ..
-    "  |  Trigger: " .. TRIGGER_DIST .. " studs"
+    "🔒 Position Lock",
+    "X: " .. TARGET_X .. "  |  Z: " .. TARGET_Z,
+    "Reset if > " .. RESET_RADIUS .. " studs from target"
 })
 
 local StatusLabel = makeStatus(MainPanel, "Status: Inactive")
@@ -503,40 +520,59 @@ local PosToggle, ptStroke = makeToggle(MainPanel, "🔓  Position Lock OFF", 32)
 --       SECTION 3: ANTI AFK (MAIN)
 -- ══════════════════════════════════════
 
-makeSection(MainPanel, "── Anti AFK ──")
+makeSection(MainPanel, "─────────── Anti AFK ───────────")
 
 local afkInfoBox, afkInfoLabels = makeInfoBox(MainPanel, {
     "🛡️ Prevents AFK kick",
-    "Status: Inactive | Clicks: 0"
+    "Next: -- | Clicks: 0"
 })
 
 local AfkStatus = makeStatus(MainPanel, "Idle")
 
 local AfkToggle, afkStroke = makeToggle(MainPanel, "💤  Anti AFK OFF", 30)
 
+-- Spacer so the AFK button has room to scroll into view
+local bottomSpacer = Instance.new("Frame")
+bottomSpacer.Size = UDim2.new(1, 0, 0, 50)
+bottomSpacer.BackgroundTransparency = 1
+bottomSpacer.LayoutOrder = nextOrder()
+bottomSpacer.Parent = MainPanel
+
 -- ══════════════════════════════════════
---         PANIC INFO (MAIN)
+--  PANIC INFO (separate from scrolling)
 -- ══════════════════════════════════════
 
-local panicRow = makeRow(MainPanel, 22)
+local PanicBar = Instance.new("Frame")
+PanicBar.Size = UDim2.new(1, 0, 0, 22)
+PanicBar.Position = UDim2.new(0, 0, 1, -22)
+PanicBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+PanicBar.BorderSizePixel = 0
+PanicBar.ZIndex = 5
+PanicBar.Parent = ContentFrame
+
 local PanicLabel = Instance.new("TextLabel")
 PanicLabel.Size = UDim2.new(1, 0, 1, 0)
 PanicLabel.BackgroundTransparency = 1
-PanicLabel.Text = "⚠ [P] Panic  |  [RightShift] Hide UI"
+PanicLabel.Text = "⚠ [P] Panic  |  [RightShift] Hide"
 PanicLabel.TextColor3 = Color3.fromRGB(200, 80, 80)
-PanicLabel.TextSize = 11
+PanicLabel.TextSize = 10
 PanicLabel.Font = Enum.Font.Gotham
-PanicLabel.Parent = panicRow
+PanicLabel.ZIndex = 6
+PanicLabel.Parent = PanicBar
+
+-- Adjust main scroll to leave room for panic bar
+MainPanel.Size = UDim2.new(1, 0, 1, -22)
+SettingsPanel.Size = UDim2.new(1, 0, 1, -22)
 
 -- ══════════════════════════════════════
---   SETTINGS PANEL CONTENT
+--   SETTINGS PANEL CONTENT (Size Only)
 -- ══════════════════════════════════════
 
-makeSection(SettingsPanel, "── Ajustes ──")
+makeSection(SettingsPanel, "──────────── Ajustes ────────────")
 
 -- UI Size control
 local sizeRow = Instance.new("Frame")
-sizeRow.Size = UDim2.new(1, 0, 0, 35)
+sizeRow.Size = UDim2.new(1, 0, 0, 40)
 sizeRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 sizeRow.BorderSizePixel = 0
 sizeRow.LayoutOrder = nextOrder()
@@ -544,8 +580,8 @@ sizeRow.Parent = SettingsPanel
 Instance.new("UICorner", sizeRow).CornerRadius = UDim.new(0, 6)
 
 local SizeLabel = Instance.new("TextLabel")
-SizeLabel.Size = UDim2.new(0, 120, 0, 28)
-SizeLabel.Position = UDim2.new(0, 8, 0, 3.5)
+SizeLabel.Size = UDim2.new(0, 100, 0, 30)
+SizeLabel.Position = UDim2.new(0, 8, 0, 5)
 SizeLabel.BackgroundTransparency = 1
 SizeLabel.Text = "Tamaño UI:"
 SizeLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
@@ -555,19 +591,19 @@ SizeLabel.TextXAlignment = Enum.TextXAlignment.Left
 SizeLabel.Parent = sizeRow
 
 local MinusBtn = Instance.new("TextButton")
-MinusBtn.Size = UDim2.new(0, 35, 0, 28)
-MinusBtn.Position = UDim2.new(0, 128, 0, 3.5)
+MinusBtn.Size = UDim2.new(0, 40, 0, 30)
+MinusBtn.Position = UDim2.new(0, 115, 0, 5)
 MinusBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 MinusBtn.Text = "−"
 MinusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinusBtn.TextSize = 16
+MinusBtn.TextSize = 18
 MinusBtn.Font = Enum.Font.GothamBold
 MinusBtn.Parent = sizeRow
 Instance.new("UICorner", MinusBtn).CornerRadius = UDim.new(0, 6)
 
 local SizeDisplay = Instance.new("TextLabel")
-SizeDisplay.Size = UDim2.new(0, 50, 0, 28)
-SizeDisplay.Position = UDim2.new(0, 168, 0, 3.5)
+SizeDisplay.Size = UDim2.new(0, 55, 0, 30)
+SizeDisplay.Position = UDim2.new(0, 160, 0, 5)
 SizeDisplay.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 SizeDisplay.Text = "100%"
 SizeDisplay.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -577,200 +613,36 @@ SizeDisplay.Parent = sizeRow
 Instance.new("UICorner", SizeDisplay).CornerRadius = UDim.new(0, 6)
 
 local PlusBtn = Instance.new("TextButton")
-PlusBtn.Size = UDim2.new(0, 35, 0, 28)
-PlusBtn.Position = UDim2.new(0, 223, 0, 3.5)
+PlusBtn.Size = UDim2.new(0, 40, 0, 30)
+PlusBtn.Position = UDim2.new(0, 220, 0, 5)
 PlusBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 PlusBtn.Text = "+"
 PlusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-PlusBtn.TextSize = 16
+PlusBtn.TextSize = 18
 PlusBtn.Font = Enum.Font.GothamBold
 PlusBtn.Parent = sizeRow
 Instance.new("UICorner", PlusBtn).CornerRadius = UDim.new(0, 6)
 
--- WalkSpeed setting
-local speedRow = Instance.new("Frame")
-speedRow.Size = UDim2.new(1, 0, 0, 35)
-speedRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-speedRow.BorderSizePixel = 0
-speedRow.LayoutOrder = nextOrder()
-speedRow.Parent = SettingsPanel
-Instance.new("UICorner", speedRow).CornerRadius = UDim.new(0, 6)
-
-local SpeedLabel = Instance.new("TextLabel")
-SpeedLabel.Size = UDim2.new(0, 120, 0, 28)
-SpeedLabel.Position = UDim2.new(0, 8, 0, 3.5)
-SpeedLabel.BackgroundTransparency = 1
-SpeedLabel.Text = "WalkSpeed:"
-SpeedLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
-SpeedLabel.TextSize = 13
-SpeedLabel.Font = Enum.Font.GothamBold
-SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
-SpeedLabel.Parent = speedRow
-
-local SpeedInput = Instance.new("TextBox")
-SpeedInput.Size = UDim2.new(0, 50, 0, 28)
-SpeedInput.Position = UDim2.new(0, 128, 0, 3.5)
-SpeedInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-SpeedInput.Text = tostring(REAL_WALKSPEED)
-SpeedInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-SpeedInput.TextSize = 13
-SpeedInput.Font = Enum.Font.Gotham
-SpeedInput.ClearTextOnFocus = false
-SpeedInput.Parent = speedRow
-Instance.new("UICorner", SpeedInput).CornerRadius = UDim.new(0, 6)
-local siStroke = Instance.new("UIStroke")
-siStroke.Color = Color3.fromRGB(60, 60, 60)
-siStroke.Thickness = 1
-siStroke.Parent = SpeedInput
-
-local SpeedApply = Instance.new("TextButton")
-SpeedApply.Size = UDim2.new(0, 80, 0, 28)
-SpeedApply.Position = UDim2.new(0, 185, 0, 3.5)
-SpeedApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
-SpeedApply.Text = "Apply"
-SpeedApply.TextColor3 = Color3.fromRGB(255, 255, 255)
-SpeedApply.TextSize = 13
-SpeedApply.Font = Enum.Font.GothamBold
-SpeedApply.Parent = speedRow
-Instance.new("UICorner", SpeedApply).CornerRadius = UDim.new(0, 6)
-
--- Trigger distance setting
-local trigRow = Instance.new("Frame")
-trigRow.Size = UDim2.new(1, 0, 0, 35)
-trigRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-trigRow.BorderSizePixel = 0
-trigRow.LayoutOrder = nextOrder()
-trigRow.Parent = SettingsPanel
-Instance.new("UICorner", trigRow).CornerRadius = UDim.new(0, 6)
-
-local TrigLabel = Instance.new("TextLabel")
-TrigLabel.Size = UDim2.new(0, 120, 0, 28)
-TrigLabel.Position = UDim2.new(0, 8, 0, 3.5)
-TrigLabel.BackgroundTransparency = 1
-TrigLabel.Text = "Trigger Dist:"
-TrigLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
-TrigLabel.TextSize = 13
-TrigLabel.Font = Enum.Font.GothamBold
-TrigLabel.TextXAlignment = Enum.TextXAlignment.Left
-TrigLabel.Parent = trigRow
-
-local TrigInput = Instance.new("TextBox")
-TrigInput.Size = UDim2.new(0, 50, 0, 28)
-TrigInput.Position = UDim2.new(0, 128, 0, 3.5)
-TrigInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-TrigInput.Text = tostring(TRIGGER_DIST)
-TrigInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-TrigInput.TextSize = 13
-TrigInput.Font = Enum.Font.Gotham
-TrigInput.ClearTextOnFocus = false
-TrigInput.Parent = trigRow
-Instance.new("UICorner", TrigInput).CornerRadius = UDim.new(0, 6)
-local tiStroke = Instance.new("UIStroke")
-tiStroke.Color = Color3.fromRGB(60, 60, 60)
-tiStroke.Thickness = 1
-tiStroke.Parent = TrigInput
-
-local TrigApply = Instance.new("TextButton")
-TrigApply.Size = UDim2.new(0, 80, 0, 28)
-TrigApply.Position = UDim2.new(0, 185, 0, 3.5)
-TrigApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
-TrigApply.Text = "Apply"
-TrigApply.TextColor3 = Color3.fromRGB(255, 255, 255)
-TrigApply.TextSize = 13
-TrigApply.Font = Enum.Font.GothamBold
-TrigApply.Parent = trigRow
-Instance.new("UICorner", TrigApply).CornerRadius = UDim.new(0, 6)
-
--- AFK Interval setting
-local afkIntRow = Instance.new("Frame")
-afkIntRow.Size = UDim2.new(1, 0, 0, 35)
-afkIntRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-afkIntRow.BorderSizePixel = 0
-afkIntRow.LayoutOrder = nextOrder()
-afkIntRow.Parent = SettingsPanel
-Instance.new("UICorner", afkIntRow).CornerRadius = UDim.new(0, 6)
-
-local AfkIntLabel = Instance.new("TextLabel")
-AfkIntLabel.Size = UDim2.new(0, 120, 0, 28)
-AfkIntLabel.Position = UDim2.new(0, 8, 0, 3.5)
-AfkIntLabel.BackgroundTransparency = 1
-AfkIntLabel.Text = "AFK Interval:"
-AfkIntLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
-AfkIntLabel.TextSize = 13
-AfkIntLabel.Font = Enum.Font.GothamBold
-AfkIntLabel.TextXAlignment = Enum.TextXAlignment.Left
-AfkIntLabel.Parent = afkIntRow
-
-local afkIntervalMin = 30
-local afkIntervalMax = 90
-
-local AfkIntInput = Instance.new("TextBox")
-AfkIntInput.Size = UDim2.new(0, 80, 0, 28)
-AfkIntInput.Position = UDim2.new(0, 128, 0, 3.5)
-AfkIntInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-AfkIntInput.Text = afkIntervalMin .. "-" .. afkIntervalMax .. "s"
-AfkIntInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-AfkIntInput.TextSize = 13
-AfkIntInput.Font = Enum.Font.Gotham
-AfkIntInput.ClearTextOnFocus = false
-AfkIntInput.Parent = afkIntRow
-Instance.new("UICorner", AfkIntInput).CornerRadius = UDim.new(0, 6)
-local aiStroke = Instance.new("UIStroke")
-aiStroke.Color = Color3.fromRGB(60, 60, 60)
-aiStroke.Thickness = 1
-aiStroke.Parent = AfkIntInput
-
-local AfkIntApply = Instance.new("TextButton")
-AfkIntApply.Size = UDim2.new(0, 80, 0, 28)
-AfkIntApply.Position = UDim2.new(0, 215, 0, 3.5)
-AfkIntApply.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
-AfkIntApply.Text = "Apply"
-AfkIntApply.TextColor3 = Color3.fromRGB(255, 255, 255)
-AfkIntApply.TextSize = 13
-AfkIntApply.Font = Enum.Font.GothamBold
-AfkIntApply.Parent = afkIntRow
-Instance.new("UICorner", AfkIntApply).CornerRadius = UDim.new(0, 6)
-
--- Info text at bottom of settings
+-- Version info
 local settingsInfo = Instance.new("TextLabel")
-settingsInfo.Size = UDim2.new(1, 0, 0, 40)
+settingsInfo.Size = UDim2.new(1, 0, 0, 50)
 settingsInfo.BackgroundTransparency = 1
-settingsInfo.Text = "Eclipse Sab Nf v6\nby MiMo"
+settingsInfo.Text = "Eclipse Sab Nf v7\nOnly UI size adjustable"
 settingsInfo.TextColor3 = Color3.fromRGB(80, 80, 80)
 settingsInfo.TextSize = 10
 settingsInfo.Font = Enum.Font.Gotham
+settingsInfo.TextXAlignment = Enum.TextXAlignment.Center
 settingsInfo.LayoutOrder = nextOrder()
 settingsInfo.Parent = SettingsPanel
 
 -- ════════════════════════════════
---   SETTINGS LOGIC
+--   SETTINGS LOGIC (Scale)
 -- ════════════════════════════════
 
 local function applyScale(newScale)
     currentScale = math.clamp(newScale, minScale, maxScale)
-    local w = math.floor(BASE_WIDTH * currentScale + 0.5)
-    local h = math.floor(BASE_HEIGHT * currentScale + 0.5)
-
-    MainFrame.Size = UDim2.new(0, w, 0, h)
-    MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
-
+    MainScale.Scale = currentScale
     SizeDisplay.Text = math.floor(currentScale * 100 + 0.5) .. "%"
-end
-
--- Scale all text sizes
-local allTextElements = {}
-
-local function recolorTextForScale()
-    -- Scale all TextLabels/TextButtons/TextBoxes in the frame
-    for _, desc in ipairs(MainFrame:GetDescendants()) do
-        if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
-            if not allTextElements[desc] then
-                allTextElements[desc] = desc.TextSize
-            end
-            local base = allTextElements[desc]
-            desc.TextSize = math.max(8, math.floor(base * currentScale + 0.5))
-        end
-    end
 end
 
 local function showPanel(panel)
@@ -791,76 +663,21 @@ local function setMinimized(state)
     isMinimized = state
     if isMinimized then
         ContentFrame.Visible = false
-        local w = math.floor(BASE_WIDTH * currentScale + 0.5)
-        MainFrame.Size = UDim2.new(0, w, 0, 38)
-        MainFrame.Position = UDim2.new(0.5, -w / 2, 0.5, -19)
+        MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, 38)
         CloseBtn.Text = "+"
     else
-        applyScale(currentScale)
         ContentFrame.Visible = true
+        MainFrame.Size = UDim2.new(0, BASE_WIDTH, 0, BASE_HEIGHT)
         CloseBtn.Text = "−"
     end
 end
 
 MinusBtn.MouseButton1Click:Connect(function()
     applyScale(currentScale - scaleStep)
-    recolorTextForScale()
 end)
 
 PlusBtn.MouseButton1Click:Connect(function()
     applyScale(currentScale + scaleStep)
-    recolorTextForScale()
-end)
-
-SpeedApply.MouseButton1Click:Connect(function()
-    local val = tonumber(SpeedInput.Text)
-    if val and val >= 16 and val <= 200 then
-        REAL_WALKSPEED = val
-        SpeedInput.Text = tostring(val)
-        siStroke.Color = Color3.fromRGB(40, 180, 40)
-        task.delay(1, function() siStroke.Color = Color3.fromRGB(60, 60, 60) end)
-    else
-        siStroke.Color = Color3.fromRGB(200, 50, 50)
-        task.delay(1, function() siStroke.Color = Color3.fromRGB(60, 60, 60) end)
-    end
-end)
-
-TrigApply.MouseButton1Click:Connect(function()
-    local val = tonumber(TrigInput.Text)
-    if val and val >= 1 and val <= 50 then
-        TRIGGER_DIST = val
-        TrigInput.Text = tostring(val)
-        posInfoLabels[2].Text = "X: " .. TARGET_X .. "  |  Z: " .. TARGET_Z .. "  |  Trigger: " .. TRIGGER_DIST .. " studs"
-        tiStroke.Color = Color3.fromRGB(40, 180, 40)
-        task.delay(1, function() tiStroke.Color = Color3.fromRGB(60, 60, 60) end)
-    else
-        tiStroke.Color = Color3.fromRGB(200, 50, 50)
-        task.delay(1, function() tiStroke.Color = Color3.fromRGB(60, 60, 60) end)
-    end
-end)
-
-AfkIntApply.MouseButton1Click:Connect(function()
-    local text = AfkIntInput.Text:gsub("%s+", ""):gsub("s$", "")
-    local parts = {}
-    for num in text:gmatch("%d+") do
-        table.insert(parts, tonumber(num))
-    end
-    if #parts == 2 and parts[1] >= 5 and parts[2] >= parts[1] and parts[2] <= 300 then
-        afkIntervalMin = parts[1]
-        afkIntervalMax = parts[2]
-        AfkIntInput.Text = afkIntervalMin .. "-" .. afkIntervalMax .. "s"
-        aiStroke.Color = Color3.fromRGB(40, 180, 40)
-        task.delay(1, function() aiStroke.Color = Color3.fromRGB(60, 60, 60) end)
-    elseif #parts == 1 and parts[1] >= 5 and parts[1] <= 300 then
-        afkIntervalMin = parts[1]
-        afkIntervalMax = parts[1]
-        AfkIntInput.Text = afkIntervalMin .. "s"
-        aiStroke.Color = Color3.fromRGB(40, 180, 40)
-        task.delay(1, function() aiStroke.Color = Color3.fromRGB(60, 60, 60) end)
-    else
-        aiStroke.Color = Color3.fromRGB(200, 50, 50)
-        task.delay(1, function() aiStroke.Color = Color3.fromRGB(60, 60, 60) end)
-    end
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
@@ -963,7 +780,8 @@ JumpsToggle.MouseButton1Click:Connect(function()
 end)
 
 -- ════════════════════════════════
---   POSITION LOCK LOGIC
+--   AUTO FARM / POSITION LOCK
+--   Resets player if > 10 studs
 -- ════════════════════════════════
 
 local function positionLockLoop()
@@ -979,38 +797,41 @@ local function positionLockLoop()
 
         local dist = getDistanceFromTarget(root)
 
-        if dist < TRIGGER_DIST then
-            StatusLabel.Text = string.format("✅ At position | Dist: %.1f", dist)
-            StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-            setWalkSpeed(humanoid, SPOOFED_WALKSPEED)
-            task.wait(0.5)
-        else
-            StatusLabel.Text = string.format("⚠ Returning... | Dist: %.1f", dist)
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+        -- RESET if too far from target
+        if dist > RESET_RADIUS then
+            StatusLabel.Text = string.format("⚠ Too far (%.1f) — Resetting!", dist)
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+            task.wait(0.3)
+            resetPlayer()
+            task.wait(3)
+            continue
+        end
 
-            task.wait(math.random() * 0.3 + 0.1)
-            if not posActive then break end
+        -- CLOSE ENOUGH — stay put
+        StatusLabel.Text = string.format("✅ At position | Dist: %.1f", dist)
+        StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        setWalkSpeed(humanoid, SPOOFED_WALKSPEED)
 
-            local offset = getRandomOffset()
-            local targetPos = Vector3.new(TARGET_X + offset.X, root.Position.Y, TARGET_Z + offset.Z)
+        -- Periodically nudge to stay within radius
+        task.wait(1)
 
-            local reached = walkToPosition(targetPos, function(d)
-                if posActive then
-                    StatusLabel.Text = string.format("⚠ Walking... | Dist: %.1f", d)
-                end
-            end)
+        if not posActive then break end
 
-            if reached then
-                StatusLabel.Text = "✅ Arrived at position"
-                StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-            else
-                StatusLabel.Text = "⚠ Timed out, retrying..."
-                StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        local _, r2, h2 = getCharParts()
+        if r2 and h2 then
+            local d2 = getDistanceFromTarget(r2)
+            if d2 > RESET_RADIUS * 0.8 then
+                -- Walk back to center if drifting
+                local offset = getRandomOffset()
+                local targetPos = Vector3.new(TARGET_X + offset.X, r2.Position.Y, TARGET_Z + offset.Z)
+                walkToPosition(targetPos, function(d)
+                    if posActive then
+                        StatusLabel.Text = string.format("⚠ Correcting... | Dist: %.1f", d)
+                    end
+                end)
+                local _, _, h3 = getCharParts()
+                if h3 then setWalkSpeed(h3, SPOOFED_WALKSPEED) end
             end
-
-            local _, _, h = getCharParts()
-            if h then setWalkSpeed(h, SPOOFED_WALKSPEED) end
-            task.wait(0.5)
         end
     end
 end
@@ -1048,7 +869,7 @@ local function antiAfkLoop()
 
         for i = waitTime, 1, -1 do
             if not afkActive then break end
-            afkInfoLabels[2].Text = string.format("Next: %ds | Total: %d", i, afkCount)
+            afkInfoLabels[2].Text = string.format("Next: %ds | Clicks: %d", i, afkCount)
             task.wait(1)
         end
 
@@ -1088,7 +909,7 @@ local function antiAfkLoop()
         end
 
         afkCount = afkCount + 1
-        afkInfoLabels[2].Text = string.format("Status: Active | Total: %d", afkCount)
+        afkInfoLabels[2].Text = string.format("Active | Clicks: %d", afkCount)
         AfkStatus.TextColor3 = Color3.fromRGB(100, 200, 255)
         task.wait(0.5)
     end
@@ -1101,7 +922,7 @@ AfkToggle.MouseButton1Click:Connect(function()
         AfkToggle.Text = "✅  Anti AFK ON"
         AfkToggle.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
         afkStroke.Color = Color3.fromRGB(30, 100, 30)
-        AfkStatus.Text = "Status: Active..."
+        AfkStatus.Text = "Active..."
         AfkStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
         task.spawn(antiAfkLoop)
     else
@@ -1110,7 +931,7 @@ AfkToggle.MouseButton1Click:Connect(function()
         afkStroke.Color = Color3.fromRGB(100, 30, 30)
         AfkStatus.Text = "Idle"
         AfkStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
-        afkInfoLabels[2].Text = "Status: Inactive | Clicks: 0"
+        afkInfoLabels[2].Text = "Next: -- | Clicks: 0"
     end
 end)
 
@@ -1149,7 +970,7 @@ UIS.InputBegan:Connect(function(input, processed)
         afkStroke.Color = Color3.fromRGB(100, 30, 30)
         AfkStatus.Text = "🔴 PANIC"
         AfkStatus.TextColor3 = Color3.fromRGB(255, 50, 50)
-        afkInfoLabels[2].Text = "Status: PANIC | Clicks: 0"
+        afkInfoLabels[2].Text = "PANIC | Clicks: 0"
     end
 
     if input.KeyCode == Enum.KeyCode.RightShift then
@@ -1208,8 +1029,9 @@ end)
 -- ════════════════════════════════
 
 print("══════════════════════════════════")
-print("  ECLIPSE SAB NF v6 - Loaded ✅")
-print("  All UI elements contained")
-print("  Settings panel working")
+print("  ECLIPSE SAB NF v7 - Loaded ✅")
+print("  Jumps Bypass + Auto Farm")
+print("  Reset if > " .. RESET_RADIUS .. " studs from target")
+print("  Settings: UI size only")
 print("  PANIC: [P] | UI: [RightShift]")
 print("══════════════════════════════════")
