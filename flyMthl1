@@ -1,5 +1,4 @@
--- Fly Bypass v1 - Rediseñado
--- Con imagen de fondo y layout simplificado
+-- Fly Bypass v1 - Rediseñado con fondo visible
 
 local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
@@ -22,12 +21,8 @@ local BodyVelocity = nil
 local BodyGyro = nil
 
 local keys = {
-    W = false,
-    A = false,
-    S = false,
-    D = false,
-    Space = false,
-    LeftShift = false
+    W = false, A = false, S = false,
+    D = false, Space = false, LeftShift = false
 }
 
 -- ══════════════════════════════════════════════════
@@ -37,7 +32,6 @@ Player.CharacterAdded:Connect(function(char)
     Character = char
     HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
     Humanoid = char:WaitForChild("Humanoid")
-
     if flying then
         wait(0.5)
         startFly()
@@ -147,30 +141,15 @@ end
 local function stopFly()
     flying = false
 
-    if flyConnection then
-        flyConnection:Disconnect()
-        flyConnection = nil
-    end
-
-    if BodyVelocity then
-        BodyVelocity:Destroy()
-        BodyVelocity = nil
-    end
-
-    if BodyGyro then
-        BodyGyro:Destroy()
-        BodyGyro = nil
-    end
-
-    if Humanoid then
-        Humanoid.PlatformStand = false
-    end
-
+    if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+    if BodyVelocity then BodyVelocity:Destroy() BodyVelocity = nil end
+    if BodyGyro then BodyGyro:Destroy() BodyGyro = nil end
+    if Humanoid then Humanoid.PlatformStand = false end
     disableNoclip()
 end
 
 -- ══════════════════════════════════════════════════
--- GUI REDEISEÑADA
+-- GUI - CON IMAGEN DE FONDO VISIBLE
 -- ══════════════════════════════════════════════════
 
 pcall(function()
@@ -189,8 +168,7 @@ local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 280, 0, 160)
 MainFrame.Position = UDim2.new(0.5, -140, 0.5, -80)
-MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
-MainFrame.BackgroundTransparency = 0.05
+MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
@@ -200,240 +178,271 @@ MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
 local mainStroke = Instance.new("UIStroke", MainFrame)
-mainStroke.Color = Color3.fromRGB(60, 60, 60)
+mainStroke.Color = Color3.fromRGB(40, 40, 40)
 mainStroke.Thickness = 2
 
--- Imagen de fondo
+-- ══════════════════════════════════════════════════
+-- IMAGEN DE FONDO - VISIBLE
+-- ══════════════════════════════════════════════════
 local BackgroundImage = Instance.new("ImageLabel")
-BackgroundImage.Name = "Background"
+BackgroundImage.Name = "BackgroundImage"
 BackgroundImage.Size = UDim2.new(1, 0, 1, 0)
 BackgroundImage.Position = UDim2.new(0, 0, 0, 0)
 BackgroundImage.BackgroundTransparency = 1
 BackgroundImage.Image = "rbxassetid://112002576136361"
-BackgroundImage.ImageTransparency = 0.55
-BackgroundImage.ImageColor3 = Color3.fromRGB(50, 50, 70)
+BackgroundImage.ImageTransparency = 0.3
+BackgroundImage.ImageColor3 = Color3.fromRGB(255, 255, 255)
 BackgroundImage.ScaleType = Enum.ScaleType.Crop
 BackgroundImage.ZIndex = 0
 BackgroundImage.Parent = MainFrame
 
--- Overlay oscuro
+-- Overlay semitransparente para legibilidad
 local Overlay = Instance.new("Frame")
 Overlay.Name = "Overlay"
 Overlay.Size = UDim2.new(1, 0, 1, 0)
-Overlay.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
-Overlay.BackgroundTransparency = 0.3
+Overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Overlay.BackgroundTransparency = 0.5
 Overlay.BorderSizePixel = 0
 Overlay.ZIndex = 1
 Overlay.Parent = MainFrame
 
 -- ══════════════════════════════════════════════════
--- BARRA DE TÍTULO - NEGRO
+-- BARRA DE TÍTULO - NEGRO CON BORDES REDONDEADOS
 -- ══════════════════════════════════════════════════
 local TitleBar = Instance.new("Frame")
 TitleBar.Name = "TitleBar"
-TitleBar.Size = UDim2.new(1, 0, 0, 32)
+TitleBar.Size = UDim2.new(1, 0, 0, 30)
 TitleBar.Position = UDim2.new(0, 0, 0, 0)
 TitleBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-TitleBar.BackgroundTransparency = 0
 TitleBar.BorderSizePixel = 0
-TitleBar.ZIndex = 5
+TitleBar.ZIndex = 10
 TitleBar.Parent = MainFrame
 
--- Bordes redondeados arriba del TitleBar
+-- Bordes redondeados arriba
 Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
 
--- Fix para que la parte de abajo del titlebar sea cuadrada
+-- Fix esquina inferior cuadrada
 local TitleFix = Instance.new("Frame")
-TitleFix.Size = UDim2.new(1, 0, 0, 14)
-TitleFix.Position = UDim2.new(0, 0, 1, -14)
+TitleFix.Size = UDim2.new(1, 0, 0, 12)
+TitleFix.Position = UDim2.new(0, 0, 1, -12)
 TitleFix.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 TitleFix.BorderSizePixel = 0
-TitleFix.ZIndex = 5
+TitleFix.ZIndex = 10
 TitleFix.Parent = TitleBar
 
--- Texto "Fly Bypass" en BLANCO
+-- Texto "Fly Bypass" BLANCO
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Name = "Title"
-TitleLabel.Size = UDim2.new(1, -50, 1, 0)
-TitleLabel.Position = UDim2.new(0, 12, 0, 0)
+TitleLabel.Size = UDim2.new(1, -65, 1, 0)
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Text = "Fly Bypass"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 15
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-TitleLabel.ZIndex = 6
+TitleLabel.ZIndex = 11
 TitleLabel.Parent = TitleBar
 
--- Botón cerrar (X)
+-- Botón minimizar [-]
+local MinimizeButton = Instance.new("TextButton")
+MinimizeButton.Name = "MinBtn"
+MinimizeButton.Size = UDim2.new(0, 20, 0, 20)
+MinimizeButton.Position = UDim2.new(1, -50, 0, 5)
+MinimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+MinimizeButton.BackgroundTransparency = 0.2
+MinimizeButton.Text = "−"
+MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeButton.TextSize = 14
+MinimizeButton.Font = Enum.Font.GothamBold
+MinimizeButton.ZIndex = 12
+MinimizeButton.Parent = TitleBar
+Instance.new("UICorner", MinimizeButton).CornerRadius = UDim.new(0, 5)
+
+-- Botón cerrar [X]
 local CloseButton = Instance.new("TextButton")
 CloseButton.Name = "CloseBtn"
-CloseButton.Size = UDim2.new(0, 22, 0, 22)
-CloseButton.Position = UDim2.new(1, -28, 0, 5)
-CloseButton.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
-CloseButton.BackgroundTransparency = 0.1
+CloseButton.Size = UDim2.new(0, 20, 0, 20)
+CloseButton.Position = UDim2.new(1, -26, 0, 5)
+CloseButton.BackgroundColor3 = Color3.fromRGB(180, 35, 35)
+CloseButton.BackgroundTransparency = 0.2
 CloseButton.Text = "✕"
 CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseButton.TextSize = 11
+CloseButton.TextSize = 10
 CloseButton.Font = Enum.Font.GothamBold
-CloseButton.ZIndex = 7
+CloseButton.ZIndex = 12
 CloseButton.Parent = TitleBar
 Instance.new("UICorner", CloseButton).CornerRadius = UDim.new(0, 5)
 
 -- ══════════════════════════════════════════════════
 -- SECCIÓN "FLY PTS"
 -- ══════════════════════════════════════════════════
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Name = "Content"
+ContentFrame.Size = UDim2.new(1, 0, 1, -30)
+ContentFrame.Position = UDim2.new(0, 0, 0, 30)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.ZIndex = 3
+ContentFrame.Parent = MainFrame
+
 local SectionFrame = Instance.new("Frame")
 SectionFrame.Name = "FlySection"
-SectionFrame.Size = UDim2.new(1, -20, 0, 112)
-SectionFrame.Position = UDim2.new(0, 10, 0, 38)
-SectionFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
-SectionFrame.BackgroundTransparency = 0.25
+SectionFrame.Size = UDim2.new(1, -16, 1, -8)
+SectionFrame.Position = UDim2.new(0, 8, 0, 4)
+SectionFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+SectionFrame.BackgroundTransparency = 0.4
 SectionFrame.BorderSizePixel = 0
-SectionFrame.ZIndex = 3
-SectionFrame.Parent = MainFrame
+SectionFrame.ZIndex = 4
+SectionFrame.Parent = ContentFrame
 Instance.new("UICorner", SectionFrame).CornerRadius = UDim.new(0, 8)
 
 local sectionStroke = Instance.new("UIStroke", SectionFrame)
-sectionStroke.Color = Color3.fromRGB(40, 40, 55)
+sectionStroke.Color = Color3.fromRGB(35, 35, 50)
 sectionStroke.Thickness = 1
 
--- Header de sección
+-- Header "Fly PTS"
 local SectionHeader = Instance.new("TextLabel")
 SectionHeader.Name = "Header"
-SectionHeader.Size = UDim2.new(1, 0, 0, 22)
-SectionHeader.Position = UDim2.new(0, 0, 0, 0)
+SectionHeader.Size = UDim2.new(1, 0, 0, 20)
+SectionHeader.Position = UDim2.new(0, 0, 0, 2)
 SectionHeader.BackgroundTransparency = 1
 SectionHeader.Text = "━━━━━━ Fly PTS ━━━━━━"
-SectionHeader.TextColor3 = Color3.fromRGB(100, 100, 130)
+SectionHeader.TextColor3 = Color3.fromRGB(120, 120, 150)
 SectionHeader.TextSize = 11
 SectionHeader.Font = Enum.Font.GothamBold
-SectionHeader.ZIndex = 4
+SectionHeader.ZIndex = 5
 SectionHeader.Parent = SectionFrame
 
 -- ══════════════════════════════════════════════════
 -- FILA: FLY TOGGLE
 -- ══════════════════════════════════════════════════
 local FlyRow = Instance.new("Frame")
-FlyRow.Name = "FlyRow"
-FlyRow.Size = UDim2.new(1, -16, 0, 34)
-FlyRow.Position = UDim2.new(0, 8, 0, 28)
+FlyRow.Size = UDim2.new(1, -12, 0, 30)
+FlyRow.Position = UDim2.new(0, 6, 0, 24)
 FlyRow.BackgroundTransparency = 1
-FlyRow.ZIndex = 4
+FlyRow.ZIndex = 5
 FlyRow.Parent = SectionFrame
 
 local FlyLabel = Instance.new("TextLabel")
-FlyLabel.Name = "Label"
-FlyLabel.Size = UDim2.new(0, 80, 1, 0)
-FlyLabel.Position = UDim2.new(0, 0, 0, 0)
+FlyLabel.Size = UDim2.new(0, 70, 1, 0)
+FlyLabel.Position = UDim2.new(0, 4, 0, 0)
 FlyLabel.BackgroundTransparency = 1
 FlyLabel.Text = "Fly"
-FlyLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+FlyLabel.TextColor3 = Color3.fromRGB(220, 220, 230)
 FlyLabel.TextSize = 13
 FlyLabel.Font = Enum.Font.GothamBold
 FlyLabel.TextXAlignment = Enum.TextXAlignment.Left
-FlyLabel.ZIndex = 5
+FlyLabel.ZIndex = 6
 FlyLabel.Parent = FlyRow
 
--- Botón ON/OFF
 local ToggleButton = Instance.new("TextButton")
-ToggleButton.Name = "Toggle"
-ToggleButton.Size = UDim2.new(0, 60, 0, 26)
-ToggleButton.Position = UDim2.new(1, -62, 0.5, -13)
-ToggleButton.BackgroundColor3 = Color3.fromRGB(160, 35, 35)
-ToggleButton.BackgroundTransparency = 0.15
+ToggleButton.Size = UDim2.new(0, 55, 0, 24)
+ToggleButton.Position = UDim2.new(1, -57, 0.5, -12)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(150, 30, 30)
+ToggleButton.BackgroundTransparency = 0.1
 ToggleButton.Text = "OFF"
 ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleButton.TextSize = 12
+ToggleButton.TextSize = 11
 ToggleButton.Font = Enum.Font.GothamBold
-ToggleButton.ZIndex = 5
+ToggleButton.ZIndex = 6
 ToggleButton.Parent = FlyRow
 Instance.new("UICorner", ToggleButton).CornerRadius = UDim.new(0, 6)
 
 local toggleStroke = Instance.new("UIStroke", ToggleButton)
-toggleStroke.Color = Color3.fromRGB(100, 25, 25)
+toggleStroke.Color = Color3.fromRGB(90, 20, 20)
 toggleStroke.Thickness = 1.5
 
 -- ══════════════════════════════════════════════════
 -- FILA: FLY SPEED + SET
 -- ══════════════════════════════════════════════════
 local SpeedRow = Instance.new("Frame")
-SpeedRow.Name = "SpeedRow"
-SpeedRow.Size = UDim2.new(1, -16, 0, 34)
-SpeedRow.Position = UDim2.new(0, 8, 0, 68)
+SpeedRow.Size = UDim2.new(1, -12, 0, 30)
+SpeedRow.Position = UDim2.new(0, 6, 0, 58)
 SpeedRow.BackgroundTransparency = 1
-SpeedRow.ZIndex = 4
+SpeedRow.ZIndex = 5
 SpeedRow.Parent = SectionFrame
 
 local SpeedLabel = Instance.new("TextLabel")
-SpeedLabel.Name = "Label"
-SpeedLabel.Size = UDim2.new(0, 80, 1, 0)
-SpeedLabel.Position = UDim2.new(0, 0, 0, 0)
+SpeedLabel.Size = UDim2.new(0, 70, 1, 0)
+SpeedLabel.Position = UDim2.new(0, 4, 0, 0)
 SpeedLabel.BackgroundTransparency = 1
 SpeedLabel.Text = "Fly Speed"
-SpeedLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+SpeedLabel.TextColor3 = Color3.fromRGB(220, 220, 230)
 SpeedLabel.TextSize = 13
 SpeedLabel.Font = Enum.Font.GothamBold
 SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
-SpeedLabel.ZIndex = 5
+SpeedLabel.ZIndex = 6
 SpeedLabel.Parent = SpeedRow
 
--- Input de velocidad
 local SpeedInput = Instance.new("TextBox")
-SpeedInput.Name = "SpeedInput"
-SpeedInput.Size = UDim2.new(0, 80, 0, 26)
-SpeedInput.Position = UDim2.new(1, -148, 0.5, -13)
-SpeedInput.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
-SpeedInput.BackgroundTransparency = 0.15
+SpeedInput.Size = UDim2.new(0, 80, 0, 24)
+SpeedInput.Position = UDim2.new(1, -142, 0.5, -12)
+SpeedInput.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+SpeedInput.BackgroundTransparency = 0.1
 SpeedInput.Text = tostring(flySpeed)
 SpeedInput.PlaceholderText = "100"
-SpeedInput.PlaceholderColor3 = Color3.fromRGB(70, 70, 90)
-SpeedInput.TextColor3 = Color3.fromRGB(180, 180, 220)
-SpeedInput.TextSize = 13
+SpeedInput.PlaceholderColor3 = Color3.fromRGB(60, 60, 80)
+SpeedInput.TextColor3 = Color3.fromRGB(200, 200, 230)
+SpeedInput.TextSize = 12
 SpeedInput.Font = Enum.Font.GothamBold
 SpeedInput.ClearTextOnFocus = false
-SpeedInput.ZIndex = 5
+SpeedInput.ZIndex = 6
 SpeedInput.Parent = SpeedRow
 Instance.new("UICorner", SpeedInput).CornerRadius = UDim.new(0, 6)
 
 local inputStroke = Instance.new("UIStroke", SpeedInput)
-inputStroke.Color = Color3.fromRGB(40, 40, 60)
+inputStroke.Color = Color3.fromRGB(35, 35, 55)
 inputStroke.Thickness = 1
 
--- Botón SET
 local SetButton = Instance.new("TextButton")
-SetButton.Name = "SetBtn"
-SetButton.Size = UDim2.new(0, 52, 0, 26)
-SetButton.Position = UDim2.new(1, -58, 0.5, -13)
-SetButton.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-SetButton.BackgroundTransparency = 0.15
+SetButton.Size = UDim2.new(0, 48, 0, 24)
+SetButton.Position = UDim2.new(1, -52, 0.5, -12)
+SetButton.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+SetButton.BackgroundTransparency = 0.1
 SetButton.Text = "Set"
 SetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-SetButton.TextSize = 12
+SetButton.TextSize = 11
 SetButton.Font = Enum.Font.GothamBold
-SetButton.ZIndex = 5
+SetButton.ZIndex = 6
 SetButton.Parent = SpeedRow
 Instance.new("UICorner", SetButton).CornerRadius = UDim.new(0, 6)
 
 local setStroke = Instance.new("UIStroke", SetButton)
-setStroke.Color = Color3.fromRGB(60, 60, 80)
+setStroke.Color = Color3.fromRGB(50, 50, 70)
 setStroke.Thickness = 1.5
+
+-- ══════════════════════════════════════════════════
+-- MINIMIZAR / RESTAURAR
+-- ══════════════════════════════════════════════════
+local isMinimized = false
+
+MinimizeButton.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    if isMinimized then
+        ContentFrame.Visible = false
+        MainFrame.Size = UDim2.new(0, 280, 0, 30)
+        MinimizeButton.Text = "+"
+    else
+        ContentFrame.Visible = true
+        MainFrame.Size = UDim2.new(0, 280, 0, 160)
+        MinimizeButton.Text = "−"
+    end
+end)
 
 -- ══════════════════════════════════════════════════
 -- CONEXIONES DE BOTONES
 -- ══════════════════════════════════════════════════
-
 ToggleButton.MouseButton1Click:Connect(function()
     if not flying then
         startFly()
         ToggleButton.Text = "ON"
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(35, 160, 70)
-        toggleStroke.Color = Color3.fromRGB(25, 110, 50)
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 150, 60)
+        toggleStroke.Color = Color3.fromRGB(20, 100, 40)
     else
         stopFly()
         ToggleButton.Text = "OFF"
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(160, 35, 35)
-        toggleStroke.Color = Color3.fromRGB(100, 25, 25)
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(150, 30, 30)
+        toggleStroke.Color = Color3.fromRGB(90, 20, 20)
     end
 end)
 
@@ -470,13 +479,13 @@ UserInputService.InputBegan:Connect(function(input, processed)
         if not flying then
             startFly()
             ToggleButton.Text = "ON"
-            ToggleButton.BackgroundColor3 = Color3.fromRGB(35, 160, 70)
-            toggleStroke.Color = Color3.fromRGB(25, 110, 50)
+            ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 150, 60)
+            toggleStroke.Color = Color3.fromRGB(20, 100, 40)
         else
             stopFly()
             ToggleButton.Text = "OFF"
-            ToggleButton.BackgroundColor3 = Color3.fromRGB(160, 35, 35)
-            toggleStroke.Color = Color3.fromRGB(100, 25, 25)
+            ToggleButton.BackgroundColor3 = Color3.fromRGB(150, 30, 30)
+            toggleStroke.Color = Color3.fromRGB(90, 20, 20)
         end
     end
 end)
