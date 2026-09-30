@@ -1,0 +1,453 @@
+-- ══════════════════════════════════════════════════════════════
+-- ECLIPSE HUD OVERLAY v15.4
+-- EclipseVS x vailVS | FPS | MS | Particles | Fixed Top Center
+-- NO accent line | NO orange boxes | Clean pill shape
+-- ══════════════════════════════════════════════════════════════
+
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Stats = game:GetService("Stats")
+
+pcall(function()
+    for _, gui in ipairs(game:GetService("CoreGui"):GetChildren()) do
+        if gui.Name == "EclipseHUD" then gui:Destroy() end
+    end
+end)
+
+-- ════════════════════════════════
+--        FPS / MS TRACKING
+-- ════════════════════════════════
+
+local fps = 0
+local ms = 0
+local frameCount = 0
+local lastFPSTime = tick()
+
+RunService.Heartbeat:Connect(function()
+    frameCount = frameCount + 1
+    local now = tick()
+    if now - lastFPSTime >= 1 then
+        fps = frameCount
+        frameCount = 0
+        lastFPSTime = now
+    end
+    pcall(function()
+        ms = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+    end)
+end)
+
+-- ════════════════════════════════
+--   COLOR PALETTE
+-- ════════════════════════════════
+
+local C = {
+    bg        = Color3.fromRGB(10, 10, 14),
+    accent    = Color3.fromRGB(255, 140, 0),
+    green     = Color3.fromRGB(40, 200, 70),
+    yellow    = Color3.fromRGB(255, 200, 40),
+    red       = Color3.fromRGB(220, 60, 50),
+    text      = Color3.fromRGB(255, 252, 245),
+    textDim   = Color3.fromRGB(140, 135, 125),
+    textMuted = Color3.fromRGB(90, 85, 80),
+    border    = Color3.fromRGB(30, 28, 38),
+    p1        = Color3.fromRGB(255, 140, 0),
+    p2        = Color3.fromRGB(255, 100, 20),
+    p3        = Color3.fromRGB(255, 180, 60),
+}
+
+-- ════════════════════════════════
+--   TWEEN HELPER
+-- ════════════════════════════════
+
+local function tw(inst, props, dur)
+    TweenService:Create(inst, TweenInfo.new(dur or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
+end
+
+-- ════════════════════════════════
+--         GUI CREATION
+-- ════════════════════════════════
+
+local BAR_W = 340
+local BAR_H = 46
+local RADIUS = 22
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "EclipseHUD"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- ──────────────────────────────
+--     MAIN FRAME (pill shape)
+-- ──────────────────────────────
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, BAR_W, 0, BAR_H)
+MainFrame.Position = UDim2.new(0.5, -BAR_W / 2, 0, 8)
+MainFrame.BackgroundColor3 = C.bg
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, RADIUS)
+
+-- Subtle border only
+local borderStroke = Instance.new("UIStroke")
+borderStroke.Color = C.border
+borderStroke.Thickness = 1
+borderStroke.Transparency = 0.40
+borderStroke.Parent = MainFrame
+
+-- Background image
+local bgImg = Instance.new("ImageLabel")
+bgImg.Size = UDim2.new(1, 0, 1, 0)
+bgImg.BackgroundTransparency = 1
+bgImg.Image = "rbxassetid://133593930106752"
+bgImg.ImageTransparency = 0.50
+bgImg.ScaleType = Enum.ScaleType.Crop
+bgImg.ZIndex = 1
+bgImg.Parent = MainFrame
+
+-- Dark overlay (covers bg, rounded to pill)
+local overlay = Instance.new("Frame")
+overlay.Size = UDim2.new(1, 0, 1, 0)
+overlay.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
+overlay.BackgroundTransparency = 0.22
+overlay.BorderSizePixel = 0
+overlay.ZIndex = 2
+overlay.Parent = MainFrame
+
+Instance.new("UICorner", overlay).CornerRadius = UDim.new(0, RADIUS)
+
+local oGrad = Instance.new("UIGradient")
+oGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(14, 12, 20)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(8, 7, 14)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(14, 12, 20)),
+})
+oGrad.Rotation = 90
+oGrad.Parent = overlay
+
+-- ═══════════════════════════════════════════════
+--   NO ACCENT LINE HERE — REMOVED COMPLETELY
+-- ═══════════════════════════════════════════════
+
+-- ──────────────────────────────
+--   FALLING PARTICLES
+-- ──────────────────────────────
+
+local ParticleBox = Instance.new("Frame")
+ParticleBox.Size = UDim2.new(1, 0, 1, 0)
+ParticleBox.BackgroundTransparency = 1
+ParticleBox.ZIndex = 3
+ParticleBox.ClipsDescendants = true
+ParticleBox.Parent = MainFrame
+
+local particles = {}
+local MAX_P = 10
+local P_COLORS = {C.p1, C.p2, C.p3}
+
+local function spawnP()
+    if #particles >= MAX_P then return end
+    local sz = math.random(2, 3)
+    local col = P_COLORS[math.random(1, #P_COLORS)]
+    local sx = math.random(20, BAR_W - 20)
+    local sp = math.random(28, 55) / 10
+    local sw = math.random(4, 10)
+    local ss = math.random(12, 22) / 10
+    local al = math.random(18, 35) / 100
+
+    local p = Instance.new("Frame")
+    p.Size = UDim2.new(0, sz, 0, sz)
+    p.Position = UDim2.new(0, sx, 0, -sz - 2)
+    p.BackgroundColor3 = col
+    p.BackgroundTransparency = 1 - al
+    p.BorderSizePixel = 0
+    p.ZIndex = 3
+    p.Parent = ParticleBox
+    Instance.new("UICorner", p).CornerRadius = UDim.new(1, 0)
+
+    -- Very subtle glow circle (fully transparent parent, not a box)
+    local g = Instance.new("Frame")
+    g.Size = UDim2.new(1, sz * 2, 1, sz * 2)
+    g.Position = UDim2.new(0, -sz, 0, -sz)
+    g.BackgroundColor3 = col
+    g.BackgroundTransparency = 1 - (al * 0.15)
+    g.BorderSizePixel = 0
+    g.ZIndex = 3
+    g.Parent = p
+    Instance.new("UICorner", g).CornerRadius = UDim.new(1, 0)
+
+    table.insert(particles, {
+        f = p, x = sx, y = -sz - 2,
+        sp = sp, sw = sw, ss = ss,
+        t = math.random() * 6.28, al = al
+    })
+end
+
+local function updateP(dt)
+    for i = #particles, 1, -1 do
+        local pt = particles[i]
+        pt.y = pt.y + (BAR_H / pt.sp) * dt
+        pt.t = pt.t + dt * pt.ss
+        local s = math.sin(pt.t) * pt.sw
+        if pt.y > BAR_H + 4 then
+            pt.f:Destroy()
+            table.remove(particles, i)
+        else
+            pt.f.Position = UDim2.new(0, pt.x + s, 0, pt.y)
+            if pt.y > BAR_H - 12 then
+                local fade = (pt.y - (BAR_H - 12)) / 12
+                pt.f.BackgroundTransparency = 1 - (pt.al * (1 - fade))
+            end
+        end
+    end
+end
+
+task.spawn(function()
+    while MainFrame.Parent do
+        spawnP()
+        task.wait(math.random(25, 50) / 100)
+    end
+end)
+
+RunService.Heartbeat:Connect(function(dt)
+    updateP(dt)
+end)
+
+-- ──────────────────────────────
+--   LEFT: BRAND + GLOWING DOT
+-- ──────────────────────────────
+
+-- Single dot (circle only, no rectangular glow frame)
+local dot = Instance.new("Frame")
+dot.Size = UDim2.new(0, 7, 0, 7)
+dot.Position = UDim2.new(0, 14, 0, (BAR_H / 2) - 3)
+dot.BackgroundColor3 = C.accent
+dot.BackgroundTransparency = 0.15
+dot.BorderSizePixel = 0
+dot.ZIndex = 16
+dot.Parent = MainFrame
+Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+
+-- Soft outer ring (same color, very transparent, circle only)
+local dotRing = Instance.new("Frame")
+dotRing.Size = UDim2.new(1, 14, 1, 14)
+dotRing.Position = UDim2.new(0, -7, 0, -7)
+dotRing.BackgroundColor3 = C.accent
+dotRing.BackgroundTransparency = 0.88
+dotRing.BorderSizePixel = 0
+dotRing.ZIndex = 15
+dotRing.Parent = dot
+Instance.new("UICorner", dotRing).CornerRadius = UDim.new(1, 0)
+
+-- Dot pulse (ring only, no rectangular glow)
+task.spawn(function()
+    while MainFrame.Parent do
+        local p = (math.sin(tick() * 3) + 1) / 2
+        dotRing.BackgroundTransparency = 0.84 + 0.12 * (1 - p)
+        tw(dotRing, {
+            Size = UDim2.new(1, 14 + 8 * p, 1, 14 + 8 * p),
+            Position = UDim2.new(0, -7 - 4 * p, 0, -7 - 4 * p)
+        }, 0.08)
+        task.wait(0.04)
+    end
+end)
+
+-- Single brand label
+local Brand = Instance.new("TextLabel")
+Brand.Size = UDim2.new(0, 200, 0, BAR_H)
+Brand.Position = UDim2.new(0, 28, 0, 0)
+Brand.BackgroundTransparency = 1
+Brand.Text = "EclipseVS x vailVS"
+Brand.TextColor3 = C.accent
+Brand.TextSize = 15
+Brand.Font = Enum.Font.GothamBlack
+Brand.TextXAlignment = Enum.TextXAlignment.Left
+Brand.ZIndex = 16
+Brand.Parent = MainFrame
+
+-- Shimmer gradient on brand
+local bGrad = Instance.new("UIGradient")
+bGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 180, 40)),
+    ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 140, 0)),
+    ColorSequenceKeypoint.new(0.7, Color3.fromRGB(200, 100, 0)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(160, 80, 0)),
+})
+bGrad.Parent = Brand
+
+task.spawn(function()
+    local o = 0
+    while MainFrame.Parent do
+        o = o + 0.007
+        bGrad.Offset = Vector2.new(math.sin(o) * 0.5, 0)
+        task.wait(0.03)
+    end
+end)
+
+-- ──────────────────────────────
+--   VERTICAL SEPARATOR
+-- ──────────────────────────────
+
+local sep = Instance.new("Frame")
+sep.Size = UDim2.new(0, 1, 0.50, 0)
+sep.Position = UDim2.new(0, 218, 0.25, 0)
+sep.BackgroundColor3 = C.border
+sep.BackgroundTransparency = 0.30
+sep.BorderSizePixel = 0
+sep.ZIndex = 10
+sep.Parent = MainFrame
+
+-- ──────────────────────────────
+--   RIGHT: FPS
+-- ──────────────────────────────
+
+local FPSBlock = Instance.new("Frame")
+FPSBlock.Size = UDim2.new(0, 55, 0, BAR_H)
+FPSBlock.Position = UDim2.new(0, 226, 0, 0)
+FPSBlock.BackgroundTransparency = 1
+FPSBlock.ZIndex = 12
+FPSBlock.Parent = MainFrame
+
+local FPSLbl = Instance.new("TextLabel")
+FPSLbl.Size = UDim2.new(1, 0, 0, 12)
+FPSLbl.Position = UDim2.new(0, 0, 0, 6)
+FPSLbl.BackgroundTransparency = 1
+FPSLbl.Text = "FPS"
+FPSLbl.TextColor3 = C.textMuted
+FPSLbl.TextSize = 8
+FPSLbl.Font = Enum.Font.GothamBold
+FPSLbl.ZIndex = 16
+FPSLbl.Parent = FPSBlock
+
+local FPSVal = Instance.new("TextLabel")
+FPSVal.Size = UDim2.new(1, -8, 0, 18)
+FPSVal.Position = UDim2.new(0, 0, 0, 19)
+FPSVal.BackgroundTransparency = 1
+FPSVal.Text = "0"
+FPSVal.TextColor3 = C.green
+FPSVal.TextSize = 16
+FPSVal.Font = Enum.Font.GothamBlack
+FPSVal.TextXAlignment = Enum.TextXAlignment.Center
+FPSVal.ZIndex = 16
+FPSVal.Parent = FPSBlock
+
+local fpsDot = Instance.new("Frame")
+fpsDot.Size = UDim2.new(0, 4, 0, 4)
+fpsDot.Position = UDim2.new(0.5, -2, 1, -7)
+fpsDot.BackgroundColor3 = C.green
+fpsDot.BorderSizePixel = 0
+fpsDot.ZIndex = 16
+fpsDot.Parent = FPSBlock
+Instance.new("UICorner", fpsDot).CornerRadius = UDim.new(1, 0)
+
+-- ──────────────────────────────
+--   RIGHT: MS
+-- ──────────────────────────────
+
+local MSBlock = Instance.new("Frame")
+MSBlock.Size = UDim2.new(0, 55, 0, BAR_H)
+MSBlock.Position = UDim2.new(0, 280, 0, 0)
+MSBlock.BackgroundTransparency = 1
+MSBlock.ZIndex = 12
+MSBlock.Parent = MainFrame
+
+local MSLbl = Instance.new("TextLabel")
+MSLbl.Size = UDim2.new(1, 0, 0, 12)
+MSLbl.Position = UDim2.new(0, 0, 0, 6)
+MSLbl.BackgroundTransparency = 1
+MSLbl.Text = "MS"
+MSLbl.TextColor3 = C.textMuted
+MSLbl.TextSize = 8
+MSLbl.Font = Enum.Font.GothamBold
+MSLbl.ZIndex = 16
+MSLbl.Parent = MSBlock
+
+local MSVal = Instance.new("TextLabel")
+MSVal.Size = UDim2.new(1, -8, 0, 18)
+MSVal.Position = UDim2.new(0, 0, 0, 19)
+MSVal.BackgroundTransparency = 1
+MSVal.Text = "0"
+MSVal.TextColor3 = C.green
+MSVal.TextSize = 16
+MSVal.Font = Enum.Font.GothamBlack
+MSVal.TextXAlignment = Enum.TextXAlignment.Center
+MSVal.ZIndex = 16
+MSVal.Parent = MSBlock
+
+local msDot = Instance.new("Frame")
+msDot.Size = UDim2.new(0, 4, 0, 4)
+msDot.Position = UDim2.new(0.5, -2, 1, -7)
+msDot.BackgroundColor3 = C.green
+msDot.BorderSizePixel = 0
+msDot.ZIndex = 16
+msDot.Parent = MSBlock
+Instance.new("UICorner", msDot).CornerRadius = UDim.new(1, 0)
+
+-- ──────────────────────────────
+--   STATS UPDATE LOOP
+-- ──────────────────────────────
+
+task.spawn(function()
+    while MainFrame.Parent do
+        FPSVal.Text = tostring(fps)
+        if fps >= 50 then
+            tw(FPSVal, {TextColor3 = C.green}, 0.3)
+            tw(fpsDot, {BackgroundColor3 = C.green}, 0.3)
+        elseif fps >= 30 then
+            tw(FPSVal, {TextColor3 = C.yellow}, 0.3)
+            tw(fpsDot, {BackgroundColor3 = C.yellow}, 0.3)
+        else
+            tw(FPSVal, {TextColor3 = C.red}, 0.3)
+            tw(fpsDot, {BackgroundColor3 = C.red}, 0.3)
+        end
+
+        MSVal.Text = tostring(ms)
+        if ms <= 80 then
+            tw(MSVal, {TextColor3 = C.green}, 0.3)
+            tw(msDot, {BackgroundColor3 = C.green}, 0.3)
+        elseif ms <= 150 then
+            tw(MSVal, {TextColor3 = C.yellow}, 0.3)
+            tw(msDot, {BackgroundColor3 = C.yellow}, 0.3)
+        else
+            tw(MSVal, {TextColor3 = C.red}, 0.3)
+            tw(msDot, {BackgroundColor3 = C.red}, 0.3)
+        end
+
+        task.wait(0.5)
+    end
+end)
+
+-- ──────────────────────────────
+--   ENTRANCE ANIMATION
+-- ──────────────────────────────
+
+MainFrame.Position = UDim2.new(0.5, -BAR_W / 2, 0, -BAR_H - 12)
+task.wait(0.15)
+tw(MainFrame, {Position = UDim2.new(0.5, -BAR_W / 2, 0, 8)}, 0.5)
+
+-- ──────────────────────────────
+--   RIGHTSHIFT HIDE/SHOW
+-- ──────────────────────────────
+
+UIS.InputBegan:Connect(function(input, proc)
+    if proc then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        if ScreenGui.Enabled then
+            tw(MainFrame, {Position = UDim2.new(0.5, -BAR_W / 2, 0, -BAR_H - 12)}, 0.3)
+            task.wait(0.3)
+            ScreenGui.Enabled = false
+        else
+            ScreenGui.Enabled = true
+            MainFrame.Position = UDim2.new(0.5, -BAR_W / 2, 0, -BAR_H - 12)
+            tw(MainFrame, {Position = UDim2.new(0.5, -BAR_W / 2, 0, 8)}, 0.3)
+        end
+    end
+end)
+
+print("══════════════════════════════")
+print("  ECLIPSE HUD OVERLAY v15.4")
+print("  EclipseVS x vailVS")
+print("  RightShift = Hide")
+print("══════════════════════════════")
