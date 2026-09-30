@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
--- ECLIPSE AUTO FARM v14.4
--- Compact | Controls Flush Right | Zero Wasted Space
+-- ECLIPSE AUTO FARM v14.6
+-- Black Borders | Symmetric Spacing | All Flush Right
 -- Smart Stuck Detection | Jump to unstick
 -- ══════════════════════════════════════════════════════════════
 
@@ -154,18 +154,21 @@ end
 --         GUI CREATION
 -- ════════════════════════════════
 
-local BASE_WIDTH = 240
-local BASE_HEIGHT = 300
-local PAD = 8        -- outer padding
-local EDGE = 6       -- control margin from card right edge
+local BASE_WIDTH = 260
+local BASE_HEIGHT = 310
+local PAD = 8        -- outer padding (left = right)
+local MARGIN = 6     -- inner margin from card edge to controls
 local ROW_H = 32
-local BTN_W = 26     -- -/+ button width
-local BTN_H = 24     -- -/+ button height
-local VAL_W = 28     -- value display width
-local GAP = 3        -- gap between controls
-local INP_W = 40     -- input width
-local APP_W = 30     -- apply button width
-local TOGGLE_W = 46  -- toggle button width
+local LABEL_W = 100  -- fixed label width
+local CTRL_W = 140   -- fixed control container width
+local BTN_SZ = 24    -- button size
+local VAL_W = 30     -- value display width
+local INP_W = 48     -- input width
+local APP_W = 34     -- apply button width
+local TOGGLE_W = 52  -- toggle button width
+local GAP = 4        -- gap between controls
+
+local BLACK_BORDER = Color3.fromRGB(30, 28, 35)
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "EclipseAutoFarm"
@@ -183,6 +186,13 @@ MainFrame.Parent = ScreenGui
 
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
 
+-- Black border on main frame
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = BLACK_BORDER
+mainStroke.Thickness = 1.5
+mainStroke.Parent = MainFrame
+
+-- Background image
 local bgImage = Instance.new("ImageLabel")
 bgImage.Size = UDim2.new(1, 0, 1, 0)
 bgImage.BackgroundTransparency = 1
@@ -192,6 +202,7 @@ bgImage.ScaleType = Enum.ScaleType.Crop
 bgImage.ZIndex = 1
 bgImage.Parent = MainFrame
 
+-- Dark overlay
 local overlay = Instance.new("Frame")
 overlay.Size = UDim2.new(1, 0, 1, 0)
 overlay.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
@@ -199,11 +210,6 @@ overlay.BackgroundTransparency = 0.45
 overlay.BorderSizePixel = 0
 overlay.ZIndex = 2
 overlay.Parent = MainFrame
-
-local mainStroke = Instance.new("UIStroke")
-mainStroke.Color = Color3.fromRGB(35, 33, 40)
-mainStroke.Thickness = 1.5
-mainStroke.Parent = MainFrame
 
 local uiScale = Instance.new("UIScale")
 uiScale.Scale = 1.0
@@ -222,6 +228,7 @@ TitleBar.Parent = MainFrame
 
 Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 12)
 
+-- Fill bottom corners of title bar
 local TitleFill = Instance.new("Frame")
 TitleFill.Size = UDim2.new(1, 0, 0, 10)
 TitleFill.Position = UDim2.new(0, 0, 1, -10)
@@ -230,9 +237,15 @@ TitleFill.BorderSizePixel = 0
 TitleFill.ZIndex = 15
 TitleFill.Parent = TitleBar
 
+-- BLACK border on title bar (same as main frame)
+local titleStroke = Instance.new("UIStroke")
+titleStroke.Color = BLACK_BORDER
+titleStroke.Thickness = 1.5
+titleStroke.Parent = TitleBar
+
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -55, 1, 0)
-TitleLabel.Position = UDim2.new(0, PAD, 0, 0)
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Text = "Eclipse Auto Farm"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 250, 240)
@@ -333,8 +346,8 @@ local function makeSection(parent, text)
 end
 
 -- ══════════════════════════════════════════════════════════════
---   ROW: Label left | Controls flush to RIGHT EDGE
---   No intermediate frame, no centering = zero wasted space
+--   ROW BUILDER: Label left + Control container right (clipped)
+--   Same padding left and right = symmetric
 -- ══════════════════════════════════════════════════════════════
 
 local function makeRow(parent, labelText)
@@ -344,12 +357,14 @@ local function makeRow(parent, labelText)
     card.BorderSizePixel = 0
     card.LayoutOrder = nextOrder()
     card.ZIndex = 4
+    card.ClipsDescendants = true
     card.Parent = parent
     Instance.new("UICorner", card).CornerRadius = UDim.new(0, 7)
 
+    -- Label: MARGIN from left edge
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -120, 1, 0)
-    label.Position = UDim2.new(0, 8, 0, 0)
+    label.Size = UDim2.new(0, LABEL_W, 1, 0)
+    label.Position = UDim2.new(0, MARGIN, 0, 0)
     label.BackgroundTransparency = 1
     label.Text = labelText
     label.TextColor3 = Color3.fromRGB(255, 140, 0)
@@ -359,55 +374,67 @@ local function makeRow(parent, labelText)
     label.ZIndex = 5
     label.Parent = card
 
-    return card, label
+    -- Control container: MARGIN from right edge (same as left!)
+    local ctrlFrame = Instance.new("Frame")
+    ctrlFrame.Size = UDim2.new(0, CTRL_W, 1, 0)
+    ctrlFrame.Position = UDim2.new(1, -(CTRL_W + MARGIN), 0, 0)
+    ctrlFrame.BackgroundTransparency = 1
+    ctrlFrame.ZIndex = 5
+    ctrlFrame.ClipsDescendants = true
+    ctrlFrame.Parent = card
+
+    return card, label, ctrlFrame
 end
 
--- [-] [val] [+]  positioned from RIGHT edge of card
-local function makeBtnGroup(parent)
-    local x = -EDGE  -- start from right edge
+-- ══════════════════════════════════════════════════════════════
+--   CONTROLS: centered inside ctrlFrame
+-- ══════════════════════════════════════════════════════════════
 
-    local plusBtn = Instance.new("TextButton")
-    plusBtn.Size = UDim2.new(0, BTN_W, 0, BTN_H)
-    plusBtn.Position = UDim2.new(1, x, 0.5, -BTN_H / 2)
-    plusBtn.BackgroundColor3 = Color3.fromRGB(55, 50, 65)
-    plusBtn.Text = "+"
-    plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    plusBtn.TextSize = 14
-    plusBtn.Font = Enum.Font.GothamBold
-    plusBtn.BorderSizePixel = 0
-    plusBtn.ZIndex = 6
-    plusBtn.AutoButtonColor = false
-    plusBtn.Parent = parent
-    Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 5)
-    plusBtn.MouseEnter:Connect(function() plusBtn.BackgroundTransparency = 0.15 end)
-    plusBtn.MouseLeave:Connect(function() plusBtn.BackgroundTransparency = 0 end)
+local function makeValBox(parent, w, h, txt)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(0, w, 0, h)
+    f.BackgroundColor3 = Color3.fromRGB(30, 28, 38)
+    f.BorderSizePixel = 0
+    f.ZIndex = 6
+    f.Parent = parent
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 5)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = txt or ""
+    lbl.TextColor3 = Color3.fromRGB(255, 140, 0)
+    lbl.TextSize = 11
+    lbl.Font = Enum.Font.GothamBold
+    lbl.ZIndex = 7
+    lbl.Parent = f
+    return f, lbl
+end
 
-    x = x - BTN_W - GAP
+local function makeInputBox(parent, w, h, default)
+    local tb = Instance.new("TextBox")
+    tb.Size = UDim2.new(0, w, 0, h)
+    tb.BackgroundColor3 = Color3.fromRGB(30, 28, 38)
+    tb.Text = tostring(default)
+    tb.TextColor3 = Color3.fromRGB(255, 255, 255)
+    tb.TextSize = 10
+    tb.Font = Enum.Font.Gotham
+    tb.ClearTextOnFocus = false
+    tb.BorderSizePixel = 0
+    tb.ZIndex = 6
+    tb.Parent = parent
+    Instance.new("UICorner", tb).CornerRadius = UDim.new(0, 5)
+    return tb
+end
 
-    local valFrame = Instance.new("Frame")
-    valFrame.Size = UDim2.new(0, VAL_W, 0, BTN_H)
-    valFrame.Position = UDim2.new(1, x, 0.5, -BTN_H / 2)
-    valFrame.BackgroundColor3 = Color3.fromRGB(30, 28, 38)
-    valFrame.BorderSizePixel = 0
-    valFrame.ZIndex = 6
-    valFrame.Parent = parent
-    Instance.new("UICorner", valFrame).CornerRadius = UDim.new(0, 5)
-
-    local valLabel = Instance.new("TextLabel")
-    valLabel.Size = UDim2.new(1, 0, 1, 0)
-    valLabel.BackgroundTransparency = 1
-    valLabel.Text = "1"
-    valLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
-    valLabel.TextSize = 11
-    valLabel.Font = Enum.Font.GothamBold
-    valLabel.ZIndex = 7
-    valLabel.Parent = valFrame
-
-    x = x - VAL_W - GAP
+-- [-] [val] [+]  centered inside ctrlFrame
+local function makeBtnGroup(ctrlFrame)
+    local btnH = BTN_SZ
+    local totalW = BTN_SZ + GAP + VAL_W + GAP + BTN_SZ
+    local startX = math.floor((CTRL_W - totalW) / 2)
 
     local minusBtn = Instance.new("TextButton")
-    minusBtn.Size = UDim2.new(0, BTN_W, 0, BTN_H)
-    minusBtn.Position = UDim2.new(1, x, 0.5, -BTN_H / 2)
+    minusBtn.Size = UDim2.new(0, BTN_SZ, 0, btnH)
+    minusBtn.Position = UDim2.new(0, startX, 0.5, -btnH / 2)
     minusBtn.BackgroundColor3 = Color3.fromRGB(55, 50, 65)
     minusBtn.Text = "-"
     minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -416,58 +443,69 @@ local function makeBtnGroup(parent)
     minusBtn.BorderSizePixel = 0
     minusBtn.ZIndex = 6
     minusBtn.AutoButtonColor = false
-    minusBtn.Parent = parent
+    minusBtn.Parent = ctrlFrame
     Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 5)
     minusBtn.MouseEnter:Connect(function() minusBtn.BackgroundTransparency = 0.15 end)
     minusBtn.MouseLeave:Connect(function() minusBtn.BackgroundTransparency = 0 end)
 
+    local valFrame, valLabel = makeValBox(ctrlFrame, VAL_W, btnH, "1")
+    valFrame.Position = UDim2.new(0, startX + BTN_SZ + GAP, 0.5, -btnH / 2)
+
+    local plusBtn = Instance.new("TextButton")
+    plusBtn.Size = UDim2.new(0, BTN_SZ, 0, btnH)
+    plusBtn.Position = UDim2.new(0, startX + BTN_SZ + GAP + VAL_W + GAP, 0.5, -btnH / 2)
+    plusBtn.BackgroundColor3 = Color3.fromRGB(55, 50, 65)
+    plusBtn.Text = "+"
+    plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    plusBtn.TextSize = 14
+    plusBtn.Font = Enum.Font.GothamBold
+    plusBtn.BorderSizePixel = 0
+    plusBtn.ZIndex = 6
+    plusBtn.AutoButtonColor = false
+    plusBtn.Parent = ctrlFrame
+    Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 5)
+    plusBtn.MouseEnter:Connect(function() plusBtn.BackgroundTransparency = 0.15 end)
+    plusBtn.MouseLeave:Connect(function() plusBtn.BackgroundTransparency = 0 end)
+
     return minusBtn, valLabel, plusBtn
 end
 
--- [input] [Set]  positioned from RIGHT edge of card
-local function makeInputGroup(parent, default)
-    local x = -EDGE
+-- [input] [Set]  centered inside ctrlFrame
+local function makeInputGroup(ctrlFrame, default)
+    local btnH = BTN_SZ
+    local totalW = INP_W + GAP + APP_W
+    local startX = math.floor((CTRL_W - totalW) / 2)
 
-    local appBtn = Instance.new("TextButton")
-    appBtn.Size = UDim2.new(0, APP_W, 0, BTN_H)
-    appBtn.Position = UDim2.new(1, x, 0.5, -BTN_H / 2)
-    appBtn.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
-    appBtn.Text = "Set"
-    appBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    appBtn.TextSize = 10
-    appBtn.Font = Enum.Font.GothamBold
-    appBtn.BorderSizePixel = 0
-    appBtn.ZIndex = 6
-    appBtn.AutoButtonColor = false
-    appBtn.Parent = parent
-    Instance.new("UICorner", appBtn).CornerRadius = UDim.new(0, 5)
-    appBtn.MouseEnter:Connect(function() appBtn.BackgroundTransparency = 0.15 end)
-    appBtn.MouseLeave:Connect(function() appBtn.BackgroundTransparency = 0 end)
+    local input = makeInputBox(ctrlFrame, INP_W, btnH, default)
+    input.Position = UDim2.new(0, startX, 0.5, -btnH / 2)
 
-    x = x - APP_W - GAP
+    local applyBtn = Instance.new("TextButton")
+    applyBtn.Size = UDim2.new(0, APP_W, 0, btnH)
+    applyBtn.Position = UDim2.new(0, startX + INP_W + GAP, 0.5, -btnH / 2)
+    applyBtn.BackgroundColor3 = Color3.fromRGB(40, 130, 40)
+    applyBtn.Text = "Set"
+    applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    applyBtn.TextSize = 10
+    applyBtn.Font = Enum.Font.GothamBold
+    applyBtn.BorderSizePixel = 0
+    applyBtn.ZIndex = 6
+    applyBtn.AutoButtonColor = false
+    applyBtn.Parent = ctrlFrame
+    Instance.new("UICorner", applyBtn).CornerRadius = UDim.new(0, 5)
+    applyBtn.MouseEnter:Connect(function() applyBtn.BackgroundTransparency = 0.15 end)
+    applyBtn.MouseLeave:Connect(function() applyBtn.BackgroundTransparency = 0 end)
 
-    local input = Instance.new("TextBox")
-    input.Size = UDim2.new(0, INP_W, 0, BTN_H)
-    input.Position = UDim2.new(1, x, 0.5, -BTN_H / 2)
-    input.BackgroundColor3 = Color3.fromRGB(30, 28, 38)
-    input.Text = tostring(default)
-    input.TextColor3 = Color3.fromRGB(255, 255, 255)
-    input.TextSize = 10
-    input.Font = Enum.Font.Gotham
-    input.ClearTextOnFocus = false
-    input.BorderSizePixel = 0
-    input.ZIndex = 6
-    input.Parent = parent
-    Instance.new("UICorner", input).CornerRadius = UDim.new(0, 5)
-
-    return input, appBtn
+    return input, applyBtn
 end
 
--- [ON/OFF] toggle positioned from RIGHT edge of card
-local function makeToggleBtn(parent)
+-- [ON/OFF] toggle centered inside ctrlFrame
+local function makeToggleCtrl(ctrlFrame)
+    local btnH = BTN_SZ
+    local startX = math.floor((CTRL_W - TOGGLE_W) / 2)
+
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, TOGGLE_W, 0, BTN_H)
-    btn.Position = UDim2.new(1, -EDGE, 0.5, -BTN_H / 2)
+    btn.Size = UDim2.new(0, TOGGLE_W, 0, btnH)
+    btn.Position = UDim2.new(0, startX, 0.5, -btnH / 2)
     btn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
     btn.Text = "OFF"
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -476,7 +514,7 @@ local function makeToggleBtn(parent)
     btn.BorderSizePixel = 0
     btn.ZIndex = 6
     btn.AutoButtonColor = false
-    btn.Parent = parent
+    btn.Parent = ctrlFrame
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
     btn.MouseEnter:Connect(function() btn.BackgroundTransparency = 0.08 end)
     btn.MouseLeave:Connect(function() btn.BackgroundTransparency = 0 end)
@@ -490,8 +528,8 @@ end
 makeSection(MainPanel, "Slots")
 
 -- Auto Farm toggle
-local farmRow, farmLabel = makeRow(MainPanel, "Auto Farm")
-FarmToggleBtn = makeToggleBtn(farmRow)
+local farmRow, farmLabel, farmCtrl = makeRow(MainPanel, "Auto Farm")
+FarmToggleBtn = makeToggleCtrl(farmCtrl)
 
 FarmToggleBtn.MouseButton1Click:Connect(function()
     farmActive = not farmActive
@@ -512,8 +550,8 @@ FarmToggleBtn.MouseButton1Click:Connect(function()
 end)
 
 -- Slot selector
-local slotRow, slotLabel = makeRow(MainPanel, "Farm Slot")
-local SlotMinus, slotDisplay, SlotPlus = makeBtnGroup(slotRow)
+local slotRow, slotLabel, slotCtrl = makeRow(MainPanel, "Farm Slot")
+local SlotMinus, slotDisplay, SlotPlus = makeBtnGroup(slotCtrl)
 
 SlotMinus.MouseButton1Click:Connect(function()
     selectedSlot = selectedSlot - 1
@@ -577,8 +615,8 @@ StatusLabel.Parent = MainPanel
 makeSection(MainPanel, "Settings")
 
 -- WalkSpeed
-local wsRow, wsLabel = makeRow(MainPanel, "WalkSpeed:")
-local wsInput, wsApply = makeInputGroup(wsRow, WALKSPEED)
+local wsRow, wsLabel, wsCtrl = makeRow(MainPanel, "WalkSpeed:")
+local wsInput, wsApply = makeInputGroup(wsCtrl, WALKSPEED)
 wsApply.MouseButton1Click:Connect(function()
     local val = tonumber(wsInput.Text)
     if val and val >= 16 and val <= 100 then
@@ -592,8 +630,8 @@ wsApply.MouseButton1Click:Connect(function()
 end)
 
 -- Stuck Time
-local stRow, stLabel = makeRow(MainPanel, "Stuck Time:")
-local stInput, stApply = makeInputGroup(stRow, STUCK_TIME)
+local stRow, stLabel, stCtrl = makeRow(MainPanel, "Stuck Time:")
+local stInput, stApply = makeInputGroup(stCtrl, STUCK_TIME)
 stApply.MouseButton1Click:Connect(function()
     local val = tonumber(stInput.Text)
     if val and val >= 1 and val <= 15 then
@@ -610,8 +648,8 @@ stApply.MouseButton1Click:Connect(function()
 end)
 
 -- Trigger Dist
-local tdRow, tdLabel = makeRow(MainPanel, "Trigger Dist:")
-local tdInput, tdApply = makeInputGroup(tdRow, TRIGGER_DIST)
+local tdRow, tdLabel, tdCtrl = makeRow(MainPanel, "Trigger Dist:")
+local tdInput, tdApply = makeInputGroup(tdCtrl, TRIGGER_DIST)
 tdApply.MouseButton1Click:Connect(function()
     local val = tonumber(tdInput.Text)
     if val and val >= 1 and val <= 50 then
@@ -625,8 +663,8 @@ tdApply.MouseButton1Click:Connect(function()
 end)
 
 -- UI Scale
-local scaleRow, scaleLabel = makeRow(MainPanel, "UI Scale:")
-local ScaleMinus, SizeDisplay, ScalePlus = makeBtnGroup(scaleRow)
+local scaleRow, scaleLabel, scaleCtrl = makeRow(MainPanel, "UI Scale:")
+local ScaleMinus, SizeDisplay, ScalePlus = makeBtnGroup(scaleCtrl)
 
 local currentUIScale = 1.0
 local function applyScale(newScale)
@@ -740,7 +778,7 @@ LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 print("══════════════════════════════")
-print("  ECLIPSE AUTO FARM v14.4")
-print("  Controls Flush Right Edge")
+print("  ECLIPSE AUTO FARM v14.6")
+print("  Black Borders | Symmetric")
 print("  [RightShift] = Hide")
 print("══════════════════════════════")
