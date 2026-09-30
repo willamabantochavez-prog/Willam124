@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════
--- ECLIPSE AUTO FARM v14.6
--- Black Borders | Symmetric Spacing | All Flush Right
+-- ECLIPSE AUTO FARM v14.7
+-- Black Borders | Flush Right 2px | Label 6px Left
 -- Smart Stuck Detection | Jump to unstick
 -- ══════════════════════════════════════════════════════════════
 
@@ -156,17 +156,18 @@ end
 
 local BASE_WIDTH = 260
 local BASE_HEIGHT = 310
-local PAD = 8        -- outer padding (left = right)
-local MARGIN = 6     -- inner margin from card edge to controls
+local PAD = 8
+local MARGIN_LEFT = 6   -- label distance from left edge
+local MARGIN_RIGHT = 2  -- controls distance from right edge (flush!)
 local ROW_H = 32
-local LABEL_W = 100  -- fixed label width
-local CTRL_W = 140   -- fixed control container width
-local BTN_SZ = 24    -- button size
-local VAL_W = 30     -- value display width
-local INP_W = 48     -- input width
-local APP_W = 34     -- apply button width
-local TOGGLE_W = 52  -- toggle button width
-local GAP = 4        -- gap between controls
+local LABEL_W = 100
+local CTRL_W = 140
+local BTN_SZ = 24
+local VAL_W = 30
+local INP_W = 48
+local APP_W = 34
+local TOGGLE_W = 52
+local GAP = 4
 
 local BLACK_BORDER = Color3.fromRGB(30, 28, 35)
 
@@ -186,13 +187,11 @@ MainFrame.Parent = ScreenGui
 
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
 
--- Black border on main frame
 local mainStroke = Instance.new("UIStroke")
 mainStroke.Color = BLACK_BORDER
 mainStroke.Thickness = 1.5
 mainStroke.Parent = MainFrame
 
--- Background image
 local bgImage = Instance.new("ImageLabel")
 bgImage.Size = UDim2.new(1, 0, 1, 0)
 bgImage.BackgroundTransparency = 1
@@ -202,7 +201,6 @@ bgImage.ScaleType = Enum.ScaleType.Crop
 bgImage.ZIndex = 1
 bgImage.Parent = MainFrame
 
--- Dark overlay
 local overlay = Instance.new("Frame")
 overlay.Size = UDim2.new(1, 0, 1, 0)
 overlay.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
@@ -228,7 +226,6 @@ TitleBar.Parent = MainFrame
 
 Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 12)
 
--- Fill bottom corners of title bar
 local TitleFill = Instance.new("Frame")
 TitleFill.Size = UDim2.new(1, 0, 0, 10)
 TitleFill.Position = UDim2.new(0, 0, 1, -10)
@@ -237,7 +234,6 @@ TitleFill.BorderSizePixel = 0
 TitleFill.ZIndex = 15
 TitleFill.Parent = TitleBar
 
--- BLACK border on title bar (same as main frame)
 local titleStroke = Instance.new("UIStroke")
 titleStroke.Color = BLACK_BORDER
 titleStroke.Thickness = 1.5
@@ -346,8 +342,9 @@ local function makeSection(parent, text)
 end
 
 -- ══════════════════════════════════════════════════════════════
---   ROW BUILDER: Label left + Control container right (clipped)
---   Same padding left and right = symmetric
+--   ROW BUILDER
+--   Label: MARGIN_LEFT from left
+--   Controls: MARGIN_RIGHT from right (flush!)
 -- ══════════════════════════════════════════════════════════════
 
 local function makeRow(parent, labelText)
@@ -361,10 +358,10 @@ local function makeRow(parent, labelText)
     card.Parent = parent
     Instance.new("UICorner", card).CornerRadius = UDim.new(0, 7)
 
-    -- Label: MARGIN from left edge
+    -- Label: 6px from left
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(0, LABEL_W, 1, 0)
-    label.Position = UDim2.new(0, MARGIN, 0, 0)
+    label.Position = UDim2.new(0, MARGIN_LEFT, 0, 0)
     label.BackgroundTransparency = 1
     label.Text = labelText
     label.TextColor3 = Color3.fromRGB(255, 140, 0)
@@ -374,10 +371,10 @@ local function makeRow(parent, labelText)
     label.ZIndex = 5
     label.Parent = card
 
-    -- Control container: MARGIN from right edge (same as left!)
+    -- Control container: 2px from right (flush!)
     local ctrlFrame = Instance.new("Frame")
     ctrlFrame.Size = UDim2.new(0, CTRL_W, 1, 0)
-    ctrlFrame.Position = UDim2.new(1, -(CTRL_W + MARGIN), 0, 0)
+    ctrlFrame.Position = UDim2.new(1, -(CTRL_W + MARGIN_RIGHT), 0, 0)
     ctrlFrame.BackgroundTransparency = 1
     ctrlFrame.ZIndex = 5
     ctrlFrame.ClipsDescendants = true
@@ -387,7 +384,7 @@ local function makeRow(parent, labelText)
 end
 
 -- ══════════════════════════════════════════════════════════════
---   CONTROLS: centered inside ctrlFrame
+--   CONTROLS: RIGHT-ALIGNED inside ctrlFrame
 -- ══════════════════════════════════════════════════════════════
 
 local function makeValBox(parent, w, h, txt)
@@ -426,11 +423,12 @@ local function makeInputBox(parent, w, h, default)
     return tb
 end
 
--- [-] [val] [+]  centered inside ctrlFrame
+-- [-] [val] [+]  RIGHT-ALIGNED inside ctrlFrame
 local function makeBtnGroup(ctrlFrame)
     local btnH = BTN_SZ
     local totalW = BTN_SZ + GAP + VAL_W + GAP + BTN_SZ
-    local startX = math.floor((CTRL_W - totalW) / 2)
+    -- Right-align: startX so group ends near right edge of ctrlFrame
+    local startX = CTRL_W - totalW
 
     local minusBtn = Instance.new("TextButton")
     minusBtn.Size = UDim2.new(0, BTN_SZ, 0, btnH)
@@ -470,11 +468,11 @@ local function makeBtnGroup(ctrlFrame)
     return minusBtn, valLabel, plusBtn
 end
 
--- [input] [Set]  centered inside ctrlFrame
+-- [input] [Set]  RIGHT-ALIGNED inside ctrlFrame
 local function makeInputGroup(ctrlFrame, default)
     local btnH = BTN_SZ
     local totalW = INP_W + GAP + APP_W
-    local startX = math.floor((CTRL_W - totalW) / 2)
+    local startX = CTRL_W - totalW
 
     local input = makeInputBox(ctrlFrame, INP_W, btnH, default)
     input.Position = UDim2.new(0, startX, 0.5, -btnH / 2)
@@ -498,10 +496,10 @@ local function makeInputGroup(ctrlFrame, default)
     return input, applyBtn
 end
 
--- [ON/OFF] toggle centered inside ctrlFrame
+-- [ON/OFF] RIGHT-ALIGNED inside ctrlFrame
 local function makeToggleCtrl(ctrlFrame)
     local btnH = BTN_SZ
-    local startX = math.floor((CTRL_W - TOGGLE_W) / 2)
+    local startX = CTRL_W - TOGGLE_W
 
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, TOGGLE_W, 0, btnH)
@@ -778,7 +776,7 @@ LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 print("══════════════════════════════")
-print("  ECLIPSE AUTO FARM v14.6")
-print("  Black Borders | Symmetric")
+print("  ECLIPSE AUTO FARM v14.7")
+print("  Flush Right 2px | Black")
 print("  [RightShift] = Hide")
 print("══════════════════════════════")
