@@ -17,7 +17,7 @@ if not pcall(function() loadGui.Parent=game.CoreGui end) then loadGui.Parent=pg 
 local loadF=Instance.new("Frame") loadF.Size=UDim2.fromOffset(280,100) loadF.AnchorPoint=Vector2.new(0.5,0.5) loadF.Position=UDim2.new(0.5,0,0.5,0) loadF.BackgroundColor3=Color3.fromRGB(15,12,8) loadF.BorderSizePixel=0 loadF.Parent=loadGui
 Instance.new("UICorner",loadF).CornerRadius=UDim.new(0,10)
 local ls=Instance.new("UIStroke") ls.Color=Color3.fromRGB(220,140,40) ls.Thickness=2 ls.Parent=loadF
-local loadL=Instance.new("TextLabel") loadL.Size=UDim2.new(1,-20,0,30) loadL.Position=UDim2.fromOffset(10,10) loadL.BackgroundTransparency=1 loadL.Text="Eclipse v5.0 - Code Sniper" loadL.TextSize=16 loadL.TextColor3=Color3.fromRGB(235,190,90) loadL.Font=Enum.Font.GothamBold loadL.Parent=loadF
+local loadL=Instance.new("TextLabel") loadL.Size=UDim2.new(1,-20,0,30) loadL.Position=UDim2.fromOffset(10,10) loadL.BackgroundTransparency=1 loadL.Text="Eclipse v5.0 - Leaker AI" loadL.TextSize=16 loadL.TextColor3=Color3.fromRGB(235,190,90) loadL.Font=Enum.Font.GothamBold loadL.Parent=loadF
 local loadSub=Instance.new("TextLabel") loadSub.Size=UDim2.new(1,-20,0,20) loadSub.Position=UDim2.fromOffset(10,42) loadSub.BackgroundTransparency=1 loadSub.Text="Loading..." loadSub.TextSize=11 loadSub.TextColor3=Color3.fromRGB(180,170,150) loadSub.Font=Enum.Font.GothamMedium loadSub.Parent=loadF
 local loadBar=Instance.new("Frame") loadBar.Size=UDim2.new(1,-40,0,6) loadBar.Position=UDim2.fromOffset(20,78) loadBar.BackgroundColor3=Color3.fromRGB(40,35,25) loadBar.BorderSizePixel=0 loadBar.Parent=loadF
 Instance.new("UICorner",loadBar).CornerRadius=UDim.new(0,3)
@@ -316,7 +316,7 @@ local function createRiddleSolver(config,deps,saved)
             or msg:find("Code Redeemed",1,true) or msg:find("Submit Failed",1,true)
             or msg:find("Rejected",1,true) or msg:find("Game Response",1,true))
         if important and msg~=previous and type(deps.log)=="function" then
-            pcall(deps.log,"V2 AI: "..tostring(msg))
+            pcall(deps.log,"N Reply: "..tostring(msg))
         end
     end
     local function cancelFn(job) if job and deps.cancel then deps.cancel(job) end end
@@ -348,7 +348,7 @@ local function createRiddleSolver(config,deps,saved)
             local answer=validAnswer(engineValue)
             if answer then return answer,q,"EclipBrainrotAi" end
         elseif type(deps.log)=="function" then
-            pcall(deps.log,"V2 AI: Engine error for clue ["..tostring(question):sub(1,80).."]: "..tostring(engineValue))
+            pcall(deps.log,"N Reply: Engine error for clue ["..tostring(question):sub(1,80).."]: "..tostring(engineValue))
         end
 
         -- Shared resolver fallback preserves Eclipse-only facts and compound clues.
@@ -358,7 +358,7 @@ local function createRiddleSolver(config,deps,saved)
                 local answer=validAnswer(ai)
                 if answer then return answer,q,"SharedResolver" end
             elseif type(deps.log)=="function" then
-                pcall(deps.log,"V2 AI: Shared resolver error for clue ["..tostring(question):sub(1,80).."]: "..tostring(ai))
+                pcall(deps.log,"N Reply: Shared resolver error for clue ["..tostring(question):sub(1,80).."]: "..tostring(ai))
             end
         end
         local dr=RiddleDates[q]; if dr then return dr.date or dr.day,q,"DateDB" end
@@ -380,14 +380,14 @@ local function createRiddleSolver(config,deps,saved)
                 local answer=encoded(ans)
                 entries[#entries+1]={question=key(c),value=answer,matched=found,source=src}
                 if type(deps.log)=="function" then
-                    pcall(deps.log,"V2 AI: Clue ["..tostring(c):sub(1,80).."] => "..answer.." ("..tostring(src or "local")..")")
+                    pcall(deps.log,"N Reply: Clue ["..tostring(c):sub(1,80).."] => "..answer.." ("..tostring(src or "local")..")")
                 end
                 return
             end
             if c:find("?",1,true) or normalize(payload(c)):match("^my%s") or normalize(payload(c)):match("^what%s") or normalize(payload(c)):match("^whats%s") or normalize(payload(c)):match("^when%s") then
                 entries[#entries+1]={question=key(c)}
                 if type(deps.log)=="function" then
-                    pcall(deps.log,"V2 AI: No local answer for clue ["..tostring(c):sub(1,80).."]")
+                    pcall(deps.log,"N Reply: No local answer for clue ["..tostring(c):sub(1,80).."]")
                 end
             end
         end
@@ -413,8 +413,17 @@ local function createRiddleSolver(config,deps,saved)
         local request={code=code,count=#s.entries,revision=s.revision,guessed=guessed,session=s.session,attemptKey=atk,entryIds={}} for _,e in ipairs(s.entries) do request.entryIds[e.id]=true end
         s.pending,s.lastSubmitted=request,code s.attempts[atk]=true for _,e in ipairs(s.entries) do e.submitted=true end
         emit(guessed and "Submitting Guess..." or "Submitting Riddle Answer...")
-        if type(deps.log)=="function" then pcall(deps.log,"V2 AI: Code assembled = "..code) end
-        s.responseTimer=deps.after(config.ResponseTimeout or 18,function() if s.pending==request then emit("Game Response Delayed") end end)
+        if type(deps.log)=="function" then pcall(deps.log,"N Reply: Code assembled = "..code) end
+        s.responseTimer=deps.after(config.ResponseTimeout or 18,function()
+            if s.pending ~= request then return end
+            s.responseTimer = nil
+            s.pending = nil
+            releaseSubmitted(request)
+            s.attempts[atk] = nil
+            s.retryAt = deps.now() + math.max(1, tonumber(config.RiddleRateRetryDelay) or 1)
+            emit("Game Response Timeout - Ready")
+            -- Wait for a new clue/wake instead of leaving a permanent pending lock.
+        end)
         local submitOk=pcall(deps.submit,code,function(success,message)
             if s.pending~=request then return end cancelFn(s.responseTimer) s.responseTimer=nil s.pending=nil
             s.lastResponse=clean(message) local lower=s.lastResponse:lower() local result="unclear"
@@ -435,12 +444,23 @@ local function createRiddleSolver(config,deps,saved)
     local function duplicate(msg,sender,id) local now2=deps.now() local idKey=identity(msg,sender,id) if idKey then local at=s.seenIds[idKey] return at~=nil and now2-at<=(config.MessageIdTTL or 600) end return false end
     local function rememberMsg(msg,sender,id) local now2=deps.now() local idKey=identity(msg,sender,id) if duplicate(msg,sender,id) then s.duplicateCount+=1 return false end if idKey then s.seenIds[idKey]=now2 end return true end
     function s:observe(msg,dur,snd,loc,sender,id,remove) if not trusted(msg,loc,sender,remove) then return false end local q=normalize(msg):gsub("^the%s+riddle","riddle") local body=q:match("^riddle%s+is%s*(.*)$") or q:match("^riddle%s+(.+)$") local control=q=="riddle" or q=="riddle is" or q=="making a riddle" or q=="im going to make a riddle" if body then local st=body:match("^%s*(.-)%s*$") if st=="hard" or st=="easy" or st=="soon" or st=="ready" or st:match("^coming%s+soon") then control=true end end if not control and not body then if q:find("%f[%w_]riddle%f[^%w_]") then control=true else return false end end if duplicate(msg,sender,id) then return true,true,false end if control and not rememberMsg(msg,sender,id) then return true,true,false end if self.enabled then reset("Waiting For Riddle Questions...") end if self.enabled then self.armed=true end return true,control,true end
-    function s:receive2(msg,dur,snd,loc,sender,id,remove) if not self.enabled or not trusted(msg,loc,sender,remove) then return false end local q=normalize(msg):gsub("^the%s+riddle","riddle") local explicit=q:match("^riddle%s+is%s+")~=nil or q:match("^riddle%s+")~=nil if not self.armed and not explicit then return false end local entries2=resolve(msg) if #entries2==0 or key(msg)=="" then return false end local qk=key(msg) local resolved=false for _,e in ipairs(entries2) do if e.value or e.source=="Live" then resolved=true break end end local looksLike=explicit or resolved or clean(msg):find("?",1,true)~=nil or normalize(payload(msg)):match("^my%s") or normalize(payload(msg)):match("^what%s") or normalize(payload(msg)):match("^whats%s") or normalize(payload(msg)):match("^when%s") if not looksLike then return false end if not rememberMsg(msg,sender,id) then return true end
+    function s:receive2(msg,dur,snd,loc,sender,id,remove) if not self.enabled or not trusted(msg,loc,sender,remove) then return false end local q=normalize(msg):gsub("^the%s+riddle","riddle") local explicit=q:match("^riddle%s+is%s+")~=nil or q:match("^riddle%s+")~=nil if not self.armed and not explicit then return false end local entries2=resolve(msg) if #entries2==0 or key(msg)=="" then return false end local qk=key(msg) local resolved=false for _,e in ipairs(entries2) do if e.value or e.source=="Live" then resolved=true break end end local looksLike=explicit or resolved or clean(msg):find("?",1,true)~=nil or normalize(payload(msg)):match("^my%s") or normalize(payload(msg)):match("^what%s") or normalize(payload(msg)):match("^whats%s") or normalize(payload(msg)):match("^when%s") if not looksLike then return false end
+        local textKey=normalize(payload(msg))
+        local nowText=deps.now()
+        for seenKey, seenAt in pairs(self.seenText) do
+            if nowText-seenAt > math.max(1, config.RiddleDuplicateWindow or 0.35) then self.seenText[seenKey]=nil end
+        end
+        if self.seenText[textKey] and nowText-self.seenText[textKey] <= math.max(1, config.RiddleDuplicateWindow or 0.35) then
+            self.duplicateCount+=1
+            return true
+        end
+        self.seenText[textKey]=nowText
+        if not rememberMsg(msg,sender,id) then return true end
         if type(deps.log)=="function" then
             for _,entry in ipairs(entries2) do
                 local detail = entry.value and ("Resolved "..tostring(entry.question).." -> "..tostring(entry.value).." ["..tostring(entry.source or "Local").."]")
                     or ("Unresolved clue: "..tostring(entry.question))
-                pcall(deps.log,"V2 AI: "..detail)
+                pcall(deps.log,"N Reply: "..detail)
             end
         end if not self.pending and #self.entries>0 and self.lastClueAt and deps.now()-self.lastClueAt>(config.RiddleClueGap or 8) then reset("Waiting For Riddle Questions...") end if not self.pending and self.completedQuestion==qk then reset("Waiting For Riddle Questions...") end self.completedQuestion=nil self.lastClueAt=deps.now() nextAnnouncementId+=1 for _,e in ipairs(entries2) do nextEntryId+=1 e.id,e.announcement=nextEntryId,nextAnnouncementId self.entries[#self.entries+1]=e if not e.value or e.value=="" then self.unknownCount+=1 end self.lastMatched=e.matched or e.question end refreshEntries() emit("Riddle Answer "..#self.entries.." Collected") scheduleFn() return true end
     function s:learn(msg,dur,snd,loc,sender,id,remove) if not self.settings.learnFacts or not trusted(msg,loc,sender,remove) then return false end local plain,q2=clean(msg),normalize(msg) if q2:find("?",1,true) or q2:match("^riddle") or q2:match("^what%s") then return false end local subject,answer2=plain:match("^%s*(.-)%s+[Ii][Ss]%s+(.+)%s*$") if not subject or not answer2 then return false end local sk=key(subject) local allowed=sk:match("^my%s+.+%s+name$") or sk:match("^my%s+.+%s+color$") or RiddleDatabase[sk]~=nil or learnedValue(sk)~=nil if not allowed then return false end answer2=answer2:match("^%s*(.-)%s*$"):gsub("[%.!]$","") if #answer2==0 or #answer2>50 then return false end if encoded(answer2)=="" then return false end local rec2={answer=answer2,learnedAt=deps.now()} if not self.learned[sk] then self.learnedCount+=1 end self.learned[sk]=rec2 local corrected=false for _,e in ipairs(self.entries) do if not e.submitted and self.learned[e.question]==rec2 then e.value,e.source=encoded(answer2),"Learned" corrected=true end end refreshEntries() emit("Learned: "..sk) if corrected then scheduleFn() end return true end
@@ -3544,6 +3564,169 @@ local function createRiddleCalendar(config, deps)
     end
 end
 
+
+-- N Reply profile facts supplied by the operator; these override generic guesses.
+local NReplyFacts = {
+    ["real name"] = "SAMMY",
+    ["sammy real name"] = "SAMMY",
+    ["sammys real name"] = "SAMMY",
+    ["name"] = "SAMMY",
+    ["roblox username"] = "SPYDERSAMMY",
+    ["username"] = "SPYDERSAMMY",
+    ["my username"] = "SPYDERSAMMY",
+    ["age"] = "24",
+    ["my age"] = "24",
+    ["birth year"] = "2002",
+    ["my birth year"] = "2002",
+    ["birth day"] = "FRIDAY",
+    ["my birth day"] = "FRIDAY",
+    ["birth month"] = "FEBRUARY",
+    ["my birth month"] = "FEBRUARY",
+    ["birthday"] = "FRIDAY",
+    ["birth date"] = "FRIDAY",
+    ["birthplace"] = "ALGERIA",
+    ["birth place"] = "ALGERIA",
+    ["where was i born"] = "ALGERIA",
+    ["where was sammy born"] = "ALGERIA",
+    ["country"] = "BRAZIL",
+    ["my country"] = "BRAZIL",
+    ["what country"] = "BRAZIL",
+    ["city"] = "SAO PAULO",
+    ["state"] = "SAO PAULO",
+    ["city state"] = "SAO PAULO",
+    ["where do i live"] = "SAO PAULO",
+    ["nationality"] = "BRAZILIAN",
+    ["favorite color"] = "BLUE",
+    ["my favorite color"] = "BLUE",
+    ["favorite sport"] = "FOOTBALL",
+    ["favorite player"] = "RONALDO",
+    ["favorite player number"] = "7",
+    ["favorite players number"] = "7",
+    ["favorite food"] = "PIZZA",
+    ["favorite animal"] = "SPIDER",
+    ["favorite game"] = "ROBLOX",
+    ["favorite artist"] = "DRAKE",
+    ["favorite travis scott album"] = "ASTROWORLD",
+    ["travis scott favorite album"] = "ASTROWORLD",
+    ["favorite number"] = "67",
+    ["lucky number"] = "67",
+    ["favorite brainrot"] = "MEOWL",
+    ["my favorite brainrot"] = "MEOWL",
+    ["youtube channel"] = "SPYDERSAMMY",
+    ["sab release date"] = "MAY 16 2025",
+    ["steal a brainrot release date"] = "MAY 16 2025",
+    ["sab release day"] = "FRIDAY",
+    ["sab co owner"] = "LUKE",
+    ["co owner"] = "LUKE",
+    ["admin war with"] = "JANDEL",
+    ["admin abuse war month"] = "AUGUST",
+    ["go to after admin abuse"] = "GYM",
+    ["best friend"] = "STEAK",
+    ["world cup winner"] = "SPAIN",
+    ["color of poop"] = "BROWN",
+    ["first trait"] = "LIGHTNING",
+    ["lightning trait"] = "MATEO",
+    ["actual mutation"] = "CRYSTAL",
+    ["actual age station"] = "SUMMER",
+    ["first mutation"] = "BLOODROT",
+    ["second mutation"] = "CANDY",
+    ["third mutation"] = "LAVA",
+    ["fourth mutation"] = "GALAXY",
+    ["fifth mutation"] = "YINYANG",
+    ["sixth mutation"] = "RADIOACTIVE",
+    ["seventh mutation"] = "CURSED",
+    ["eighth mutation"] = "DIVINE",
+    ["ninth mutation"] = "CYBER",
+    ["tenth mutation"] = "PHANTOM",
+    ["eleventh mutation"] = "CRYSTAL",
+    ["first og"] = "STRAWBERRY",
+    ["first og brainrot"] = "STRAWBERRY",
+    ["second og"] = "MEOWL",
+    ["second og brainrot"] = "MEOWL",
+    ["third og"] = "SKIBIDI",
+    ["third og brainrot"] = "SKIBIDI",
+    ["fourth og"] = "JOHN PORK",
+    ["fourth og brainrot"] = "JOHN PORK",
+    ["first event"] = "BLOODMOON",
+    ["latest event"] = "BEE",
+    ["first machine"] = "FIRST FUSE MACHINE",
+    ["second machine"] = "FIRST CRAFT MACHINE",
+    ["third machine"] = "WITCHS FUSE",
+    ["fourth machine"] = "BRAINROT DEALER",
+    ["fifth machine"] = "BRAINROT TRADER",
+    ["sixth machine"] = "SANTAS FUSE",
+    ["seventh machine"] = "DUELS MACHINE",
+    ["eighth machine"] = "CUPIDS MACHINE",
+    ["ninth machine"] = "TRADE MACHINE",
+    ["tenth machine"] = "DIVINE FUSE",
+    ["eleventh machine"] = "CYBER CRAFT",
+    ["twelfth machine"] = "SUMMER FUSE",
+    ["thirteenth machine"] = "LOS TRADERS",
+    ["strongest brainrot"] = "SPYDER ELEPHANT",
+    ["og brainrot cannot be obtained"] = "HEADLESS HORSEMAN",
+}
+
+-- Deterministic lookup for the operator-supplied Q -> A profile.
+-- Supports bare labels ("Real Name"), question phrasing ("What is my real name?"),
+-- apostrophes ("Sammy's real name"), and exported "Label: value" rows.
+local function directNReplyFact(question)
+    local raw = tostring(question or "")
+    local candidates = {}
+    local label = raw:match("^%s*([^:]+):")
+    if label then table.insert(candidates, label) end
+    table.insert(candidates, raw)
+
+    local prefixes = {
+        "what is the ", "what is my ", "what is sammys ", "what is sammy ", "what is ",
+        "whats the ", "whats my ", "whats sammys ", "whats sammy ", "whats ",
+        "which is the ", "which is my ", "which is ", "who is the ", "who is my ", "who is ",
+        "tell me the ", "tell me my ", "tell me ", "the answer to ", "answer to ", "the ",
+        "my ", "sammy ", "sammys "
+    }
+
+    for _, candidate in ipairs(candidates) do
+        local q = normalize(candidate):gsub("’", "'"):gsub("'", "")
+        q = q:gsub("/", " "):gsub("%-", " "):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+        q = q:gsub("^sammy asks%s+", ""):gsub("^the riddle is%s+", ""):gsub("^riddle is%s+", "")
+        local answer = NReplyFacts[q]
+        if answer ~= nil then return tostring(answer) end
+
+        for _ = 1, 3 do
+            local stripped = false
+            for _, prefix in ipairs(prefixes) do
+                if q:sub(1, #prefix) == prefix then
+                    q = q:sub(#prefix + 1):match("^%s*(.-)%s*$") or ""
+                    answer = NReplyFacts[q]
+                    if answer ~= nil then return tostring(answer) end
+                    stripped = true
+                    break
+                end
+            end
+            if not stripped then break end
+        end
+        answer = NReplyFacts[q]
+        if answer ~= nil then return tostring(answer) end
+    end
+    return nil
+end
+
+RiddleDatabase["trait"] = "LIGHTNING"
+RiddleDatabase["my trait"] = "LIGHTNING"
+RiddleDatabase["sammy trait"] = "LIGHTNING"
+for question, answer in pairs(NReplyFacts) do
+    RiddleDatabase[question] = answer; RiddleFactKeys[question] = true
+    for _, prefix in ipairs({'my ', 'sammy ', 'sammys '}) do
+        RiddleDatabase[prefix .. question] = answer; RiddleFactKeys[prefix .. question] = true
+    end
+end
+for i, answer in ipairs({'BLOODROT','CANDY','LAVA','GALAXY','YINYANG','RADIOACTIVE','CURSED','DIVINE','CYBER','PHANTOM','CRYSTAL'}) do
+    local ord = ({'first','second','third','fourth','fifth','sixth','seventh','eighth','ninth','tenth','eleventh'})[i]
+    RiddleDatabase[ord .. ' mutation'] = answer; RiddleDatabase['mutation ' .. i] = answer
+end
+for i, answer in ipairs({'FIRST FUSE MACHINE','FIRST CRAFT MACHINE','WITCHS FUSE','BRAINROT DEALER','BRAINROT TRADER','SANTAS FUSE','DUELS MACHINE','CUPIDS MACHINE','TRADE MACHINE','DIVINE FUSE','CYBER CRAFT','SUMMER FUSE','LOS TRADERS'}) do
+    local ord = ({'first','second','third','fourth','fifth','sixth','seventh','eighth','ninth','tenth','eleventh','twelfth','thirteenth'})[i]
+    RiddleDatabase[ord .. ' machine'] = answer; RiddleDatabase['machine ' .. i] = answer
+end
 -- Pre-normalize the full riddle database once, after all supplied revisions are applied.
 -- This avoids repeating normalization on thousands of keys for every question.
 local RiddleDatabaseFacts = {}
@@ -3573,6 +3756,9 @@ local function containsPhrase(text, phrase)
 end
 
 local function factAnswer(query)
+    -- Exact supplied Q -> A facts win over old or generic database entries.
+    local supplied = directNReplyFact(query)
+    if supplied ~= nil then return supplied end
     -- La coincidencia más larga evita que una clave corta tape una pregunta específica.
     -- La base suministrada tiene prioridad en empates porque contiene las revisiones más recientes.
     local best, bestLength = nil, 0
@@ -3681,6 +3867,11 @@ function RiddleEngine.Answer(question)
     local raw = tostring(question or "")
     local query = normalize(raw)
     if query == "" then return "UNKNOWN" end
+
+    -- Exact operator-supplied facts first: bare labels like "Real Name" must map to SAMMY.
+    local supplied = directNReplyFact(raw)
+    if supplied ~= nil then return supplied end
+
     -- Numeric clue components are literal code characters, not unknown riddles.
     if query:match("^%d+$") then return query end
 
@@ -3729,6 +3920,11 @@ function RiddleEngine.Answer(question)
         return table.concat(parts, "")
     end
 
+    -- Operator-supplied ordinal facts override stale generic ordering.
+    if query:find("machine", 1, true) or query:find("mutation", 1, true) or query:find("og", 1, true) then
+        local supplied = factAnswer(query)
+        if supplied ~= "" then return compact(supplied) end
+    end
     local answer = marketAnswer(query)
     if answer ~= "" then return answer end
     answer = machineAnswer(query)
@@ -3752,6 +3948,11 @@ function RiddleEngine.GetMachines()
     return MACHINES
 end
 
+-- Used by the announcement router to recognize bare field labels before normal riddle detection.
+function RiddleEngine.GetSuppliedFact(question)
+    return directNReplyFact(question) or ""
+end
+
 RiddleEngine.Welcome = "¡Hola! Soy EclipBrainrotAi, una IA local y gratuita creada con la información de Steal a Brainrot que me diste."
 
 return RiddleEngine
@@ -3766,7 +3967,10 @@ end
 RiddleEngine.looksLikeRiddle = function(value)
     local raw = tostring(value or "")
     local clean = RiddleEngine.basicClean(raw)
-    if clean == "" or not clean:find("%s") then return false end
+    if clean == "" then return false end
+    local okFact, suppliedFact = pcall(RiddleEngine.GetSuppliedFact, raw)
+    if okFact and type(suppliedFact) == "string" and suppliedFact ~= "" then return true end
+    if not clean:find("%s") then return false end
     if raw:find("?", 1, true) or raw:find("+", 1, true) or raw:find(",", 1, true) then return true end
     local first = clean:match("^(%S+)") or ""
     local starts = {what=true, whats=true, who=true, whos=true, when=true, where=true,
@@ -3791,6 +3995,8 @@ end
 local function localEclipseFact(question)
     local q = normalizeLegacyRiddle(question)
     if q == "" then return nil end
+    local okSupplied, supplied = pcall(RiddleEngine.GetSuppliedFact, question)
+    if okSupplied and type(supplied) == "string" and supplied ~= "" then return supplied end
     local live = liveRiddleAnswer(question)
     if type(live) == "string" and live ~= "" then return live end
     local function lookup(k)
@@ -4209,7 +4415,7 @@ local function buildBaseUI()
     TTL.Position = UDim2.fromOffset(46, 6)
     TTL.BackgroundTransparency = 1
     TTL.RichText = true
-    TTL.Text = '<font color="rgb(255,180,50)">Eclipse.VS</font> <font color="rgb(255,255,255)">CSP</font>'
+    TTL.Text = '<font color="rgb(255,180,50)">Eclipse</font> <font color="rgb(255,255,255)">Leaker AI</font>'
     TTL.TextSize = 13
     TTL.Font = Enum.Font.GothamBold
     TTL.TextXAlignment = Enum.TextXAlignment.Left
@@ -4220,7 +4426,7 @@ local function buildBaseUI()
     Sub.Size = UDim2.fromOffset(200, 14)
     Sub.Position = UDim2.fromOffset(46, 24)
     Sub.BackgroundTransparency = 1
-    Sub.Text = "v5.0 - Advance Engine + My fav Drone N ofc"
+    Sub.Text = "v5.0 - Leaker Engine"
     Sub.TextSize = 8
     Sub.TextColor3 = COLORS.Dim
     Sub.Font = Enum.Font.GothamMedium
@@ -4454,7 +4660,7 @@ local function buildMainPanel()
     end)
 
     -- ─── CODES V2 LEAKER AI ───
-    mkHeader(MainP, "CODES V2 LKR JS")
+    mkHeader(MainP, "CODES V2 LEAKER AI")
 
     settingRow(MainP, "Auto Redeem", cfg.v2AutoRedeem, "V2ARD", function(v)
         cfg.v2AutoRedeem = v; saveCfg()
@@ -5038,7 +5244,7 @@ local function buildSettingsPanel()
         cfg.snow = v; saveCfg(); if v then startSnow() else stopSnow() end
     end, "Background snow particles")
 
-    settingRow(SetP, "My Cute N animation", cfg.mascot, "MSC", function(v)
+    settingRow(SetP, "Mascot Animation", cfg.mascot, "MSC", function(v)
         cfg.mascot = v; saveCfg(); MascotCont.Visible = v
     end, "Mascot sitting on UI")
 
@@ -5336,12 +5542,12 @@ local function initCoreLogic()
     -- V1 and V2 both call the shared Eclipse + EclipBrainrotAi resolver.
     local function runV1Riddle(question)
         S.askedCount = S.askedCount + 1
-        logRich("[EclipBrainrotAi] Question: " .. tostring(question):sub(1, 100), "rgb(250,204,90)")
-        print("[EclipBrainrotAi] Question: " .. tostring(question):sub(1, 180))
+        logRich("N Reply: Question: " .. tostring(question):sub(1, 100), "rgb(250,204,90)")
+        print("N Reply: Question: " .. tostring(question):sub(1, 180))
         local okAI, rawAnswer = pcall(answerWithSourcesAI, question)
         if not okAI then
-            logRich("[EclipBrainrotAi] ERROR: " .. tostring(rawAnswer), CC.Red)
-            warn("[EclipBrainrotAi] " .. tostring(rawAnswer))
+            logRich("N Reply: ERROR: " .. tostring(rawAnswer), CC.Red)
+            warn("N Reply: " .. tostring(rawAnswer))
             return
         end
         local answer = tostring(rawAnswer or ""):match("^%s*(.-)%s*$") or ""
@@ -5349,24 +5555,24 @@ local function initCoreLogic()
         local compactAnswer = answer:gsub("[^A-Za-z0-9]", "")
         if answer == "" or upper == "UNKNOWN" or upper == "NAN" or upper:find("NOT FOUND", 1, true) or compactAnswer == "" then
             S.askedCount = math.max(0, S.askedCount)
-            logRich("[EclipBrainrotAi] No local answer for this clue; nothing was submitted.", CC.Red)
-            print("[EclipBrainrotAi] UNKNOWN - nothing submitted")
+            logRich("N Reply: No local answer for this clue; nothing was submitted.", CC.Red)
+            print("N Reply: UNKNOWN - nothing submitted")
             if setStatus then setStatus("AI: UNKNOWN RIDDLE", CC.Red) end
             return
         end
         answer = compactAnswer:upper()
         S.solvedCount = S.solvedCount + 1
-        logRich("[EclipBrainrotAi] Answer: " .. answer, CC.Green)
-        print("[EclipBrainrotAi] Answer: " .. answer)
+        logRich("N Reply: " .. answer, CC.Green)
+        print("N Reply: " .. answer)
         local cb = _G._eCodeBox; if cb then cb.Text = answer end
         local pasted, result = typeAndSubmitCode(answer, cfg.autoSubmit)
         if pasted then
-            logRich("[EclipBrainrotAi] " .. tostring(result), CC.Green)
-            print("[EclipBrainrotAi] " .. tostring(result))
+            logRich("N Reply: " .. tostring(result), CC.Green)
+            print("N Reply: " .. tostring(result))
             if setStatus then setStatus((cfg.autoSubmit and "AI CODE SUBMITTED - " or "AI CODE PASTED - ") .. answer, CC.Green) end
         else
-            logRich("[EclipBrainrotAi] PASTE/SUBMIT ERROR: " .. tostring(result), CC.Red)
-            warn("[EclipBrainrotAi] PASTE/SUBMIT ERROR: " .. tostring(result))
+            logRich("N Reply: PASTE/SUBMIT ERROR: " .. tostring(result), CC.Red)
+            warn("N Reply: PASTE/SUBMIT ERROR: " .. tostring(result))
             if setStatus then setStatus("AI ANSWER FOUND - " .. tostring(result), CC.Red) end
         end
     end
@@ -5376,11 +5582,24 @@ local function initCoreLogic()
         S.riddleBusy = true
         task.spawn(function()
             while #S.riddleQueue > 0 do
-                local q = table.remove(S.riddleQueue, 1)
+                local item = table.remove(S.riddleQueue, 1)
+                local q = type(item) == "table" and item.text or item
+                local key = type(item) == "table" and item.key or nil
                 local okRun, runErr = pcall(runV1Riddle, q)
                 if not okRun then
-                    logRich("[EclipBrainrotAi] UNCAUGHT ERROR: " .. tostring(runErr), CC.Red)
-                    warn("[EclipBrainrotAi] UNCAUGHT ERROR: " .. tostring(runErr))
+                    logRich("N Reply: UNCAUGHT ERROR: " .. tostring(runErr), CC.Red)
+                    warn("N Reply: UNCAUGHT ERROR: " .. tostring(runErr))
+                end
+                if key then
+                    S.v1QueuedKeys = S.v1QueuedKeys or {}
+                    S.v1RecentKeys = S.v1RecentKeys or {}
+                    S.v1QueuedKeys[key] = nil
+                    S.v1RecentKeys[key] = tick()
+                    task.delay(5, function()
+                        if S.v1RecentKeys and S.v1RecentKeys[key] and tick() - S.v1RecentKeys[key] >= 4.9 then
+                            S.v1RecentKeys[key] = nil
+                        end
+                    end)
                 end
             end
             S.riddleBusy = false
@@ -5388,8 +5607,19 @@ local function initCoreLogic()
     end
 
     local function queueV1Riddle(q)
-        if #S.riddleQueue > 6 then return end
-        S.riddleQueue[#S.riddleQueue + 1] = q; pumpV1Queue()
+        local key = tostring(q or ""):lower():gsub("[^%w]+", " "):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+        if key == "" then return end
+        S.v1QueuedKeys = S.v1QueuedKeys or {}
+        S.v1RecentKeys = S.v1RecentKeys or {}
+        if S.v1QueuedKeys[key] then return end
+        if S.v1RecentKeys[key] and tick() - S.v1RecentKeys[key] < 5 then return end
+        if #S.riddleQueue >= 6 then
+            logRich("N Reply: Queue full; repeated clue ignored.", CC.Red)
+            return
+        end
+        S.v1QueuedKeys[key] = true
+        S.riddleQueue[#S.riddleQueue + 1] = {text = q, key = key}
+        pumpV1Queue()
     end
 
     -- ══════════════════════════════════════
@@ -5557,7 +5787,7 @@ local function initCoreLogic()
             ["riddle is easy"] = true, ["riddle is soon"] = true, ["riddle is ready"] = true,
         }
         if riddleControls[control] or control:find("^riddle is coming soon") then
-            logRich("[EclipBrainrotAi] Riddle marker received; waiting for clue text.", "rgb(250,204,90)")
+            logRich("N Reply: Riddle marker received; waiting for clue text.", "rgb(250,204,90)")
             return
         end
         if text:find("%s") then
@@ -5624,13 +5854,13 @@ local function initCoreLogic()
             return v2Riddle:receive2(cleanMessage, duration, sound, v2Location, v2Sender, messageId, false), false
         end)
         if not okDispatch then
-            logRich("[Eclipse V2 AI] Riddle dispatch error: " .. tostring(handled), CC.Red)
-            warn("[Eclipse V2 AI] Riddle dispatch error: " .. tostring(handled))
+            logRich("N Reply: Riddle dispatch error: " .. tostring(handled), CC.Red)
+            warn("N Reply: Riddle dispatch error: " .. tostring(handled))
             return false
         end
         if handled then
-            logRich("[Eclipse V2 AI] Clue routed to EclipBrainrotAi: " .. cleanMessage:sub(1, 100), "rgb(250,204,90)")
-            print("[Eclipse V2 AI] Clue routed to EclipBrainrotAi: " .. cleanMessage:sub(1, 160))
+            logRich("N Reply: Clue routed to local answer engine: " .. cleanMessage:sub(1, 100), "rgb(250,204,90)")
+            print("N Reply: Clue routed to local answer engine: " .. cleanMessage:sub(1, 160))
         end
         return handled == true
     end
@@ -6002,7 +6232,7 @@ task.defer(function()
     }):Play()
 end)
 
-logRich("Eclipse Code Sniper loaded - EclipBrainrotAi local engine ready")
+logRich("Eclipse Code Sniper loaded - N Reply local AI ready")
 
 end) -- end of main pcall
 
