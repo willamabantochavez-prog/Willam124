@@ -17,7 +17,7 @@ if not pcall(function() loadGui.Parent=game.CoreGui end) then loadGui.Parent=pg 
 local loadF=Instance.new("Frame") loadF.Size=UDim2.fromOffset(280,100) loadF.AnchorPoint=Vector2.new(0.5,0.5) loadF.Position=UDim2.new(0.5,0,0.5,0) loadF.BackgroundColor3=Color3.fromRGB(15,12,8) loadF.BorderSizePixel=0 loadF.Parent=loadGui
 Instance.new("UICorner",loadF).CornerRadius=UDim.new(0,10)
 local ls=Instance.new("UIStroke") ls.Color=Color3.fromRGB(220,140,40) ls.Thickness=2 ls.Parent=loadF
-local loadL=Instance.new("TextLabel") loadL.Size=UDim2.new(1,-20,0,30) loadL.Position=UDim2.fromOffset(10,10) loadL.BackgroundTransparency=1 loadL.Text="Eclipse v5.0 - Leaker AI" loadL.TextSize=16 loadL.TextColor3=Color3.fromRGB(235,190,90) loadL.Font=Enum.Font.GothamBold loadL.Parent=loadF
+local loadL=Instance.new("TextLabel") loadL.Size=UDim2.new(1,-20,0,30) loadL.Position=UDim2.fromOffset(10,10) loadL.BackgroundTransparency=1 loadL.Text="Eclipse v5.0 - V1 AI" loadL.TextSize=16 loadL.TextColor3=Color3.fromRGB(235,190,90) loadL.Font=Enum.Font.GothamBold loadL.Parent=loadF
 local loadSub=Instance.new("TextLabel") loadSub.Size=UDim2.new(1,-20,0,20) loadSub.Position=UDim2.fromOffset(10,42) loadSub.BackgroundTransparency=1 loadSub.Text="Loading..." loadSub.TextSize=11 loadSub.TextColor3=Color3.fromRGB(180,170,150) loadSub.Font=Enum.Font.GothamMedium loadSub.Parent=loadF
 local loadBar=Instance.new("Frame") loadBar.Size=UDim2.new(1,-40,0,6) loadBar.Position=UDim2.fromOffset(20,78) loadBar.BackgroundColor3=Color3.fromRGB(40,35,25) loadBar.BorderSizePixel=0 loadBar.Parent=loadF
 Instance.new("UICorner",loadBar).CornerRadius=UDim.new(0,3)
@@ -27,8 +27,15 @@ task.wait(0.1)
 
 -- ═══ CONFIG ═══
 local CF="eclipse_v5_leaker.json"
-local cfg={sniper=true,autoSubmit=true,submitAfter=3,retypeInvalid=false,riddleSolver=true,redeemDelay=0.05,autoBuy=false,anchor=false,anchorKey="Z",antiRagdoll=false,snow=true,antiLag=false,antiLagUltra=false,optimize=false,scale=0.67,bg=1,v3x=0.5,v3y=0.12,mascot=true,v2AutoRedeem=false,v2AutoRiddle=false,v2AutoMode=false,v2PartsMode=false,v2Parts=3,v2LearnFacts=false,v2Fallback=false,v2FallbackDelay=0.55}
+local cfg={sniper=true,autoType=false,autoSubmit=true,submitAfter=3,retypeInvalid=false,riddleSolver=true,learnSammyBrain=false,fallbackGuesser=false,learnedFactsV1={},redeemDelay=0.05,autoBuy=false,anchor=false,anchorKey="Z",antiRagdoll=false,snow=true,antiLag=false,antiLagUltra=false,optimize=false,scale=0.67,bg=1,v3x=0.5,v3y=0.12,mascot=true,v2AutoRedeem=false,v2AutoRiddle=false,v2AutoMode=false,v2PartsMode=false,v2Parts=3,v2LearnFacts=false,v2Fallback=false,v2FallbackDelay=0.55}
 pcall(function() if type(isfile)=="function" and isfile(CF) then local d=HS:JSONDecode(readfile(CF)) if type(d)=="table" then for k,v in pairs(d) do if cfg[k]~=nil and type(cfg[k])==type(v) then cfg[k]=v end end cfg.submitAfter=math.clamp(math.floor(tonumber(cfg.submitAfter) or 3),1,5) cfg.redeemDelay=math.clamp(tonumber(cfg.redeemDelay) or 0.05,0.01,3.00) cfg.v2Parts=math.clamp(math.floor(tonumber(cfg.v2Parts) or 3),1,12) end end end)
+-- Only one V1 mode is active at a time. Old V2 saved options are deliberately ignored.
+cfg.v2AutoRedeem=false; cfg.v2AutoRiddle=false; cfg.v2AutoMode=false; cfg.v2PartsMode=false
+cfg.v2LearnFacts=false; cfg.v2Fallback=false
+cfg.learnedFactsV1=type(cfg.learnedFactsV1)=="table" and cfg.learnedFactsV1 or {}
+cfg.autoType=cfg.autoType==true; cfg.riddleSolver=cfg.riddleSolver==true
+if cfg.autoType then cfg.riddleSolver=false end
+local learnedFactsV1=cfg.learnedFactsV1
 local function saveCfg() if type(writefile)~="function" then return end pcall(function() writefile(CF,HS:JSONEncode(cfg)) end) end
 
 -- ═══ FORWARD DECLARATIONS ═══
@@ -3992,9 +3999,31 @@ local function normalizeLegacyRiddle(value)
         :gsub("[%?%.,!;:]", " "):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
 end
 
+local function lookupLearnedV1(question)
+    local q = normalizeLegacyRiddle(question):gsub("/", " "):gsub("%-", " "):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+    if q == "" then return nil end
+    local candidates = {q}
+    local prefixes = {"what is the ", "what is my ", "what is ", "whats the ", "whats my ", "whats ", "which is the ", "which is my ", "which is ", "tell me the ", "tell me my ", "tell me ", "the answer to ", "the ", "my ", "sammy ", "sammys "}
+    local current = q
+    for _ = 1, 4 do
+        local removed = false
+        for _, prefix in ipairs(prefixes) do
+            if current:sub(1, #prefix) == prefix then current = current:sub(#prefix + 1):match("^%s*(.-)%s*$") or ""; candidates[#candidates + 1] = current; removed = true; break end
+        end
+        if not removed or current == "" then break end
+    end
+    for _, candidate in ipairs(candidates) do
+        local value = learnedFactsV1[candidate]
+        if type(value) == "string" and value ~= "" then return value end
+    end
+    return nil
+end
+
 local function localEclipseFact(question)
     local q = normalizeLegacyRiddle(question)
     if q == "" then return nil end
+    local learned = lookupLearnedV1(question)
+    if learned then return learned end
     local okSupplied, supplied = pcall(RiddleEngine.GetSuppliedFact, question)
     if okSupplied and type(supplied) == "string" and supplied ~= "" then return supplied end
     local live = liveRiddleAnswer(question)
@@ -4124,7 +4153,9 @@ local featureStates={} local tabPanels={} local currentTab="MAIN" local AW={}
 local function copyTheme(t) COLORS.Window=t.Window COLORS.Row=t.Row COLORS.Control=t.Control COLORS.Log=t.Log COLORS.Border=t.Border COLORS.Accent=t.Accent COLORS.TabActive=t.TabActive COLORS.TabInactive=t.TabInactive COLORS.TabTextOn=t.TabTextOn COLORS.Dim=t.Dim COLORS.Text=t.Text COLORS.White=Color3.fromRGB(255,255,255) COLORS.Green=Color3.fromRGB(110,225,130) COLORS.Red=Color3.fromRGB(240,95,95) end
 copyTheme(BG_THEMES[1])
 
-local function mkToggle(parent,enabled,tag,onChange) featureStates[tag]=enabled local btn=Instance.new("TextButton") btn.Size=UDim2.fromOffset(42,20) btn.Position=UDim2.new(1,-50,0.5,-10) btn.BackgroundColor3=enabled and COLORS.Accent or COLORS.Control btn.BorderSizePixel=0 btn.AutoButtonColor=false btn.Text=enabled and "ON" or "OFF" btn.TextSize=8 btn.TextColor3=enabled and COLORS.TabTextOn or COLORS.Dim btn.Font=Enum.Font.GothamBold btn.ZIndex=8 btn.Parent=parent addC(btn,6) local stroke=addS(btn,enabled and COLORS.Accent or COLORS.Border,1,enabled and 0.5 or 0.7) local isOnFn=function() return featureStates[tag] end table.insert(themed.toggleBtns,{btn=btn,stroke=stroke,isOn=isOnFn}) local lastT=0 btn.Activated:Connect(function() if tick()-lastT<0.15 then return end lastT=tick() local ns=not featureStates[tag] featureStates[tag]=ns btn.Text=ns and "ON" or "OFF" local t=BG_THEMES[cfg.bg] or BG_THEMES[1] btn.BackgroundColor3=ns and t.Accent or t.Control btn.TextColor3=ns and t.TabTextOn or t.Dim stroke.Color=ns and t.Accent or t.Border stroke.Transparency=ns and 0.5 or 0.7 if onChange then onChange(ns) end end) end
+local featureToggleControls={}
+local function setFeatureToggle(tag,value) featureStates[tag]=value==true local item=featureToggleControls[tag] if not item then return end local on=featureStates[tag] local t=BG_THEMES[cfg.bg] or BG_THEMES[1] item.btn.Text=on and "ON" or "OFF" item.btn.BackgroundColor3=on and t.Accent or t.Control item.btn.TextColor3=on and t.TabTextOn or t.Dim item.stroke.Color=on and t.Accent or t.Border item.stroke.Transparency=on and 0.5 or 0.7 end
+local function mkToggle(parent,enabled,tag,onChange) featureStates[tag]=enabled local btn=Instance.new("TextButton") btn.Size=UDim2.fromOffset(42,20) btn.Position=UDim2.new(1,-50,0.5,-10) btn.BackgroundColor3=enabled and COLORS.Accent or COLORS.Control btn.BorderSizePixel=0 btn.AutoButtonColor=false btn.Text=enabled and "ON" or "OFF" btn.TextSize=8 btn.TextColor3=enabled and COLORS.TabTextOn or COLORS.Dim btn.Font=Enum.Font.GothamBold btn.ZIndex=8 btn.Parent=parent addC(btn,6) local stroke=addS(btn,enabled and COLORS.Accent or COLORS.Border,1,enabled and 0.5 or 0.7) featureToggleControls[tag]={btn=btn,stroke=stroke} local isOnFn=function() return featureStates[tag] end table.insert(themed.toggleBtns,{btn=btn,stroke=stroke,isOn=isOnFn}) local lastT=0 btn.Activated:Connect(function() if tick()-lastT<0.15 then return end lastT=tick() local ns=not featureStates[tag] setFeatureToggle(tag,ns) if onChange then onChange(ns) end end) end
 local function mkHeader(parent,text) local h=Instance.new("Frame") h.Size=UDim2.new(1,0,0,24) h.BackgroundTransparency=1 h.ZIndex=6 h.Parent=parent local lbl=Instance.new("TextLabel") lbl.Size=UDim2.new(1,0,1,-6) lbl.BackgroundTransparency=1 lbl.Text=text lbl.TextSize=11 lbl.TextColor3=COLORS.Accent lbl.Font=Enum.Font.GothamBold lbl.TextXAlignment=Enum.TextXAlignment.Left lbl.ZIndex=7 lbl.Parent=h local line=Instance.new("Frame") line.Size=UDim2.new(1,0,0,1) line.Position=UDim2.new(0,0,1,-4) line.BackgroundColor3=COLORS.Accent line.BackgroundTransparency=0.55 line.BorderSizePixel=0 line.ZIndex=7 line.Parent=h end
 local function settingRow(parent,title,initial,tag,onChange,subtitle) local h=subtitle and 44 or 36 local card=Instance.new("Frame") card.Size=UDim2.new(1,0,0,h) card.BackgroundColor3=COLORS.Row card.BackgroundTransparency=0.4 card.BorderSizePixel=0 card.ZIndex=6 card.Parent=parent addC(card,9) local cs=addS(card,COLORS.Border,1,0.55) table.insert(themed.cards,card) table.insert(themed.cardStrokes,cs) if subtitle then local l1=mkLabel(card,UDim2.new(1,-55,0,16),UDim2.fromOffset(10,2),10,COLORS.White) l1.Text=title local l2=mkLabel(card,UDim2.new(1,-55,0,16),UDim2.fromOffset(10,20),7,COLORS.Dim) l2.Text=subtitle else local l=mkLabel(card,UDim2.new(1,-55,0,36),UDim2.fromOffset(10,0),10,COLORS.White) l.Text=title end mkToggle(card,initial,tag,onChange) end
 
@@ -4415,7 +4446,7 @@ local function buildBaseUI()
     TTL.Position = UDim2.fromOffset(46, 6)
     TTL.BackgroundTransparency = 1
     TTL.RichText = true
-    TTL.Text = '<font color="rgb(255,180,50)">Eclipse</font> <font color="rgb(255,255,255)">Leaker AI</font>'
+    TTL.Text = '<font color="rgb(255,180,50)">Eclipse</font> <font color="rgb(255,255,255)">Code Sniper</font>'
     TTL.TextSize = 13
     TTL.Font = Enum.Font.GothamBold
     TTL.TextXAlignment = Enum.TextXAlignment.Left
@@ -4426,7 +4457,7 @@ local function buildBaseUI()
     Sub.Size = UDim2.fromOffset(200, 14)
     Sub.Position = UDim2.fromOffset(46, 24)
     Sub.BackgroundTransparency = 1
-    Sub.Text = "v5.0 - Leaker Engine"
+    Sub.Text = "v5.0 - V1 AI Engine"
     Sub.TextSize = 8
     Sub.TextColor3 = COLORS.Dim
     Sub.Font = Enum.Font.GothamMedium
@@ -4557,7 +4588,7 @@ local function buildMainPanel()
     MainP.BorderSizePixel = 0
     MainP.ScrollBarThickness = 3
     MainP.ScrollBarImageColor3 = COLORS.Dim
-    MainP.CanvasSize = UDim2.new(0, 0, 0, 1800)
+    MainP.CanvasSize = UDim2.new(0, 0, 0, 900)
     MainP.ZIndex = 5
     MainP.Parent = PanelCont
     tabPanels["MAIN"] = MainP
@@ -4570,12 +4601,24 @@ local function buildMainPanel()
     Instance.new("UIListLayout", MainP).Padding = UDim.new(0, 5)
 
     -- ─── CODES V1 ───
-    mkHeader(MainP, "CODES V1")
+    mkHeader(MainP, "CODES V1  >")
+
+    settingRow(MainP, "Auto Type", cfg.autoType, "AT", function(v)
+        cfg.autoType = v
+        if v then
+            cfg.riddleSolver = false
+            setFeatureToggle("RD", false)
+            if clearCapture then clearCapture() end
+        end
+        saveCfg()
+        logRich("V1 Auto Type " .. (v and "ON" or "OFF"))
+        if v then logRich("N Reply: Riddle Solver OFF (Auto Type and Riddle Solver are exclusive)") end
+    end)
 
     settingRow(MainP, "Auto Submit", cfg.autoSubmit, "AS", function(v)
         cfg.autoSubmit = v
         saveCfg()
-        logRich("V1 auto submit " .. (v and "on" or "off"))
+        logRich("V1 Auto Submit " .. (v and "ON" or "OFF"))
     end)
 
     local DC = Instance.new("Frame")
@@ -4653,150 +4696,21 @@ local function buildMainPanel()
         cfg.retypeInvalid = v; saveCfg()
     end)
 
-    mkHeader(MainP, "(AI) Riddle Solver")
+    mkHeader(MainP, "(AI) RIDDLE SOLVER  >")
     settingRow(MainP, "Riddle Solver", cfg.riddleSolver, "RD", function(v)
-        cfg.riddleSolver = v; saveCfg()
-        logRich("V1 riddle solver " .. (v and "on" or "off"))
-    end)
-
-    -- ─── CODES V2 LEAKER AI ───
-    mkHeader(MainP, "CODES V2 LEAKER AI")
-
-    settingRow(MainP, "Auto Redeem", cfg.v2AutoRedeem, "V2ARD", function(v)
-        cfg.v2AutoRedeem = v; saveCfg()
-        if _G._eV2Engine then _G._eV2Engine:setEnabled(v) end
-        logRich("V2 auto redeem " .. (v and "on" or "off"))
-    end)
-
-    settingRow(MainP, "Auto Riddle Solver", cfg.v2AutoRiddle, "V2ARS", function(v)
-        cfg.v2AutoRiddle = v; saveCfg()
-        if _G._eV2Riddle then
-            _G._eV2Riddle:setEnabled(v, true)
-            if v then
-                cfg.v2AutoMode = false
-                if _G._eV2Engine then _G._eV2Engine:setAutoMode(false) end
-                saveCfg()
-            end
+        cfg.riddleSolver = v
+        if v then
+            cfg.autoType = false
+            setFeatureToggle("AT", false)
+            if clearCapture then clearCapture() end
         end
-        logRich("V2 riddle solver " .. (v and "on" or "off"))
-    end)
-
-    settingRow(MainP, "Auto Mode", cfg.v2AutoMode, "V2AM", function(v)
-        cfg.v2AutoMode = v; saveCfg()
-        if _G._eV2Engine then _G._eV2Engine:setAutoMode(v) end
-        logRich("V2 auto mode " .. (v and "on" or "off"))
-    end)
-
-    -- Part Mode + counter
-    local DC3 = Instance.new("Frame")
-    DC3.Size = UDim2.new(1, 0, 0, 42)
-    DC3.BackgroundColor3 = COLORS.Row
-    DC3.BackgroundTransparency = 0.4
-    DC3.BorderSizePixel = 0
-    DC3.ZIndex = 6
-    DC3.Parent = MainP
-    addC(DC3, 9)
-    table.insert(themed.cards, DC3)
-    table.insert(themed.cardStrokes, addS(DC3, COLORS.Border, 1, 0.55))
-    local dc3Lbl = mkLabel(DC3, UDim2.new(1, -100, 0, 42), UDim2.fromOffset(10, 0), 10, COLORS.White)
-    dc3Lbl.Text = "Part Mode"
-
-    local CS3 = Instance.new("Frame")
-    CS3.Size = UDim2.fromOffset(88, 28)
-    CS3.Position = UDim2.new(1, -96, 0, 7)
-    CS3.BackgroundColor3 = COLORS.Window
-    CS3.BackgroundTransparency = 0.05
-    CS3.ZIndex = 7
-    CS3.Parent = DC3
-    addC(CS3, 6)
-    addS(CS3, COLORS.Border, 1, 0.65)
-
-    local Minus3 = Instance.new("TextButton")
-    Minus3.Size = UDim2.fromOffset(22, 22)
-    Minus3.Position = UDim2.fromOffset(3, 3)
-    Minus3.BackgroundColor3 = COLORS.Control
-    Minus3.Text = "-"
-    Minus3.TextSize = 14
-    Minus3.TextColor3 = COLORS.Text
-    Minus3.Font = Enum.Font.GothamBold
-    Minus3.ZIndex = 8
-    Minus3.Parent = CS3
-    addC(Minus3, 4)
-    table.insert(themed.counterBtns, Minus3)
-
-    local CntLbl3 = mkLabel(CS3, UDim2.fromOffset(22, 22), UDim2.fromOffset(33, 3), 14, COLORS.White, Enum.Font.GothamBold)
-    CntLbl3.Text = tostring(cfg.v2Parts)
-    CntLbl3.TextXAlignment = Enum.TextXAlignment.Center
-    CntLbl3.ZIndex = 8
-
-    local Plus3 = Instance.new("TextButton")
-    Plus3.Size = UDim2.fromOffset(22, 22)
-    Plus3.Position = UDim2.fromOffset(63, 3)
-    Plus3.BackgroundColor3 = COLORS.Control
-    Plus3.Text = "+"
-    Plus3.TextSize = 14
-    Plus3.TextColor3 = COLORS.Text
-    Plus3.Font = Enum.Font.GothamBold
-    Plus3.ZIndex = 8
-    Plus3.Parent = CS3
-    addC(Plus3, 4)
-    table.insert(themed.counterBtns, Plus3)
-
-    local lastD3 = 0
-    Minus3.Activated:Connect(function()
-        if tick() - lastD3 < 0.15 then return end; lastD3 = tick()
-        cfg.v2Parts = math.max(1, cfg.v2Parts - 1)
-        CntLbl3.Text = tostring(cfg.v2Parts)
         saveCfg()
-        if _G._eV2Engine then _G._eV2Engine:setAmount(cfg.v2Parts) end
+        logRich("N Reply: Riddle Solver " .. (v and "ON" or "OFF"))
+        if v then logRich("N Reply: Auto Type OFF (Riddle Solver works independently)") end
     end)
-    local lastI3 = 0
-    Plus3.Activated:Connect(function()
-        if tick() - lastI3 < 0.15 then return end; lastI3 = tick()
-        cfg.v2Parts = math.min(12, cfg.v2Parts + 1)
-        CntLbl3.Text = tostring(cfg.v2Parts)
-        saveCfg()
-        if _G._eV2Engine then _G._eV2Engine:setAmount(cfg.v2Parts) end
-    end)
-
-    -- Retype button
-    local RetypeRow = Instance.new("Frame")
-    RetypeRow.Size = UDim2.new(1, 0, 0, 28)
-    RetypeRow.BackgroundTransparency = 1
-    RetypeRow.ZIndex = 6
-    RetypeRow.Parent = MainP
-
-    local RetypeBtn = Instance.new("TextButton")
-    RetypeBtn.Size = UDim2.new(1, 0, 1, 0)
-    RetypeBtn.BackgroundColor3 = COLORS.Accent
-    RetypeBtn.BackgroundTransparency = 0.85
-    RetypeBtn.BorderSizePixel = 0
-    RetypeBtn.AutoButtonColor = false
-    RetypeBtn.Text = "RETYPE RECENT ANNOUNCEMENTS"
-    RetypeBtn.TextSize = 11
-    RetypeBtn.TextColor3 = COLORS.Accent
-    RetypeBtn.Font = Enum.Font.GothamBold
-    RetypeBtn.ZIndex = 7
-    RetypeBtn.Parent = RetypeRow
-    addC(RetypeBtn, 8)
-    addS(RetypeBtn, COLORS.Accent, 1, 0.5)
-    _G._eRetypeBtn = RetypeBtn
-
-    -- V2 Status
-    local V2Status = Instance.new("TextLabel")
-    V2Status.Size = UDim2.new(1, 0, 0, 16)
-    V2Status.BackgroundTransparency = 1
-    V2Status.Text = "V2 Status: Initializing..."
-    V2Status.TextSize = 9
-    V2Status.TextColor3 = COLORS.Dim
-    V2Status.Font = Enum.Font.Code
-    V2Status.TextXAlignment = Enum.TextXAlignment.Left
-    V2Status.ZIndex = 7
-    V2Status.Parent = MainP
-    _G._eV2Status = V2Status
 
     -- ─── CONSOLE ───
-    mkHeader(MainP, "CONSOLE")
+    mkHeader(MainP, "CONSOLE  >")
 
     Console = Instance.new("ScrollingFrame")
     Console.Size = UDim2.new(1, 0, 0, 120)
@@ -4844,11 +4758,11 @@ local function buildMainPanel()
     BtnRow.Parent = MainP
 
     local ClearBtn = Instance.new("TextButton")
-    ClearBtn.Size = UDim2.new(0.48, 0, 1, 0)
+    ClearBtn.Size = UDim2.new(0.30, 0, 1, 0)
     ClearBtn.BackgroundColor3 = COLORS.Control
     ClearBtn.BorderSizePixel = 0
     ClearBtn.AutoButtonColor = false
-    ClearBtn.Text = "Clear Console"
+    ClearBtn.Text = "Clear"
     ClearBtn.TextSize = 10
     ClearBtn.TextColor3 = COLORS.Text
     ClearBtn.Font = Enum.Font.GothamBold
@@ -4859,12 +4773,12 @@ local function buildMainPanel()
     ClearBtn.Activated:Connect(function() clearLog() end)
 
     local ExtBtn = Instance.new("TextButton")
-    ExtBtn.Size = UDim2.new(0.48, 0, 1, 0)
-    ExtBtn.Position = UDim2.new(0.52, 0, 0, 0)
+    ExtBtn.Size = UDim2.new(0.30, 0, 1, 0)
+    ExtBtn.Position = UDim2.new(0.35, 0, 0, 0)
     ExtBtn.BackgroundColor3 = COLORS.Control
     ExtBtn.BorderSizePixel = 0
     ExtBtn.AutoButtonColor = false
-    ExtBtn.Text = "External OFF"
+    ExtBtn.Text = "External"
     ExtBtn.TextSize = 10
     ExtBtn.TextColor3 = COLORS.Text
     ExtBtn.Font = Enum.Font.GothamBold
@@ -4874,6 +4788,25 @@ local function buildMainPanel()
     local ExtSt = addS(ExtBtn, COLORS.Border, 1, 0.6)
     _G._eExtBtn = ExtBtn
     _G._eExtSt = ExtSt
+
+    local HelpBtn = Instance.new("TextButton")
+    HelpBtn.Size = UDim2.new(0.30, 0, 1, 0)
+    HelpBtn.Position = UDim2.new(0.70, 0, 0, 0)
+    HelpBtn.BackgroundColor3 = COLORS.Control
+    HelpBtn.BorderSizePixel = 0
+    HelpBtn.AutoButtonColor = false
+    HelpBtn.Text = "??"
+    HelpBtn.TextSize = 10
+    HelpBtn.TextColor3 = COLORS.Text
+    HelpBtn.Font = Enum.Font.GothamBold
+    HelpBtn.ZIndex = 7
+    HelpBtn.Parent = BtnRow
+    addC(HelpBtn, 6)
+    addS(HelpBtn, COLORS.Border, 1, 0.6)
+    table.insert(themed.counterBtns, HelpBtn)
+    HelpBtn.Activated:Connect(function()
+        logRich("N Reply: Help — Auto Type collects code fragments; Riddle Solver answers known local facts; Learn Sammy Brain learns verified Sammy facts; Fallback Guesser submits an unverified guess when no answer is found.", "rgb(250,204,90)")
+    end)
 end
 
 -- ══════════════════════════════════════════
@@ -5054,47 +4987,19 @@ local function buildFarmPanel()
         end
     end)
 
-    mkHeader(FarmP, "CODE V2 SETTINGS")
+    mkHeader(FarmP, "V1 AI SETTINGS  >")
 
-    settingRow(FarmP, "Learn Sammy Brain", cfg.v2LearnFacts, "V2LF", function(v)
-        cfg.v2LearnFacts = v; saveCfg()
-        if _G._eV2Riddle then _G._eV2Riddle:setSettings({learnFacts = v}) end
+    settingRow(FarmP, "Learn Sammy Brain", cfg.learnSammyBrain, "V1LF", function(v)
+        cfg.learnSammyBrain = v
+        saveCfg()
+        logRich("N Reply: Learn Sammy Brain " .. (v and "ON" or "OFF"))
     end)
 
-    settingRow(FarmP, "Fallback Guesser", cfg.v2Fallback, "V2FB", function(v)
-        cfg.v2Fallback = v; saveCfg()
-        if _G._eV2Riddle then _G._eV2Riddle:setSettings({fallback = v}) end
+    settingRow(FarmP, "Fallback Guesser", cfg.fallbackGuesser, "V1FB", function(v)
+        cfg.fallbackGuesser = v
+        saveCfg()
+        logRich("N Reply: Fallback Guesser " .. (v and "ON" or "OFF"))
     end)
-
-    -- Riddle Delay
-    local RD2 = Instance.new("Frame"); RD2.Size = UDim2.new(1, 0, 0, 42); RD2.BackgroundColor3 = COLORS.Row
-    RD2.BackgroundTransparency = 0.4; RD2.BorderSizePixel = 0; RD2.ZIndex = 6; RD2.Parent = FarmP
-    addC(RD2, 9); table.insert(themed.cards, RD2); table.insert(themed.cardStrokes, addS(RD2, COLORS.Border, 1, 0.55))
-    local rd2Lbl = mkLabel(RD2, UDim2.new(1, -100, 0, 42), UDim2.fromOffset(10, 0), 10, COLORS.White)
-    rd2Lbl.Text = "Riddle Delay"
-
-    local RCS2 = Instance.new("Frame"); RCS2.Size = UDim2.fromOffset(88, 28); RCS2.Position = UDim2.new(1, -96, 0, 7)
-    RCS2.BackgroundColor3 = COLORS.Window; RCS2.BackgroundTransparency = 0.05; RCS2.ZIndex = 7; RCS2.Parent = RD2
-    addC(RCS2, 6); addS(RCS2, COLORS.Border, 1, 0.65)
-
-    local RM2 = Instance.new("TextButton"); RM2.Size = UDim2.fromOffset(22, 22); RM2.Position = UDim2.fromOffset(3, 3)
-    RM2.BackgroundColor3 = COLORS.Control; RM2.Text = "-"; RM2.TextSize = 14; RM2.TextColor3 = COLORS.Text
-    RM2.Font = Enum.Font.GothamBold; RM2.ZIndex = 8; RM2.Parent = RCS2; addC(RM2, 4); table.insert(themed.counterBtns, RM2)
-
-    local RVL2 = mkLabel(RCS2, UDim2.fromOffset(28, 22), UDim2.fromOffset(30, 3), 11, COLORS.White, Enum.Font.GothamBold)
-    RVL2.Text = string.format("%.2f", cfg.v2FallbackDelay); RVL2.TextXAlignment = Enum.TextXAlignment.Center; RVL2.ZIndex = 8
-
-    local RP2 = Instance.new("TextButton"); RP2.Size = UDim2.fromOffset(22, 22); RP2.Position = UDim2.fromOffset(63, 3)
-    RP2.BackgroundColor3 = COLORS.Control; RP2.Text = "+"; RP2.TextSize = 14; RP2.TextColor3 = COLORS.Text
-    RP2.Font = Enum.Font.GothamBold; RP2.ZIndex = 8; RP2.Parent = RCS2; addC(RP2, 4); table.insert(themed.counterBtns, RP2)
-
-    local function setRDelay(d)
-        cfg.v2FallbackDelay = math.clamp(math.floor((cfg.v2FallbackDelay + d) * 100 + 0.5) / 100, 0.00, 1.00)
-        saveCfg(); RVL2.Text = string.format("%.2f", cfg.v2FallbackDelay)
-        if _G._eV2Riddle then _G._eV2Riddle:setSettings({fallbackDelay = cfg.v2FallbackDelay}) end
-    end
-    local lastRD2 = 0; RM2.Activated:Connect(function() if tick() - lastRD2 < 0.15 then return end; lastRD2 = tick(); setRDelay(-0.05) end)
-    local lastRI2 = 0; RP2.Activated:Connect(function() if tick() - lastRI2 < 0.15 then return end; lastRI2 = tick(); setRDelay(0.05) end)
 
     -- Feedback
     mkHeader(FarmP, "SEND FEEDBACK TO OWNER")
@@ -5330,7 +5235,7 @@ local function buildExternalConsole()
     ECB.Activated:Connect(function()
         ExtConsoleVisible = false; ExternalConsoleGui.Enabled = false
         if _G._eExtBtn then
-            _G._eExtBtn.Text = "External OFF"
+            _G._eExtBtn.Text = "External"
             local t = BG_THEMES[cfg.bg] or BG_THEMES[1]
             _G._eExtBtn.BackgroundColor3 = t.Control; _G._eExtBtn.TextColor3 = t.Text
             if _G._eExtSt then _G._eExtSt.Color = t.Border; _G._eExtSt.Transparency = 0.6 end
@@ -5539,12 +5444,129 @@ local function initCoreLogic()
 
     clearCapture = function() S.parts = {}; updateV3Ind(0, cfg.submitAfter) end
 
-    -- V1 and V2 both call the shared Eclipse + EclipBrainrotAi resolver.
+    -- V1-only fact learning: only trust announcements attributed to Sammy by the existing sender check.
+    local function learnV1Fact(message)
+        if not cfg.learnSammyBrain then return false end
+        local raw = tostring(message or ""):gsub("<[^>]*>", ""):match("^%s*(.-)%s*$") or ""
+        raw = raw:gsub("^[Ss][Aa][Mm][Mm][Yy]%s+[Ss][Aa][Yy][Ss]%s*:%s*", "")
+        raw = raw:gsub("^[Ss][Aa][Mm][Mm][Yy]%s+[Aa][Ss][Kk][Ss]%s*:%s*", "")
+        raw = raw:gsub("^[Qq]uestion%s*:%s*", "")
+        local subject, answer = raw:match("^%s*([^:]+)%s*:%s*(.+)%s*$")
+        if not subject or not answer then
+            subject, answer = raw:match("^%s*(.-)%s+[Ii][Ss]%s+(.+)%s*$")
+        end
+        if not subject or not answer then return false end
+        subject = normalizeLegacyRiddle(subject):gsub("/", " "):gsub("%-", " "):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+        answer = answer:gsub("[%.,!;:]+$", ""):match("^%s*(.-)%s*$") or ""
+        if subject == "" or answer == "" or #subject > 100 or #answer > 60 then return false end
+        -- Avoid learning arbitrary chat: the subject must already be a recognized local fact key.
+        local knownSupplied = ""
+        pcall(function() knownSupplied = RiddleEngine.GetSuppliedFact(subject) or "" end)
+        if RiddleDatabase[subject] == nil and (not NReplyFacts or NReplyFacts[subject] == nil) and knownSupplied == "" then return false end
+        local compact = answer:gsub("[^A-Za-z0-9]", ""):upper()
+        if compact == "" then return false end
+        learnedFactsV1[subject] = compact
+        local bare = subject:gsub("^my%s+", ""):gsub("^sammy%s+", ""):gsub("^sammys%s+", "")
+        if bare ~= "" then learnedFactsV1[bare] = compact end
+        cfg.learnedFactsV1 = learnedFactsV1
+        saveCfg()
+        logRich("N Reply: Learned Sammy fact " .. subject .. " -> " .. compact, "rgb(110,225,130)")
+        return true
+    end
+
+    -- Explicit V1 overrides for the five profile clues that were still missed.
+    -- These are resolved before the general answer engine and never go to the random fallback.
+    local V1ProfileAnswerAliases = {
+        ["age"] = "24", ["my age"] = "24", ["sammy age"] = "24", ["sammys age"] = "24",
+        ["age of sammy"] = "24", ["sammy s age"] = "24", ["how old am i"] = "24",
+        ["how old is sammy"] = "24", ["how old is he"] = "24", ["what is my age"] = "24",
+        ["birthplace"] = "ALGERIA", ["birth place"] = "ALGERIA", ["my birthplace"] = "ALGERIA",
+        ["sammy birthplace"] = "ALGERIA", ["sammys birthplace"] = "ALGERIA",
+        ["where was i born"] = "ALGERIA", ["where was sammy born"] = "ALGERIA",
+        ["where was he born"] = "ALGERIA", ["place of birth"] = "ALGERIA", ["country of birth"] = "ALGERIA",
+        ["country"] = "BRAZIL", ["my country"] = "BRAZIL", ["sammy country"] = "BRAZIL",
+        ["sammys country"] = "BRAZIL", ["country of sammy"] = "BRAZIL", ["what country"] = "BRAZIL",
+        ["city state"] = "SAO PAULO", ["city or state"] = "SAO PAULO", ["city and state"] = "SAO PAULO",
+        ["state"] = "SAO PAULO", ["city"] = "SAO PAULO", ["my city state"] = "SAO PAULO",
+        ["sammy city state"] = "SAO PAULO", ["sammys city state"] = "SAO PAULO",
+        ["where do i live"] = "SAO PAULO", ["where does sammy live"] = "SAO PAULO",
+        ["where does he live"] = "SAO PAULO", ["what city does sammy live in"] = "SAO PAULO",
+        ["nationality"] = "BRAZILIAN", ["my nationality"] = "BRAZILIAN",
+        ["sammy nationality"] = "BRAZILIAN", ["sammys nationality"] = "BRAZILIAN",
+        ["nationality of sammy"] = "BRAZILIAN", ["what is my nationality"] = "BRAZILIAN",
+        ["what is sammys nationality"] = "BRAZILIAN", ["what nationality is sammy"] = "BRAZILIAN",
+    }
+
+    local function resolveV1ProfileFact(question)
+        local raw = tostring(question or ""):gsub("<[^>]*>", ""):match("^%s*(.-)%s*$") or ""
+        local candidates = {}
+        local label = raw:match("^%s*([^:]+):")
+        if label then candidates[#candidates + 1] = label end
+        candidates[#candidates + 1] = raw
+        local prefixes = {
+            "what is the ", "what is my ", "what is sammys ", "what is sammy ", "what is ",
+            "what was the ", "what was my ", "what was sammy ", "what was ",
+            "whats the ", "whats my ", "whats sammys ", "whats sammy ", "whats ",
+            "where was sammy ", "where was i ", "where was he ", "where was ",
+            "where does sammy ", "where does he ", "where do i ", "how old is sammy ",
+            "how old am i ", "who is sammy ", "tell me the ", "tell me about ",
+            "the answer to ", "sammy asks ", "sammy says ", "my ", "sammy's ", "sammys ", "sammy ", "the ",
+        }
+        for _, candidate in ipairs(candidates) do
+            local q = tostring(candidate):lower():gsub("’", "'"):gsub("'", "")
+            q = q:gsub("[/%-]", " "):gsub("[%?%.,!;:]", " "):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+            if q:sub(1, 9) == "question " then q = q:sub(10):match("^%s*(.-)%s*$") or "" end
+            local answer = V1ProfileAnswerAliases[q]
+            if answer then return answer, q end
+            for _ = 1, 4 do
+                local removed = false
+                for _, prefix in ipairs(prefixes) do
+                    if q:sub(1, #prefix) == prefix then
+                        q = q:sub(#prefix + 1):match("^%s*(.-)%s*$") or ""
+                        answer = V1ProfileAnswerAliases[q]
+                        if answer then return answer, q end
+                        removed = true
+                        break
+                    end
+                end
+                if not removed or q == "" then break end
+            end
+            answer = V1ProfileAnswerAliases[q]
+            if answer then return answer, q end
+        end
+        return nil, nil
+    end
+
+    local function pickV1FallbackGuess()
+        local candidates, seen = {}, {}
+        for _, value in pairs(RiddleDatabase) do
+            local v = tostring(value or ""):gsub("[^A-Za-z0-9]", ""):upper()
+            if #v >= (AetherionConfig.MinPartLength or 1) and #v <= (AetherionConfig.MaxCodeLength or 50)
+                and v ~= "UNKNOWN" and v ~= "NAN" and not v:find("NOTFOUND", 1, true) and not seen[v] then
+                seen[v] = true
+                candidates[#candidates + 1] = v
+            end
+        end
+        table.sort(candidates)
+        if #candidates == 0 then return nil end
+        return candidates[math.random(1, #candidates)]
+    end
+
+    -- V1 solver resolves critical Sammy profile fields deterministically before the general local engine.
     local function runV1Riddle(question)
+        if not cfg.riddleSolver then return end
         S.askedCount = S.askedCount + 1
         logRich("N Reply: Question: " .. tostring(question):sub(1, 100), "rgb(250,204,90)")
         print("N Reply: Question: " .. tostring(question):sub(1, 180))
-        local okAI, rawAnswer = pcall(answerWithSourcesAI, question)
+        local profileAnswer, profileKey = resolveV1ProfileFact(question)
+        local okAI, rawAnswer
+        if profileAnswer ~= nil then
+            -- Deterministic profile fact: skip legacy solvers and fallback guesser.
+            okAI, rawAnswer = true, profileAnswer
+            logRich("N Reply: Profile fact matched: " .. tostring(profileKey), "rgb(110,225,130)")
+        else
+            okAI, rawAnswer = pcall(answerWithSourcesAI, question)
+        end
         if not okAI then
             logRich("N Reply: ERROR: " .. tostring(rawAnswer), CC.Red)
             warn("N Reply: " .. tostring(rawAnswer))
@@ -5552,24 +5574,37 @@ local function initCoreLogic()
         end
         local answer = tostring(rawAnswer or ""):match("^%s*(.-)%s*$") or ""
         local upper = answer:upper()
-        local compactAnswer = answer:gsub("[^A-Za-z0-9]", "")
+        -- Profile values preserve meaningful spaces (e.g. SAO PAULO); normal code clues stay compact.
+        local compactAnswer = profileAnswer ~= nil and answer:gsub("%s+", " "):upper() or answer:gsub("[^A-Za-z0-9]", "")
+        local isFallback = false
         if answer == "" or upper == "UNKNOWN" or upper == "NAN" or upper:find("NOT FOUND", 1, true) or compactAnswer == "" then
-            S.askedCount = math.max(0, S.askedCount)
-            logRich("N Reply: No local answer for this clue; nothing was submitted.", CC.Red)
-            print("N Reply: UNKNOWN - nothing submitted")
-            if setStatus then setStatus("AI: UNKNOWN RIDDLE", CC.Red) end
-            return
+            compactAnswer = ""
+            if cfg.fallbackGuesser then
+                local guess = pickV1FallbackGuess()
+                if guess then
+                    compactAnswer = guess
+                    isFallback = true
+                    logRich("N Reply: Fallback Guesser selected an unverified candidate: " .. guess, "rgb(250,204,90)")
+                end
+            end
+            if compactAnswer == "" then
+                S.askedCount = math.max(0, S.askedCount)
+                logRich("N Reply: No local answer for this clue; nothing was submitted.", CC.Red)
+                print("N Reply: UNKNOWN - nothing submitted")
+                if setStatus then setStatus("AI: UNKNOWN RIDDLE", CC.Red) end
+                return
+            end
         end
         answer = compactAnswer:upper()
         S.solvedCount = S.solvedCount + 1
-        logRich("N Reply: " .. answer, CC.Green)
-        print("N Reply: " .. answer)
+        logRich("N Reply: " .. answer .. (isFallback and " (FALLBACK GUESS)" or ""), CC.Green)
+        print("N Reply: " .. answer .. (isFallback and " (FALLBACK GUESS)" or ""))
         local cb = _G._eCodeBox; if cb then cb.Text = answer end
-        local pasted, result = typeAndSubmitCode(answer, cfg.autoSubmit)
+        local pasted, result = typeAndSubmitCode(answer, true)
         if pasted then
             logRich("N Reply: " .. tostring(result), CC.Green)
             print("N Reply: " .. tostring(result))
-            if setStatus then setStatus((cfg.autoSubmit and "AI CODE SUBMITTED - " or "AI CODE PASTED - ") .. answer, CC.Green) end
+            if setStatus then setStatus((isFallback and "AI FALLBACK SUBMITTED - " or "AI CODE SUBMITTED - ") .. answer, CC.Green) end
         else
             logRich("N Reply: PASTE/SUBMIT ERROR: " .. tostring(result), CC.Red)
             warn("N Reply: PASTE/SUBMIT ERROR: " .. tostring(result))
@@ -5790,20 +5825,28 @@ local function initCoreLogic()
             logRich("N Reply: Riddle marker received; waiting for clue text.", "rgb(250,204,90)")
             return
         end
-        if text:find("%s") then
-            if cfg.riddleSolver and Engine.looksLikeRiddle(text) then
-                local key = Engine.basicClean(text)
-                if key == S.lastRiddleKey and tick() - S.lastRiddleAt < 5 then return end
-                S.lastRiddleKey = key; S.lastRiddleAt = tick()
-                queueV1Riddle(text)
-            end
-        else
-            for word in text:gmatch("[%w_]+") do
-                if word ~= "" and not S.seen[word] then
-                    S.seen[word] = true
-                    task.delay(1.25, function() S.seen[word] = nil end)
-                    appendToBox(word)
-                end
+
+        local factKey = normalizeLegacyRiddle(text)
+        local suppliedFact = ""
+        pcall(function() suppliedFact = RiddleEngine.GetSuppliedFact(text) or "" end)
+        local profileFact = resolveV1ProfileFact(text)
+        local isKnownBareFact = RiddleDatabase[factKey] ~= nil or suppliedFact ~= "" or profileFact ~= nil
+        if cfg.riddleSolver and (Engine.looksLikeRiddle(text) or isKnownBareFact) then
+            local key = Engine.basicClean(text)
+            if key == S.lastRiddleKey and tick() - S.lastRiddleAt < 5 then return end
+            S.lastRiddleKey = key; S.lastRiddleAt = tick()
+            queueV1Riddle(text)
+            return
+        end
+
+        -- Auto Type handles code fragments only; it is kept separate from Riddle Solver.
+        if not cfg.autoType then return end
+        if text:find("%s") then return end
+        for word in text:gmatch("[%w_]+") do
+            if word ~= "" and not S.seen[word] then
+                S.seen[word] = true
+                task.delay(1.25, function() S.seen[word] = nil end)
+                appendToBox(word)
             end
         end
     end
@@ -5874,6 +5917,7 @@ local function initCoreLogic()
         local fromSammy = tonumber(senderId) == AetherionConfig.SammyUserId
         local plain = tostring(message or ""):gsub("<[^>]*>", "")
         local lower = plain:lower()
+        if fromSammy and not remove and cfg.learnSammyBrain then pcall(learnV1Fact, plain) end
         local riddleMarker = lower:find("%f[%w_]riddle%f[^%w_]" ) ~= nil
         local codeMarker = lower:find("%f[%w_]use%s+code%f[^%w_]" ) or lower:find("%f[%w_]code%s+is%f[^%w_]" )
 
@@ -5882,7 +5926,7 @@ local function initCoreLogic()
             if cfg.v2AutoRiddle and v2Riddle and v2Riddle.enabled then
                 v2Handled = dispatchV2Riddle(message, duration, sound, location, senderId, messageId, remove, false)
             end
-            if not v2Handled and S.on then routeV1(message) end
+            if not v2Handled and S.on and (cfg.autoType or cfg.riddleSolver) then routeV1(message) end
             return v2Handled
         end
 
@@ -5917,7 +5961,7 @@ local function initCoreLogic()
         end
 
         -- V1 fallback (if not handled by V2)
-        if not handled and S.on then routeV1(message) end
+        if not handled and S.on and (cfg.autoType or cfg.riddleSolver) then routeV1(message) end
 
         return handled
     end
@@ -6075,7 +6119,7 @@ local function initCoreLogic()
         _G._eExtBtn.Activated:Connect(function()
             ExtConsoleVisible = not ExtConsoleVisible
             if ExternalConsoleGui then ExternalConsoleGui.Enabled = ExtConsoleVisible end
-            _G._eExtBtn.Text = "External " .. (ExtConsoleVisible and "ON" or "OFF")
+            _G._eExtBtn.Text = "External"
             local t = BG_THEMES[cfg.bg] or BG_THEMES[1]
             _G._eExtBtn.BackgroundColor3 = ExtConsoleVisible and t.Accent or t.Control
             _G._eExtBtn.TextColor3 = ExtConsoleVisible and t.TabTextOn or t.Text
